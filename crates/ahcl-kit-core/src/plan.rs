@@ -1,9 +1,6 @@
-use crate::{ProjectRoot, RepoPath};
+use crate::RepoPath;
 use std::collections::BTreeMap;
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
-use std::io::Read;
-use std::path::Path;
 
 /// The filesystem effect of one planned path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -12,6 +9,45 @@ pub enum ChangeKind {
     Replace,
     Remove,
 }
+
+/// A filesystem-neutral observation of one repository-relative path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProjectEntry {
+    Absent,
+    File(Vec<u8>),
+    Other,
+}
+
+/// A capability-owned source of project entry observations.
+pub trait ProjectView {
+    fn entry(&self, path: &RepoPath) -> Result<ProjectEntry, ProjectViewError>;
+}
+
+/// A sanitized failure returned by a project view.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectViewError {
+    message: String,
+}
+
+impl ProjectViewError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for ProjectViewError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ProjectViewError {}
 
 /// One repository-relative filesystem intention.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -84,32 +120,42 @@ impl ChangePlan {
         self.changes.is_empty()
     }
 
-    /// Reads the selected project root and returns only changes that would alter it.
-    pub fn compare(&self, root: &ProjectRoot) -> Result<Self, PlanError> {
+    /// Compares the plan against capability-owned project observations.
+    pub fn compare(&self, view: &dyn ProjectView) -> Result<Self, PlanError> {
         let mut compared = Self::new();
         for change in self.changes.values() {
-            let destination = root.resolve(change.path());
+            let entry = view
+                .entry(change.path())
+                .map_err(|source| PlanError::View {
+                    path: change.path().clone(),
+                    source,
+                })?;
             match change.kind() {
                 ChangeKind::Create | ChangeKind::Replace => {
                     let desired = change.bytes().ok_or_else(|| PlanError::MissingBytes {
                         path: change.path().clone(),
                     })?;
-                    match read_existing_without_following(root, &destination, change.path()) {
-                        Ok(existing) if existing == desired => {}
-                        Ok(_) => compared.insert(change.clone().with_kind(ChangeKind::Replace))?,
-                        Err(PlanError::MissingPath) => {
+                    match entry {
+                        ProjectEntry::Absent => {
                             compared.insert(change.clone().with_kind(ChangeKind::Create))?
                         }
-                        Err(error) => return Err(error),
+                        ProjectEntry::File(existing) if existing == desired => {}
+                        ProjectEntry::File(_) => {
+                            compared.insert(change.clone().with_kind(ChangeKind::Replace))?
+                        }
+                        ProjectEntry::Other => {
+                            return Err(PlanError::UnsupportedEntry {
+                                path: change.path().clone(),
+                            });
+                        }
                     }
                 }
-                ChangeKind::Remove => {
-                    match inspect_existing_without_following(root, &destination, change.path()) {
-                        Ok(_) => compared.insert(change.clone())?,
-                        Err(PlanError::MissingPath) => {}
-                        Err(error) => return Err(error),
+                ChangeKind::Remove => match entry {
+                    ProjectEntry::Absent => {}
+                    ProjectEntry::File(_) | ProjectEntry::Other => {
+                        compared.insert(change.clone())?
                     }
-                }
+                },
             }
         }
         Ok(compared)
@@ -131,133 +177,6 @@ fn portable_path_key(path: &RepoPath) -> String {
     path.as_str().to_lowercase()
 }
 
-fn read_existing_without_following(
-    root: &ProjectRoot,
-    destination: &Path,
-    path: &RepoPath,
-) -> Result<Vec<u8>, PlanError> {
-    let mut file = inspect_existing_without_following(root, destination, path)?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .map_err(|source| PlanError::Read {
-            path: path.clone(),
-            source,
-        })?;
-    Ok(bytes)
-}
-
-fn inspect_existing_without_following(
-    root: &ProjectRoot,
-    destination: &Path,
-    path: &RepoPath,
-) -> Result<File, PlanError> {
-    reject_linked_parent(root, path)?;
-    match open_without_following(destination) {
-        Ok(file) if is_reparse_point(&file, path)? => {
-            Err(PlanError::UnsafePath { path: path.clone() })
-        }
-        Ok(file) => Ok(file),
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Err(PlanError::MissingPath),
-        Err(source) if is_link_error(&source) => Err(PlanError::UnsafePath { path: path.clone() }),
-        Err(source) => Err(PlanError::Read {
-            path: path.clone(),
-            source,
-        }),
-    }
-}
-
-fn reject_linked_parent(root: &ProjectRoot, path: &RepoPath) -> Result<(), PlanError> {
-    let mut current = root.as_path().to_path_buf();
-    let mut components = path.as_str().split('/').peekable();
-    while let Some(component) = components.next() {
-        if components.peek().is_none() {
-            break;
-        }
-        current.push(component);
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if is_reparse_metadata(&metadata) => {
-                return Err(PlanError::UnsafePath { path: path.clone() });
-            }
-            Ok(_) => {}
-            Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(source) => {
-                return Err(PlanError::Read {
-                    path: path.clone(),
-                    source,
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn open_without_following(destination: &Path) -> std::io::Result<File> {
-    use std::os::unix::fs::OpenOptionsExt;
-
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(destination)
-}
-
-#[cfg(windows)]
-fn open_without_following(destination: &Path) -> std::io::Result<File> {
-    use std::os::windows::fs::OpenOptionsExt;
-
-    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
-    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(destination)
-}
-
-#[cfg(not(any(unix, windows)))]
-fn open_without_following(destination: &Path) -> std::io::Result<File> {
-    OpenOptions::new().read(true).open(destination)
-}
-
-#[cfg(windows)]
-fn is_reparse_point(file: &File, path: &RepoPath) -> Result<bool, PlanError> {
-    use std::os::windows::fs::MetadataExt;
-
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
-    let metadata = file.metadata().map_err(|source| PlanError::Read {
-        path: path.clone(),
-        source,
-    })?;
-    Ok(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
-}
-
-#[cfg(not(windows))]
-fn is_reparse_point(_: &File, _: &RepoPath) -> Result<bool, PlanError> {
-    Ok(false)
-}
-
-#[cfg(unix)]
-fn is_link_error(error: &std::io::Error) -> bool {
-    error.raw_os_error() == Some(libc::ELOOP)
-}
-
-#[cfg(not(unix))]
-fn is_link_error(_: &std::io::Error) -> bool {
-    false
-}
-
-#[cfg(windows)]
-fn is_reparse_metadata(metadata: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-}
-
-#[cfg(not(windows))]
-fn is_reparse_metadata(metadata: &fs::Metadata) -> bool {
-    metadata.file_type().is_symlink()
-}
-
 #[derive(Debug)]
 pub enum PlanError {
     ConflictingChange {
@@ -266,13 +185,12 @@ pub enum PlanError {
     MissingBytes {
         path: RepoPath,
     },
-    MissingPath,
-    UnsafePath {
+    UnsupportedEntry {
         path: RepoPath,
     },
-    Read {
+    View {
         path: RepoPath,
-        source: std::io::Error,
+        source: ProjectViewError,
     },
 }
 
@@ -285,9 +203,10 @@ impl fmt::Display for PlanError {
             Self::MissingBytes { path } => {
                 write!(formatter, "write change is missing bytes for {path}")
             }
-            Self::MissingPath => formatter.write_str("planned path does not exist"),
-            Self::UnsafePath { path } => write!(formatter, "unsafe filesystem path for {path}"),
-            Self::Read { path, source } => write!(formatter, "cannot compare {path}: {source}"),
+            Self::UnsupportedEntry { path } => {
+                write!(formatter, "unsupported project entry for {path}")
+            }
+            Self::View { path, source } => write!(formatter, "cannot compare {path}: {source}"),
         }
     }
 }
@@ -295,11 +214,10 @@ impl fmt::Display for PlanError {
 impl std::error::Error for PlanError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Read { source, .. } => Some(source),
+            Self::View { source, .. } => Some(source),
             Self::ConflictingChange { .. }
             | Self::MissingBytes { .. }
-            | Self::MissingPath
-            | Self::UnsafePath { .. } => None,
+            | Self::UnsupportedEntry { .. } => None,
         }
     }
 }

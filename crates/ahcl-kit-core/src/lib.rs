@@ -12,4 +12,6 @@ pub use model::{
     LockfileEvidence, ProjectRoot, ProjectRootError, RepoPath, RepoPathError, ResolvedGraph,
     ResolvedPackage, UtcDate, UtcDateError,
 };
-pub use plan::{Change, ChangeKind, ChangePlan, PlanError};
+pub use plan::{
+    Change, ChangeKind, ChangePlan, PlanError, ProjectEntry, ProjectView, ProjectViewError,
+};
