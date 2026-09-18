@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/ahcl-kit-core", "crates/ahcl-kit-config"]
+members = [
+    "crates/ahcl-kit-core",
+    "crates/ahcl-kit-config",
+    "crates/ahcl-kit-license",
+]
 resolver = "3"
 
 [workspace.package]
