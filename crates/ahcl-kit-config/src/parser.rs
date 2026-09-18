@@ -1,4 +1,4 @@
-use crate::ast::{Assignment, DocumentAst, ScalarValue, Value};
+use crate::ast::{Assignment, DocumentAst, ScalarValue, Section, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -65,9 +65,11 @@ impl ConfigDocument {
 
         let insertion = format!("{key} = {}\n", value.render());
         let offset = match section {
-            Some(name) => section_insertion_offset(&self.source, name)
+            Some(name) => self
+                .ast
+                .section_insertion_offset(name)
                 .ok_or_else(|| ConfigError::MissingSection(name.to_owned()))?,
-            None => root_insertion_offset(&self.source),
+            None => self.ast.root_insertion_offset,
         };
         let mut rendered = self.source.clone();
         let prefix = if offset > 0 && !self.source[..offset].ends_with('\n') {
@@ -172,7 +174,10 @@ struct Line<'a> {
 
 fn parse_document(source: &str) -> Result<DocumentAst, ConfigError> {
     let lines = lines(source);
-    let mut ast = DocumentAst::default();
+    let mut ast = DocumentAst {
+        root_insertion_offset: source.len(),
+        ..DocumentAst::default()
+    };
     let mut current_section = None;
     let mut sections = BTreeSet::new();
     let mut keys = BTreeSet::new();
@@ -194,7 +199,16 @@ fn parse_document(source: &str) -> Result<DocumentAst, ConfigError> {
             if !sections.insert(section.clone()) {
                 return Err(ConfigError::DuplicateSection(section));
             }
+            if let Some(previous) = ast.sections.last_mut() {
+                previous.insertion_offset = line.start;
+            } else {
+                ast.root_insertion_offset = line.start;
+            }
             ast.section_order.push(section.clone());
+            ast.sections.push(Section {
+                name: section.clone(),
+                insertion_offset: source.len(),
+            });
             current_section = Some(section);
             index += 1;
             continue;
@@ -374,6 +388,12 @@ fn parse_block(lines: &[Line<'_>], mut index: usize) -> Result<(Value, usize), C
                 object.insert(key, value);
                 index += 1;
             } else if line.content.starts_with("    ") {
+                if line.content.as_bytes().get(4) == Some(&b' ') {
+                    return Err(parse_error(
+                        line.number,
+                        "object continuation must use exactly four spaces",
+                    ));
+                }
                 let (key, value) = parse_required_object_item(&line.content[4..], line.number)?;
                 if object.insert(key.clone(), value).is_some() {
                     return Err(parse_error(line.number, "duplicate object field"));
@@ -517,6 +537,14 @@ fn push_assignment(
 }
 
 fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
+    for section in &ast.section_order {
+        if !matches!(
+            section.as_str(),
+            "project" | "license" | "generation" | "rust.cargo"
+        ) {
+            return Err(ConfigError::UnknownSection(section.clone()));
+        }
+    }
     for assignment in &ast.assignments {
         let valid = match assignment.section.as_deref() {
             None => matches!(
@@ -541,7 +569,7 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
                 assignment.key.as_str(),
                 "manifests" | "packages" | "rules" | "lock-mode"
             ),
-            Some(section) => return Err(ConfigError::UnknownSection(section.to_owned())),
+            Some(_) => false,
         };
         if !valid {
             return Err(ConfigError::UnknownField {
@@ -551,28 +579,6 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
         }
     }
     Ok(())
-}
-
-fn section_insertion_offset(source: &str, section: &str) -> Option<usize> {
-    let mut offset = 0;
-    let mut in_section = false;
-    for segment in source.split_inclusive('\n') {
-        let content = segment
-            .strip_suffix('\n')
-            .unwrap_or(segment)
-            .trim_end_matches('\r');
-        if content.trim() == format!("[{section}]") {
-            in_section = true;
-        } else if in_section && content.trim_start().starts_with('[') {
-            return Some(offset);
-        }
-        offset += segment.len();
-    }
-    in_section.then_some(source.len())
-}
-
-fn root_insertion_offset(source: &str) -> usize {
-    source.find('[').unwrap_or(source.len())
 }
 
 fn is_name(value: &str) -> bool {

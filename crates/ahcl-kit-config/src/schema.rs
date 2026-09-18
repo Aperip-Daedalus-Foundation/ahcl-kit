@@ -1,6 +1,7 @@
 use crate::ast::{DocumentAst, ScalarValue, Value};
 use crate::{ConfigDocument, ConfigError};
 use ahcl_kit_core::{RepoPath, UtcDate};
+use http::Uri;
 use std::collections::BTreeSet;
 
 const EVIDENCE_FILE_BYTES: u64 = 2_097_152;
@@ -41,18 +42,18 @@ pub enum CargoRuleClassification {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CargoRule {
-    package: String,
-    source: Option<String>,
+    package: GlobPattern,
+    source: Option<GlobPattern>,
     classification: CargoRuleClassification,
 }
 
 impl CargoRule {
     pub fn package(&self) -> &str {
-        &self.package
+        self.package.as_str()
     }
 
     pub fn source(&self) -> Option<&str> {
-        self.source.as_deref()
+        self.source.as_ref().map(GlobPattern::as_str)
     }
 
     pub fn classification(&self) -> CargoRuleClassification {
@@ -60,11 +61,148 @@ impl CargoRule {
     }
 
     fn matches(&self, package: &str, source: &str) -> bool {
-        glob_matches(&self.package, package)
+        self.package.matches(package)
             && self
                 .source
-                .as_deref()
-                .is_none_or(|pattern| glob_matches(pattern, source))
+                .as_ref()
+                .is_none_or(|pattern| pattern.matches(source))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct GlobPattern {
+    raw: String,
+    tokens: Vec<GlobToken>,
+}
+
+impl GlobPattern {
+    fn compile(raw: String) -> Result<Self, String> {
+        let characters: Vec<_> = raw.chars().collect();
+        let mut tokens = Vec::new();
+        let mut index = 0;
+        while index < characters.len() {
+            match characters[index] {
+                '*' => {
+                    if !matches!(tokens.last(), Some(GlobToken::Star)) {
+                        tokens.push(GlobToken::Star);
+                    }
+                    index += 1;
+                }
+                '?' => {
+                    tokens.push(GlobToken::Any);
+                    index += 1;
+                }
+                '[' => {
+                    let Some(close) = characters[index + 1..]
+                        .iter()
+                        .position(|character| *character == ']')
+                    else {
+                        return Err("unterminated character class".to_owned());
+                    };
+                    let close = index + 1 + close;
+                    let mut member_index = index + 1;
+                    let negative = matches!(characters.get(member_index), Some('!' | '^'));
+                    if negative {
+                        member_index += 1;
+                    }
+                    if member_index == close {
+                        return Err("empty character class".to_owned());
+                    }
+                    let mut members = Vec::new();
+                    while member_index < close {
+                        if member_index + 2 < close && characters[member_index + 1] == '-' {
+                            members.push(ClassMember::Range(
+                                characters[member_index],
+                                characters[member_index + 2],
+                            ));
+                            member_index += 3;
+                        } else {
+                            members.push(ClassMember::Single(characters[member_index]));
+                            member_index += 1;
+                        }
+                    }
+                    tokens.push(GlobToken::Class { negative, members });
+                    index = close + 1;
+                }
+                character => {
+                    tokens.push(GlobToken::Literal(character));
+                    index += 1;
+                }
+            }
+        }
+        Ok(Self { raw, tokens })
+    }
+
+    fn as_str(&self) -> &str {
+        &self.raw
+    }
+
+    fn matches(&self, value: &str) -> bool {
+        let characters: Vec<_> = value.chars().collect();
+        let mut previous = vec![false; characters.len() + 1];
+        let mut current = vec![false; characters.len() + 1];
+        previous[0] = true;
+
+        for token in &self.tokens {
+            current.fill(false);
+            match token {
+                GlobToken::Star => {
+                    current[0] = previous[0];
+                    for index in 1..=characters.len() {
+                        current[index] = previous[index]
+                            || (!is_separator(characters[index - 1]) && current[index - 1]);
+                    }
+                }
+                token => {
+                    for index in 1..=characters.len() {
+                        current[index] =
+                            previous[index - 1] && token.matches_character(characters[index - 1]);
+                    }
+                }
+            }
+            std::mem::swap(&mut previous, &mut current);
+        }
+        previous[characters.len()]
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GlobToken {
+    Star,
+    Any,
+    Class {
+        negative: bool,
+        members: Vec<ClassMember>,
+    },
+    Literal(char),
+}
+
+impl GlobToken {
+    fn matches_character(&self, value: char) -> bool {
+        match self {
+            Self::Any => !is_separator(value),
+            Self::Class { negative, members } => {
+                !is_separator(value)
+                    && members.iter().any(|member| member.matches(value)) != *negative
+            }
+            Self::Literal(expected) => value == *expected,
+            Self::Star => false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ClassMember {
+    Single(char),
+    Range(char, char),
+}
+
+impl ClassMember {
+    fn matches(&self, value: char) -> bool {
+        match self {
+            Self::Single(expected) => value == *expected,
+            Self::Range(start, end) => *start <= value && value <= *end,
+        }
     }
 }
 
@@ -355,6 +493,15 @@ fn resolve_cargo(ast: &DocumentAst) -> Result<CargoSettings, ConfigError> {
             "must not be empty when configured".to_owned(),
         );
     }
+    let mut portable_manifest_keys = BTreeSet::new();
+    for manifest in &manifests {
+        if !portable_manifest_keys.insert(manifest.as_str().to_lowercase()) {
+            return invalid(
+                "rust.cargo.manifests",
+                format!("duplicate manifest path: {manifest}"),
+            );
+        }
+    }
     let packages = optional_string_list(ast, Some("rust.cargo"), "packages")?.unwrap_or_default();
     let rules = optional_object_list(ast, Some("rust.cargo"), "rules")?
         .unwrap_or_default()
@@ -390,17 +537,17 @@ fn resolve_rule(
         path: "rust.cargo.rules.package".to_owned(),
         message: "is required".to_owned(),
     })?;
-    validate_glob(&package).map_err(|message| ConfigError::InvalidValue {
+    let package = GlobPattern::compile(package).map_err(|message| ConfigError::InvalidValue {
         path: "rust.cargo.rules.package".to_owned(),
         message,
     })?;
-    let source = string_field(&fields, "source")?;
-    if let Some(source) = &source {
-        validate_glob(source).map_err(|message| ConfigError::InvalidValue {
+    let source = string_field(&fields, "source")?
+        .map(GlobPattern::compile)
+        .transpose()
+        .map_err(|message| ConfigError::InvalidValue {
             path: "rust.cargo.rules.source".to_owned(),
             message,
         })?;
-    }
     let classification = match string_field(&fields, "classification")?.as_deref() {
         Some("first-party") => CargoRuleClassification::FirstParty,
         Some("third-party") => CargoRuleClassification::ThirdParty,
@@ -565,15 +712,28 @@ fn parse_date(value: &str) -> Result<UtcDate, ConfigError> {
 }
 
 fn is_absolute_https_url(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("https://") else {
+    value.parse::<Uri>().is_ok_and(|uri| {
+        uri.scheme_str() == Some("https") && uri.authority().is_some_and(has_valid_https_authority)
+    })
+}
+
+fn has_valid_https_authority(authority: &http::uri::Authority) -> bool {
+    let host = authority.host();
+    if host.is_empty() {
         return false;
-    };
-    let authority = rest.split('/').next().unwrap_or_default();
-    !authority.is_empty()
-        && !authority.starts_with('.')
-        && authority
-            .bytes()
-            .all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'@'))
+    }
+    let host_and_port = authority.as_str().rsplit('@').next().unwrap_or_default();
+    if host_and_port.starts_with('[') {
+        let Some(closing_bracket) = host_and_port.find(']') else {
+            return false;
+        };
+        let suffix = &host_and_port[closing_bracket + 1..];
+        return suffix.is_empty()
+            || (suffix.starts_with(':')
+                && suffix[1..].bytes().all(|byte| byte.is_ascii_digit())
+                && authority.port_u16().is_some());
+    }
+    !host_and_port.contains(':') || authority.port_u16().is_some()
 }
 
 fn path(section: Option<&str>, key: &str) -> String {
@@ -585,112 +745,6 @@ fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, ConfigError
         path: path.into(),
         message,
     })
-}
-
-fn validate_glob(pattern: &str) -> Result<(), String> {
-    let characters: Vec<_> = pattern.chars().collect();
-    let mut index = 0;
-    while index < characters.len() {
-        if characters[index] != '[' {
-            index += 1;
-            continue;
-        }
-        let Some(close) = characters[index + 1..]
-            .iter()
-            .position(|character| *character == ']')
-        else {
-            return Err("unterminated character class".to_owned());
-        };
-        let close = index + 1 + close;
-        let start = index + usize::from(matches!(characters.get(index + 1), Some('!' | '^')));
-        if close <= start + 1 {
-            return Err("empty character class".to_owned());
-        }
-        index = close + 1;
-    }
-    Ok(())
-}
-
-fn glob_matches(pattern: &str, value: &str) -> bool {
-    let pattern: Vec<_> = pattern.chars().collect();
-    let value: Vec<_> = value.chars().collect();
-    glob_matches_from(&pattern, &value, 0, 0)
-}
-
-fn glob_matches_from(
-    pattern: &[char],
-    value: &[char],
-    mut pattern_index: usize,
-    mut value_index: usize,
-) -> bool {
-    while pattern_index < pattern.len() {
-        match pattern[pattern_index] {
-            '*' => {
-                pattern_index += 1;
-                let mut candidate = value_index;
-                while candidate <= value.len()
-                    && (candidate == value_index || !is_separator(value[candidate - 1]))
-                {
-                    if glob_matches_from(pattern, value, pattern_index, candidate) {
-                        return true;
-                    }
-                    candidate += 1;
-                }
-                return false;
-            }
-            '?' => {
-                if value_index == value.len() || is_separator(value[value_index]) {
-                    return false;
-                }
-                pattern_index += 1;
-                value_index += 1;
-            }
-            '[' => {
-                let Some(close) = pattern[pattern_index + 1..]
-                    .iter()
-                    .position(|character| *character == ']')
-                else {
-                    return false;
-                };
-                let close = pattern_index + 1 + close;
-                if value_index == value.len()
-                    || is_separator(value[value_index])
-                    || !class_matches(&pattern[pattern_index + 1..close], value[value_index])
-                {
-                    return false;
-                }
-                pattern_index = close + 1;
-                value_index += 1;
-            }
-            character => {
-                if value.get(value_index) != Some(&character) {
-                    return false;
-                }
-                pattern_index += 1;
-                value_index += 1;
-            }
-        }
-    }
-    value_index == value.len()
-}
-
-fn class_matches(class: &[char], value: char) -> bool {
-    let (negative, members) = match class.first() {
-        Some('!' | '^') => (true, &class[1..]),
-        _ => (false, class),
-    };
-    let mut matched = false;
-    let mut index = 0;
-    while index < members.len() {
-        if index + 2 < members.len() && members[index + 1] == '-' {
-            matched |= members[index] <= value && value <= members[index + 2];
-            index += 3;
-        } else {
-            matched |= members[index] == value;
-            index += 1;
-        }
-    }
-    matched != negative
 }
 
 fn is_separator(character: char) -> bool {

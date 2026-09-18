@@ -55,10 +55,18 @@ pub(crate) struct Assignment {
     pub(crate) value_end: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Section {
+    pub(crate) name: String,
+    pub(crate) insertion_offset: usize,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DocumentAst {
     pub(crate) assignments: Vec<Assignment>,
     pub(crate) section_order: Vec<String>,
+    pub(crate) sections: Vec<Section>,
+    pub(crate) root_insertion_offset: usize,
 }
 
 impl DocumentAst {
@@ -66,5 +74,12 @@ impl DocumentAst {
         self.assignments
             .iter()
             .find(|assignment| assignment.section.as_deref() == section && assignment.key == key)
+    }
+
+    pub(crate) fn section_insertion_offset(&self, section: &str) -> Option<usize> {
+        self.sections
+            .iter()
+            .find(|entry| entry.name == section)
+            .map(|entry| entry.insertion_offset)
     }
 }

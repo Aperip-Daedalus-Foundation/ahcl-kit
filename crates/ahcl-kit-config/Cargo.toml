@@ -12,3 +12,4 @@ path = "src/lib.rs"
 
 [dependencies]
 ahcl-kit-core = { path = "../ahcl-kit-core" }
+http = "=1.5.0"
