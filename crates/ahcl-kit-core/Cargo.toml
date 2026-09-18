@@ -1,0 +1,11 @@
+[package]
+name = "ahcl-kit-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "ahcl_kit_core"
+path = "src/lib.rs"

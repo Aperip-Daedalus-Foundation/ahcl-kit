@@ -1,0 +1,9 @@
+[workspace]
+members = ["crates/ahcl-kit-core"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "AHCL-1.1"
+repository = "https://github.com/Aperip-Daedalus-Foundation/ahcl-kit"
