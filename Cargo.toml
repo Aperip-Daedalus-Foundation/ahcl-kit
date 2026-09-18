@@ -3,6 +3,7 @@ members = [
     "crates/ahcl-kit-core",
     "crates/ahcl-kit-config",
     "crates/ahcl-kit-license",
+    "crates/ahcl-kit-cargo",
 ]
 resolver = "3"
 
