@@ -5,6 +5,7 @@ members = [
     "crates/ahcl-kit-license",
     "crates/ahcl-kit-cargo",
     "crates/ahcl-kit-materials",
+    "crates/ahcl-kit-cli",
 ]
 resolver = "3"
 

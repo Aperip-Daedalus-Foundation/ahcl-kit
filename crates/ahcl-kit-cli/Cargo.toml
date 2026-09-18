@@ -1,0 +1,21 @@
+[package]
+name = "ahcl-kit-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "ahcl_kit_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ahcl"
+path = "src/main.rs"
+
+[dependencies]
+ahcl-kit-core = { path = "../ahcl-kit-core" }
+clap = { version = "=4.6.7", features = ["derive"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
