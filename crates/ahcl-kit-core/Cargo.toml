@@ -9,3 +9,6 @@ repository.workspace = true
 [lib]
 name = "ahcl_kit_core"
 path = "src/lib.rs"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

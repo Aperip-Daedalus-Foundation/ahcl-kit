@@ -138,9 +138,8 @@ fn is_safe_component(component: &str) -> bool {
     }
 
     let base_name = component
-        .split('.')
-        .next()
-        .unwrap_or_default()
+        .split_once('.')
+        .map_or(component, |(name, _)| name)
         .to_ascii_uppercase();
     if matches!(base_name.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
         return false;
@@ -153,7 +152,10 @@ fn is_safe_component(component: &str) -> bool {
         return true;
     };
 
-    !matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+    !matches!(
+        number,
+        "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+    )
 }
 
 /// A stable business identifier independent from the executable name.
@@ -291,7 +293,6 @@ fn days_in_month(year: u16, month: u8) -> u8 {
 pub struct ResolvedGraph {
     pub packages: Vec<ResolvedPackage>,
     pub edges: Vec<DependencyEdge>,
-    pub lockfiles: Vec<LockfileEvidence>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -307,6 +308,7 @@ pub struct ResolvedPackage {
     pub authors: Vec<String>,
     pub declared_license: Option<String>,
     pub first_party: bool,
+    pub contributing_lockfiles: Vec<LockfileEvidence>,
     pub license_artifacts: Vec<LicenseArtifact>,
 }
 
