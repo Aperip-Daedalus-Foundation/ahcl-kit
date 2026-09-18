@@ -1,8 +1,8 @@
 use crate::ast::{DocumentAst, ScalarValue, Value};
 use crate::{ConfigDocument, ConfigError};
 use ahcl_kit_core::{RepoPath, UtcDate};
-use http::Uri;
 use std::collections::BTreeSet;
+use url::Url;
 
 const EVIDENCE_FILE_BYTES: u64 = 2_097_152;
 const FILES_PER_PACKAGE: u64 = 64;
@@ -712,28 +712,10 @@ fn parse_date(value: &str) -> Result<UtcDate, ConfigError> {
 }
 
 fn is_absolute_https_url(value: &str) -> bool {
-    value.parse::<Uri>().is_ok_and(|uri| {
-        uri.scheme_str() == Some("https") && uri.authority().is_some_and(has_valid_https_authority)
-    })
-}
-
-fn has_valid_https_authority(authority: &http::uri::Authority) -> bool {
-    let host = authority.host();
-    if host.is_empty() {
-        return false;
-    }
-    let host_and_port = authority.as_str().rsplit('@').next().unwrap_or_default();
-    if host_and_port.starts_with('[') {
-        let Some(closing_bracket) = host_and_port.find(']') else {
-            return false;
-        };
-        let suffix = &host_and_port[closing_bracket + 1..];
-        return suffix.is_empty()
-            || (suffix.starts_with(':')
-                && suffix[1..].bytes().all(|byte| byte.is_ascii_digit())
-                && authority.port_u16().is_some());
-    }
-    !host_and_port.contains(':') || authority.port_u16().is_some()
+    !value
+        .chars()
+        .any(|character| character.is_control() || character.is_whitespace())
+        && Url::parse(value).is_ok_and(|url| url.scheme() == "https" && url.host().is_some())
 }
 
 fn path(section: Option<&str>, key: &str) -> String {
