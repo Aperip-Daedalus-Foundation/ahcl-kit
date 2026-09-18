@@ -1,0 +1,12 @@
+[package]
+name = "ahcl-kit-materials"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ahcl-kit-core = { path = "../ahcl-kit-core" }
+ahcl-kit-config = { path = "../ahcl-kit-config" }
+ahcl-kit-license = { path = "../ahcl-kit-license" }
