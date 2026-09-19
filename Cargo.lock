@@ -9,7 +9,9 @@ dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
  "cargo_metadata",
+ "rustix",
  "sha2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

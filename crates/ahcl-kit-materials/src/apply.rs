@@ -26,7 +26,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::dependencies::validate_basename;
-use crate::third_party::validate_managed_package_identity;
+use crate::third_party::{valid_sha256, validate_managed_package_identity};
 use crate::view::{ManagedThirdPartyDir, ProjectFilesystem};
 use crate::{ManagedRemoval, MaterialsError, MaterialsErrorCode, SafeRelPath};
 use ahcl_kit_core::{ChangeKind, ChangePlan, RepoPath};
@@ -80,7 +80,9 @@ impl PlanApplier {
 
         for removal in validated {
             match removal {
-                ValidatedManagedRemoval::Evidence(path) => managed.remove_evidence(&path)?,
+                ValidatedManagedRemoval::Evidence(path, expected_sha256) => {
+                    managed.remove_evidence(&path, &expected_sha256)?;
+                }
                 ValidatedManagedRemoval::PackageDirectory(path) => {
                     managed.remove_empty_package(&path)?;
                 }
@@ -91,7 +93,7 @@ impl PlanApplier {
 }
 
 enum ValidatedManagedRemoval {
-    Evidence(SafeRelPath),
+    Evidence(SafeRelPath, String),
     PackageDirectory(SafeRelPath),
 }
 
@@ -101,13 +103,17 @@ impl ValidatedManagedRemoval {
             ManagedRemoval::Evidence {
                 package_directory,
                 evidence_basename,
+                expected_sha256,
             } => {
                 validate_package_directory(package_directory)?;
                 validate_evidence_basename(evidence_basename)?;
-                Ok(Self::Evidence(managed_path(&[
-                    package_directory,
-                    evidence_basename,
-                ])?))
+                if !valid_sha256(expected_sha256) {
+                    return Err(managed_tree_error());
+                }
+                Ok(Self::Evidence(
+                    managed_path(&[package_directory, evidence_basename])?,
+                    expected_sha256.clone(),
+                ))
             }
             ManagedRemoval::PackageDirectory { package_directory } => {
                 validate_package_directory(package_directory)?;

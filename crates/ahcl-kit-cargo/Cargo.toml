@@ -42,3 +42,13 @@ ahcl-kit-config = { path = "../ahcl-kit-config" }
 ahcl-kit-core = { path = "../ahcl-kit-core" }
 cargo_metadata = "=0.20.0"
 sha2 = "=0.10.9"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.4", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+] }

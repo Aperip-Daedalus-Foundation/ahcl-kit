@@ -299,6 +299,7 @@ fn output_changes(plan: &RuntimePlan) -> Vec<OutputChange> {
                 ManagedRemoval::Evidence {
                     package_directory,
                     evidence_basename,
+                    ..
                 } => format!("{base}/{package_directory}/{evidence_basename}"),
                 ManagedRemoval::PackageDirectory { package_directory } => {
                     format!("{base}/{package_directory}")

@@ -140,6 +140,7 @@ pub enum ManagedRemoval {
     Evidence {
         package_directory: String,
         evidence_basename: String,
+        expected_sha256: String,
     },
     PackageDirectory {
         package_directory: String,
@@ -455,6 +456,7 @@ fn cleanup_plan(
                         removals.push(ManagedRemoval::Evidence {
                             package_directory: package.directory.clone(),
                             evidence_basename: evidence.basename.clone(),
+                            expected_sha256: evidence.sha256.clone(),
                         });
                         removed_entries.insert(key);
                     } else {
@@ -612,7 +614,7 @@ pub(crate) fn validate_managed_package_identity(value: &str) -> Result<(), Mater
     Ok(())
 }
 
-fn valid_sha256(value: &str) -> bool {
+pub(crate) fn valid_sha256(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()

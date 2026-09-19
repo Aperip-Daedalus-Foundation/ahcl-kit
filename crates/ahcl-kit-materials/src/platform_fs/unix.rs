@@ -36,7 +36,7 @@ use crate::third_party::{
 use crate::{
     ManagedEntryKind, ManagedEvidenceInventory, ManagedPackageInventory, ManagedRootInventoryEntry,
     ManagedThirdPartyInventory, MaterialsError, MaterialsErrorCode, SafeRelPath, is_dot_entry,
-    temp_component,
+    platform_fs::reader_matches_sha256, temp_component,
 };
 use ahcl_kit_core::ProjectEntry;
 use rustix::fd::OwnedFd;
@@ -220,7 +220,11 @@ impl ManagedDirectory {
         }
     }
 
-    pub(crate) fn remove_file(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+    pub(crate) fn remove_file(
+        &self,
+        path: &SafeRelPath,
+        expected_sha256: &str,
+    ) -> Result<(), MaterialsError> {
         let handle = self.handle.as_ref().ok_or_else(managed_tree_error)?;
         let (parent, final_name) = match walk_parent(handle, path, false)? {
             Some(value) => value,
@@ -235,6 +239,15 @@ impl ManagedDirectory {
         if !FileType::from_raw_mode(metadata.st_mode).is_file()
             || !name_matches_handle(&parent, &final_name, &target)
         {
+            return Err(managed_tree_error());
+        }
+        let mut target = File::from(target);
+        if !reader_matches_sha256(&mut target, expected_sha256)
+            .map_err(|_| managed_remove_error(path))?
+        {
+            return Err(managed_changed_error(path));
+        }
+        if !name_matches_handle(&parent, &final_name, &target) {
             return Err(managed_tree_error());
         }
         unlinkat(&parent, &final_name, AtFlags::empty()).map_err(|_| managed_remove_error(path))
@@ -612,6 +625,14 @@ fn managed_remove_error(path: &SafeRelPath) -> MaterialsError {
     MaterialsError::at_path(
         "materials.managed.remove",
         "managed entry could not be removed",
+        path,
+    )
+}
+
+fn managed_changed_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.managed.changed",
+        "managed evidence changed after planning",
         path,
     )
 }

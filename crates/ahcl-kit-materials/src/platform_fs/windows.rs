@@ -36,7 +36,7 @@ use crate::third_party::{
 use crate::{
     ManagedEntryKind, ManagedEvidenceInventory, ManagedPackageInventory, ManagedRootInventoryEntry,
     ManagedThirdPartyInventory, MaterialsError, MaterialsErrorCode, SafeRelPath,
-    is_safe_os_component, temp_component,
+    is_safe_os_component, platform_fs::reader_matches_sha256, temp_component,
 };
 use ahcl_kit_core::ProjectEntry;
 use std::ffi::{OsStr, OsString};
@@ -298,7 +298,11 @@ impl ManagedDirectory {
         }
     }
 
-    pub(crate) fn remove_file(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+    pub(crate) fn remove_file(
+        &self,
+        path: &SafeRelPath,
+        expected_sha256: &str,
+    ) -> Result<(), MaterialsError> {
         let chain = self.chain.as_ref().ok_or_else(managed_tree_error)?;
         let Some((directories, final_name)) = walk_managed_parent(chain, path)? else {
             return Ok(());
@@ -306,7 +310,11 @@ impl ManagedDirectory {
         let base = current_directory(chain).ok_or_else(internal_path_error)?;
         let parent = select_parent_from_base(base, &directories).ok_or_else(internal_path_error)?;
         let target_path = append_component(&parent.final_path, &final_name);
-        let node = match open_node_path(&target_path, DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE) {
+        let node = match open_node_path_with_share(
+            &target_path,
+            DELETE | GENERIC_READ | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            FILE_SHARE_READ,
+        ) {
             Ok(node) => node,
             Err(NodeOpenError::Missing) => return Ok(()),
             Err(NodeOpenError::Reparse) => return Err(managed_link_error()),
@@ -315,7 +323,13 @@ impl ManagedDirectory {
         if node.attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
             return Err(managed_tree_error());
         }
-        delete_open_handle(node.handle.as_raw_handle()).map_err(|_| managed_remove_error(path))
+        let mut target = File::from(node.handle);
+        if !reader_matches_sha256(&mut target, expected_sha256)
+            .map_err(|_| managed_remove_error(path))?
+        {
+            return Err(managed_changed_error(path));
+        }
+        delete_open_handle(target.as_raw_handle()).map_err(|_| managed_remove_error(path))
     }
 
     pub(crate) fn remove_empty_directory(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
@@ -533,7 +547,15 @@ fn open_directory_path(path: &Path, access: u32) -> Result<DirectoryHandle, Dire
 }
 
 fn open_node_path(path: &Path, access: u32) -> Result<OpenedNode, NodeOpenError> {
-    let handle = open_handle(path, access, OPEN_EXISTING, OPEN_NO_REPARSE)
+    open_node_path_with_share(path, access, FILE_SHARE_READ | FILE_SHARE_WRITE)
+}
+
+fn open_node_path_with_share(
+    path: &Path,
+    access: u32,
+    share_mode: u32,
+) -> Result<OpenedNode, NodeOpenError> {
+    let handle = open_handle_with_share(path, access, share_mode, OPEN_EXISTING, OPEN_NO_REPARSE)
         .map_err(classify_node_open_error)?;
     let attributes = query_attributes(&handle).map_err(|_| NodeOpenError::Io)?;
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
@@ -967,6 +989,14 @@ fn managed_remove_error(path: &SafeRelPath) -> MaterialsError {
     MaterialsError::at_path(
         "materials.managed.remove",
         "managed entry could not be removed",
+        path,
+    )
+}
+
+fn managed_changed_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.managed.changed",
+        "managed evidence changed after planning",
         path,
     )
 }

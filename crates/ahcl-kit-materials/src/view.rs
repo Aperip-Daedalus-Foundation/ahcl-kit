@@ -81,8 +81,12 @@ impl ManagedThirdPartyDir<'_> {
         self.directory.ensure_present()
     }
 
-    pub(crate) fn remove_evidence(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
-        self.directory.remove_file(path)
+    pub(crate) fn remove_evidence(
+        &self,
+        path: &SafeRelPath,
+        expected_sha256: &str,
+    ) -> Result<(), MaterialsError> {
+        self.directory.remove_file(path, expected_sha256)
     }
 
     pub(crate) fn remove_empty_package(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {

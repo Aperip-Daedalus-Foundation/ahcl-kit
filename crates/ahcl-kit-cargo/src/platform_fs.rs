@@ -1,4 +1,4 @@
-// crates/ahcl-kit-cargo/src/lib.rs - Public API for Cargo dependency resolution.
+// crates/ahcl-kit-cargo/src/platform_fs.rs - Handle-scoped package evidence reads.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -25,13 +25,46 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-//! Cargo dependency resolution and byte-preserving license evidence collection.
+use std::fs::File;
+use std::io::{self, Read};
 
-mod adapter;
-mod collector;
-mod graph;
-mod limits;
-mod platform_fs;
+#[cfg(unix)]
+mod unix;
+#[cfg(windows)]
+mod windows;
 
-pub use adapter::{CargoAdapter, CargoError, CargoResolveRequest};
-pub use limits::{EvidenceLimits, PackageDirectoryInput, assign_package_directories};
+#[cfg(unix)]
+pub(crate) use unix::PackageDirectory;
+#[cfg(windows)]
+pub(crate) use windows::PackageDirectory;
+
+#[derive(Debug)]
+pub(crate) enum PackageFsError {
+    Io(io::Error),
+    InvalidPath,
+    LinkOrReparsePoint,
+    PathEncoding,
+    TooManyFiles(u64),
+    FileTooLarge(u64),
+}
+
+pub(super) fn read_file_with_limit(
+    file: File,
+    advertised_len: u64,
+    limit: u64,
+) -> Result<Vec<u8>, PackageFsError> {
+    if advertised_len > limit {
+        return Err(PackageFsError::FileTooLarge(advertised_len));
+    }
+
+    let capacity = usize::try_from(advertised_len).map_or(0, |length| length);
+    let mut bytes = Vec::with_capacity(capacity);
+    file.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(PackageFsError::Io)?;
+    let byte_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+    if byte_len > limit {
+        return Err(PackageFsError::FileTooLarge(byte_len));
+    }
+    Ok(bytes)
+}

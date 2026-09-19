@@ -26,6 +26,8 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::MaterialsError;
+use sha2::{Digest, Sha256};
+use std::io::{self, Read};
 
 pub(crate) const MAX_MANAGED_ROOT_ENTRIES: usize = 2_048;
 pub(crate) const MAX_MANAGED_PACKAGES: usize = 1_024;
@@ -47,4 +49,26 @@ fn inventory_limit_error() -> MaterialsError {
         "materials.managed.inventory_limit",
         "managed third-party inventory exceeds supported entry limits",
     )
+}
+
+fn reader_matches_sha256(reader: &mut impl Read, expected_sha256: &str) -> io::Result<bool> {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    let digest = digest.finalize();
+    Ok(expected_sha256
+        .as_bytes()
+        .chunks_exact(2)
+        .zip(digest)
+        .all(|(expected, actual)| {
+            expected[0] == HEX[usize::from(actual >> 4)]
+                && expected[1] == HEX[usize::from(actual & 0x0f)]
+        }))
 }

@@ -25,12 +25,12 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
+use crate::platform_fs::{PackageDirectory, PackageFsError};
 use crate::{CargoError, EvidenceLimits};
 use ahcl_kit_core::{LicenseArtifact, RepoPath};
 use cargo_metadata::Package;
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 
 pub(crate) struct EvidenceBudget {
     aggregate_bytes: u64,
@@ -52,7 +52,8 @@ pub(crate) fn collect(
     let Some(package_root) = manifest_path.parent() else {
         return Err(CargoError::EvidenceOutsidePackage { package_id });
     };
-    reject_link(package_root, &package.id.to_string())?;
+    let directory = PackageDirectory::open(package_root)
+        .map_err(|error| map_package_fs_error(error, &package_id))?;
 
     let mut candidates = Vec::new();
     if let Some(license_file) = &package.license_file {
@@ -60,7 +61,7 @@ pub(crate) fn collect(
         let relative = if path.is_absolute() {
             path.strip_prefix(package_root)
                 .map_err(|_| CargoError::EvidenceOutsidePackage {
-                    package_id: package.id.to_string(),
+                    package_id: package_id.clone(),
                 })?
                 .to_path_buf()
         } else {
@@ -69,36 +70,11 @@ pub(crate) fn collect(
         candidates.push(relative);
     }
 
-    let mut root_candidates = Vec::new();
-    let entries = fs::read_dir(package_root).map_err(|source| CargoError::EvidenceRead {
-        package_id: package.id.to_string(),
-        source,
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|source| CargoError::EvidenceRead {
-            package_id: package.id.to_string(),
-            source,
-        })?;
-        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-            return Err(CargoError::EvidencePathEncoding {
-                package_id: package.id.to_string(),
-            });
-        };
-        let upper = name.to_ascii_uppercase();
-        if ["LICENSE", "COPYING", "NOTICE", "COPYRIGHT"]
-            .iter()
-            .any(|prefix| upper.starts_with(prefix))
-        {
-            root_candidates.push(PathBuf::from(name));
-        }
-    }
-    root_candidates.sort_by(|left, right| {
-        left.to_string_lossy()
-            .to_ascii_lowercase()
-            .cmp(&right.to_string_lossy().to_ascii_lowercase())
-            .then_with(|| left.cmp(right))
-    });
-    candidates.extend(root_candidates);
+    candidates.extend(
+        directory
+            .root_license_candidates(limits.max_files_per_package())
+            .map_err(|error| map_package_fs_error(error, &package_id))?,
+    );
 
     let mut seen = BTreeSet::new();
     candidates.retain(|path| {
@@ -108,79 +84,45 @@ pub(crate) fn collect(
                 .to_ascii_lowercase(),
         )
     });
-    let canonical_root =
-        fs::canonicalize(package_root).map_err(|source| CargoError::EvidenceRead {
-            package_id: package.id.to_string(),
-            source,
-        })?;
+    if u64::try_from(candidates.len()).map_or(true, |count| count > limits.max_files_per_package())
+    {
+        return Err(CargoError::TooManyEvidenceFiles {
+            package_id,
+            count: u64::try_from(candidates.len()).unwrap_or(u64::MAX),
+        });
+    }
     let mut artifacts = Vec::new();
     let mut file_count = 0_u64;
     for relative in candidates {
-        validate_relative(&relative, &package.id.to_string())?;
-        let path = package_root.join(&relative);
-        reject_path_links(package_root, &relative, &package.id.to_string())?;
-        let canonical = fs::canonicalize(&path).map_err(|source| CargoError::EvidenceRead {
-            package_id: package.id.to_string(),
-            source,
-        })?;
-        if !canonical.starts_with(&canonical_root) {
-            return Err(CargoError::EvidenceOutsidePackage {
-                package_id: package.id.to_string(),
-            });
-        }
-        let metadata = fs::metadata(&path).map_err(|source| CargoError::EvidenceRead {
-            package_id: package.id.to_string(),
-            source,
-        })?;
-        if !metadata.is_file() {
+        validate_relative(&relative, &package_id)?;
+        let Some(bytes) = directory
+            .read_bounded_file(&relative, limits.max_file_bytes())
+            .map_err(|error| map_package_fs_error(error, &package_id))?
+        else {
             continue;
-        }
+        };
         file_count = file_count.saturating_add(1);
         if file_count > limits.max_files_per_package() {
             return Err(CargoError::TooManyEvidenceFiles {
-                package_id: package.id.to_string(),
+                package_id: package_id.clone(),
                 count: file_count,
             });
         }
-        if metadata.len() > limits.max_file_bytes() {
-            return Err(CargoError::EvidenceFileTooLarge {
-                package_id: package.id.to_string(),
-                byte_len: metadata.len(),
-            });
-        }
+        let byte_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         let next_total = budget
             .aggregate_bytes
-            .checked_add(metadata.len())
+            .checked_add(byte_len)
             .ok_or(CargoError::AggregateEvidenceTooLarge { byte_len: u64::MAX })?;
         if next_total > limits.max_aggregate_bytes() {
             return Err(CargoError::AggregateEvidenceTooLarge {
                 byte_len: next_total,
             });
         }
-        let bytes = fs::read(&path).map_err(|source| CargoError::EvidenceRead {
-            package_id: package.id.to_string(),
-            source,
-        })?;
-        let byte_len = bytes.len() as u64;
-        if byte_len != metadata.len() || byte_len > limits.max_file_bytes() {
-            return Err(CargoError::EvidenceFileTooLarge {
-                package_id: package.id.to_string(),
-                byte_len,
-            });
-        }
-        budget.aggregate_bytes = budget
-            .aggregate_bytes
-            .checked_add(byte_len)
-            .ok_or(CargoError::AggregateEvidenceTooLarge { byte_len: u64::MAX })?;
-        if budget.aggregate_bytes > limits.max_aggregate_bytes() {
-            return Err(CargoError::AggregateEvidenceTooLarge {
-                byte_len: budget.aggregate_bytes,
-            });
-        }
+        budget.aggregate_bytes = next_total;
         let relative = relative
             .to_str()
             .ok_or_else(|| CargoError::EvidencePathEncoding {
-                package_id: package.id.to_string(),
+                package_id: package_id.clone(),
             })?
             .replace('\\', "/");
         let relative_path =
@@ -195,6 +137,32 @@ pub(crate) fn collect(
     Ok(artifacts)
 }
 
+fn map_package_fs_error(error: PackageFsError, package_id: &str) -> CargoError {
+    match error {
+        PackageFsError::Io(source) => CargoError::EvidenceRead {
+            package_id: package_id.to_owned(),
+            source,
+        },
+        PackageFsError::InvalidPath => CargoError::EvidenceOutsidePackage {
+            package_id: package_id.to_owned(),
+        },
+        PackageFsError::LinkOrReparsePoint => CargoError::LinkOrReparsePoint {
+            package_id: package_id.to_owned(),
+        },
+        PackageFsError::PathEncoding => CargoError::EvidencePathEncoding {
+            package_id: package_id.to_owned(),
+        },
+        PackageFsError::TooManyFiles(count) => CargoError::TooManyEvidenceFiles {
+            package_id: package_id.to_owned(),
+            count,
+        },
+        PackageFsError::FileTooLarge(byte_len) => CargoError::EvidenceFileTooLarge {
+            package_id: package_id.to_owned(),
+            byte_len,
+        },
+    }
+}
+
 fn validate_relative(path: &Path, package_id: &str) -> Result<(), CargoError> {
     if path.as_os_str().is_empty()
         || path
@@ -206,44 +174,4 @@ fn validate_relative(path: &Path, package_id: &str) -> Result<(), CargoError> {
         });
     }
     Ok(())
-}
-
-fn reject_path_links(root: &Path, relative: &Path, package_id: &str) -> Result<(), CargoError> {
-    reject_link(root, package_id)?;
-    let mut current = root.to_path_buf();
-    for component in relative.components() {
-        let Component::Normal(part) = component else {
-            return Err(CargoError::EvidenceOutsidePackage {
-                package_id: package_id.to_owned(),
-            });
-        };
-        current.push(part);
-        reject_link(&current, package_id)?;
-    }
-    Ok(())
-}
-
-fn reject_link(path: &Path, package_id: &str) -> Result<(), CargoError> {
-    let metadata = fs::symlink_metadata(path).map_err(|source| CargoError::EvidenceRead {
-        package_id: package_id.to_owned(),
-        source,
-    })?;
-    if metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
-        return Err(CargoError::LinkOrReparsePoint {
-            package_id: package_id.to_owned(),
-        });
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn is_reparse_point(metadata: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-}
-
-#[cfg(not(windows))]
-fn is_reparse_point(_metadata: &fs::Metadata) -> bool {
-    false
 }

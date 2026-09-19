@@ -659,7 +659,8 @@ fn optional_string_list(
         .assignment(section, key)
         .map(|assignment| &assignment.value)
     {
-        None | Some(Value::EmptyList) => Ok(None),
+        None => Ok(None),
+        Some(Value::EmptyList) => Ok(Some(Vec::new())),
         Some(Value::ScalarList(values)) => values
             .iter()
             .map(|value| match value {
