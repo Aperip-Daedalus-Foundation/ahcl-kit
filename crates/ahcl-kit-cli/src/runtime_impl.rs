@@ -269,7 +269,6 @@ impl CommandRuntime for ConcreteRuntime {
         plan: &RuntimePlan,
     ) -> Result<(), RuntimeError> {
         let filesystem = self.filesystem(project)?;
-        PlanApplier::apply(filesystem, plan.changes()).map_err(materials_error)?;
         if let Some(materials_directory) = plan.managed_materials_directory() {
             let managed = filesystem
                 .managed_third_party_dir(materials_directory)
@@ -277,7 +276,7 @@ impl CommandRuntime for ConcreteRuntime {
             PlanApplier::apply_managed_removals(&managed, plan.managed_removals())
                 .map_err(materials_error)?;
         }
-        Ok(())
+        PlanApplier::apply(filesystem, plan.changes()).map_err(materials_error)
     }
 }
 

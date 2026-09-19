@@ -30,7 +30,9 @@ use crate::{
     OutputSeverity, ParsedInvocation, PlanRequest, PlanScope, ProjectReport, ProjectStatus,
     ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
 };
-use ahcl_kit_config::{EffectiveConfig, Language, ProjectIdentity};
+use ahcl_kit_config::{
+    CargoLockMode, CargoRuleClassification, EffectiveConfig, Language, ProjectIdentity,
+};
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
 use ahcl_kit_materials::ManagedRemoval;
@@ -85,10 +87,7 @@ fn execute_project(
     let project = ProjectRoot::new(path.to_path_buf())
         .map_err(|error| RuntimeError::with_source("cli.project_root", error))?;
     let command_id = invocation.command_id();
-    if matches!(
-        command_id,
-        CommandId::ConfigValidate | CommandId::ConfigShowResolved
-    ) {
+    if command_id == CommandId::ConfigValidate {
         runtime.load_config(&project)?;
         return Ok(crate::BatchValue::success(ProjectReport::new(
             path.to_path_buf(),
@@ -96,6 +95,18 @@ fn execute_project(
             Vec::new(),
             Vec::new(),
         )));
+    }
+    if command_id == CommandId::ConfigShowResolved {
+        let config = runtime.load_config(&project)?;
+        return Ok(crate::BatchValue::success(
+            ProjectReport::new(
+                path.to_path_buf(),
+                ProjectStatus::Success,
+                Vec::new(),
+                Vec::new(),
+            )
+            .with_resolved_config(resolved_config(&config)),
+        ));
     }
 
     let scopes = scopes(command_id);
@@ -315,6 +326,57 @@ fn output_diagnostics(diagnostics: &[Diagnostic]) -> Vec<OutputDiagnostic> {
             )
         })
         .collect()
+}
+
+fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
+    let project = config.project();
+    let cargo = config.rust().cargo();
+    let limits = config.limits();
+    serde_json::json!({
+        "schema": config.schema(),
+        "materials_directory": config.materials_directory().as_str(),
+        "languages": config.languages().iter().map(|language| match language {
+            Language::Rust => "rust",
+        }).collect::<Vec<_>>(),
+        "project": {
+            "name": project.name(),
+            "canonical_repository": project.canonical_repository(),
+            "canonical_branch": project.canonical_branch(),
+            "right_holders": project.right_holders(),
+            "contact": project.contact(),
+            "adoption_date": project.adoption_date().map(|date| date.to_string()),
+        },
+        "license": {
+            "version": config.license().version().as_str(),
+            "special_authorization_channel": config.license().special_authorization_channel(),
+        },
+        "generation": {
+            "strict_license_files": config.generation().strict_license_files(),
+        },
+        "rust": {
+            "cargo": {
+                "manifests": cargo.manifests().iter().map(|path| path.as_str()).collect::<Vec<_>>(),
+                "packages": cargo.packages(),
+                "rules": cargo.rules().iter().map(|rule| serde_json::json!({
+                    "package": rule.package(),
+                    "source": rule.source(),
+                    "classification": match rule.classification() {
+                        CargoRuleClassification::FirstParty => "first-party",
+                        CargoRuleClassification::ThirdParty => "third-party",
+                        CargoRuleClassification::Exclude => "exclude",
+                    },
+                })).collect::<Vec<_>>(),
+                "lock_mode": match cargo.lock_mode() {
+                    CargoLockMode::Locked => "locked",
+                },
+            },
+        },
+        "limits": {
+            "evidence_file_bytes": limits.evidence_file_bytes(),
+            "files_per_package": limits.files_per_package(),
+            "aggregate_evidence_bytes": limits.aggregate_evidence_bytes(),
+        },
+    })
 }
 
 fn runtime_error_report(path: std::path::PathBuf, error: &RuntimeError) -> ProjectReport {

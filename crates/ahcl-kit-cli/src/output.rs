@@ -126,6 +126,8 @@ pub struct ProjectReport {
     pub status: ProjectStatus,
     pub diagnostics: Vec<OutputDiagnostic>,
     pub planned_changes: Vec<OutputChange>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_config: Option<serde_json::Value>,
 }
 
 impl ProjectReport {
@@ -142,7 +144,13 @@ impl ProjectReport {
             status,
             diagnostics,
             planned_changes,
+            resolved_config: None,
         }
+    }
+
+    pub(crate) fn with_resolved_config(mut self, resolved_config: serde_json::Value) -> Self {
+        self.resolved_config = Some(resolved_config);
+        self
     }
 }
 
@@ -260,6 +268,9 @@ pub fn render_text(report: &CommandReport) -> String {
             project.project,
             project.status.as_str()
         ));
+        if let Some(resolved_config) = &project.resolved_config {
+            rendered.push_str(&format!("  resolved_config: {resolved_config}\n"));
+        }
         for change in &project.planned_changes {
             rendered.push_str(&format!("  {} {}\n", change.kind.as_str(), change.path));
         }
