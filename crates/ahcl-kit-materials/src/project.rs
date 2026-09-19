@@ -20,6 +20,7 @@ pub enum MaterialsErrorCode {
     ManagedTreeInvalid,
     Plan,
     View,
+    Filesystem(&'static str),
 }
 
 impl MaterialsErrorCode {
@@ -35,22 +36,81 @@ impl MaterialsErrorCode {
             Self::ManagedTreeInvalid => "materials.managed_tree_invalid",
             Self::Plan => "materials.plan",
             Self::View => "materials.view",
+            Self::Filesystem(code) => code,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+impl PartialEq<&str> for MaterialsErrorCode {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl fmt::Display for MaterialsErrorCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MaterialsError {
     code: MaterialsErrorCode,
+    message: &'static str,
+    path: Option<RepoPath>,
 }
 
 impl MaterialsError {
     pub(crate) fn new(code: MaterialsErrorCode) -> Self {
-        Self { code }
+        Self {
+            message: default_message(code),
+            code,
+            path: None,
+        }
     }
 
     pub fn code(&self) -> MaterialsErrorCode {
         self.code
+    }
+
+    pub fn message(&self) -> &'static str {
+        self.message
+    }
+
+    pub fn path(&self) -> Option<&RepoPath> {
+        self.path.as_ref()
+    }
+
+    pub(crate) fn filesystem(code: &'static str, message: &'static str) -> Self {
+        Self {
+            code: MaterialsErrorCode::Filesystem(code),
+            message,
+            path: None,
+        }
+    }
+
+    pub(crate) fn filesystem_at(
+        code: &'static str,
+        message: &'static str,
+        path: RepoPath,
+    ) -> Self {
+        Self {
+            code: MaterialsErrorCode::Filesystem(code),
+            message,
+            path: Some(path),
+        }
+    }
+
+    pub(crate) fn root(code: &'static str, message: &'static str) -> Self {
+        Self::filesystem(code, message)
+    }
+
+    pub(crate) fn at_path(
+        code: &'static str,
+        message: &'static str,
+        path: &crate::SafeRelPath,
+    ) -> Self {
+        Self::filesystem_at(code, message, path.repo_path().clone())
     }
 
     pub(crate) fn from_plan(error: PlanError) -> Self {
@@ -60,27 +120,34 @@ impl MaterialsError {
 
 impl fmt::Display for MaterialsError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match self.code {
-            MaterialsErrorCode::IdentityRequired => {
-                "project identity is required before AHCL initialization"
-            }
-            MaterialsErrorCode::ConfigExists => {
-                "existing configuration cannot be replaced without force"
-            }
-            MaterialsErrorCode::InvalidConfig => "project configuration is invalid",
-            MaterialsErrorCode::InvalidLayout => "AHCL materials layout is invalid",
-            MaterialsErrorCode::LicenseVersionMismatch => {
-                "verified license version does not match project configuration"
-            }
-            MaterialsErrorCode::StateInvalid => "managed third-party state is invalid",
-            MaterialsErrorCode::LinkOrReparsePoint => {
-                "managed third-party tree contains a link or reparse point"
-            }
-            MaterialsErrorCode::ManagedTreeInvalid => "managed third-party tree is invalid",
-            MaterialsErrorCode::Plan => "AHCL material plan could not be constructed",
-            MaterialsErrorCode::View => "project entries could not be observed",
-        };
-        formatter.write_str(message)
+        match &self.path {
+            Some(path) => write!(formatter, "{}: {path}", self.message),
+            None => formatter.write_str(self.message),
+        }
+    }
+}
+
+fn default_message(code: MaterialsErrorCode) -> &'static str {
+    match code {
+        MaterialsErrorCode::IdentityRequired => {
+            "project identity is required before AHCL initialization"
+        }
+        MaterialsErrorCode::ConfigExists => {
+            "existing configuration cannot be replaced without force"
+        }
+        MaterialsErrorCode::InvalidConfig => "project configuration is invalid",
+        MaterialsErrorCode::InvalidLayout => "AHCL materials layout is invalid",
+        MaterialsErrorCode::LicenseVersionMismatch => {
+            "verified license version does not match project configuration"
+        }
+        MaterialsErrorCode::StateInvalid => "managed third-party state is invalid",
+        MaterialsErrorCode::LinkOrReparsePoint => {
+            "managed third-party tree contains a link or reparse point"
+        }
+        MaterialsErrorCode::ManagedTreeInvalid => "managed third-party tree is invalid",
+        MaterialsErrorCode::Plan => "AHCL material plan could not be constructed",
+        MaterialsErrorCode::View => "project entries could not be observed",
+        MaterialsErrorCode::Filesystem(_) => "filesystem operation failed",
     }
 }
 
