@@ -90,7 +90,8 @@ impl ConfigDocument {
             return Ok(());
         }
 
-        let insertion = format!("{key} = {}\n", value.render());
+        let line_ending = preferred_line_ending(&self.source);
+        let insertion = format!("{key} = {}{line_ending}", value.render());
         let offset = match section {
             Some(name) => self
                 .ast
@@ -100,7 +101,7 @@ impl ConfigDocument {
         };
         let mut rendered = self.source.clone();
         let prefix = if offset > 0 && !self.source[..offset].ends_with('\n') {
-            "\n"
+            line_ending
         } else {
             ""
         };
@@ -112,6 +113,16 @@ impl ConfigDocument {
     pub(crate) fn ast(&self) -> &DocumentAst {
         &self.ast
     }
+}
+
+fn preferred_line_ending(source: &str) -> &'static str {
+    source.find('\n').map_or("\n", |index| {
+        if index > 0 && source.as_bytes()[index - 1] == b'\r' {
+            "\r\n"
+        } else {
+            "\n"
+        }
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
