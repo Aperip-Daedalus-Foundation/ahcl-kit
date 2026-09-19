@@ -40,9 +40,9 @@ mod unix;
 mod windows;
 
 #[cfg(unix)]
-pub(crate) use unix::{ManagedDirectory, PlatformRoot};
+pub(crate) use unix::{ManagedDirectory, PlatformRoot, fill_random};
 #[cfg(windows)]
-pub(crate) use windows::{ManagedDirectory, PlatformRoot};
+pub(crate) use windows::{ManagedDirectory, PlatformRoot, fill_random};
 
 fn inventory_limit_error() -> MaterialsError {
     MaterialsError::filesystem(

@@ -219,6 +219,7 @@ fn is_safe_component(component: &str) -> bool {
     )
 }
 
+#[cfg(windows)]
 pub(crate) fn is_safe_os_component(component: &OsStr) -> bool {
     match component.to_str() {
         Some(value) => is_safe_component(value),
@@ -227,14 +228,18 @@ pub(crate) fn is_safe_os_component(component: &OsStr) -> bool {
 }
 
 pub(crate) fn temp_component() -> Result<OsString, MaterialsError> {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut random = [0_u8; 16];
-    getrandom::fill(&mut random).map_err(|_| {
+    temp_component_from(platform_fs::fill_random).map_err(|_| {
         MaterialsError::filesystem(
             "materials.random.unavailable",
             "secure temporary-name generation failed",
         )
-    })?;
+    })
+}
+
+fn temp_component_from<E>(fill: impl FnOnce(&mut [u8]) -> Result<(), E>) -> Result<OsString, E> {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut random = [0_u8; 16];
+    fill(&mut random)?;
     let mut name = String::with_capacity(14 + random.len() * 2);
     name.push_str(".ahcl-kit-tmp-");
     for byte in random {
@@ -247,4 +252,50 @@ pub(crate) fn temp_component() -> Result<OsString, MaterialsError> {
 #[cfg(unix)]
 pub(crate) fn is_dot_entry(name: &OsStr) -> bool {
     name == OsStr::new(".") || name == OsStr::new("..")
+}
+
+#[cfg(test)]
+mod temp_component_contracts {
+    use super::temp_component_from;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn randomness_failure_stops_generation() {
+        let error = temp_component_from(|_| Err("rng unavailable"))
+            .expect_err("randomness failure must stop temporary-name generation");
+
+        assert_eq!(error, "rng unavailable");
+    }
+
+    #[test]
+    fn every_random_byte_changes_the_temporary_name() {
+        let mut names = BTreeSet::new();
+        let zero = [0_u8; 16];
+        let zero_name = temp_component_from(|output| {
+            output.copy_from_slice(&zero);
+            Ok::<(), ()>(())
+        })
+        .expect("infallible test source");
+        assert!(names.insert(zero_name));
+
+        for index in 0..16 {
+            for value in 1..=u8::MAX {
+                let mut random = [0_u8; 16];
+                random[index] = value;
+                let name = temp_component_from(|output| {
+                    output.copy_from_slice(&random);
+                    Ok::<(), ()>(())
+                })
+                .expect("infallible test source");
+                let name_text = name.to_str().expect("temporary name is ASCII");
+                assert!(name_text.starts_with(".ahcl-kit-tmp-"));
+                assert_eq!(name_text.len(), 46);
+                assert!(
+                    names.insert(name),
+                    "duplicate for byte {index} value {value}"
+                );
+            }
+        }
+        assert_eq!(names.len(), 4_081);
+    }
 }

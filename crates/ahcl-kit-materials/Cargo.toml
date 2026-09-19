@@ -43,19 +43,19 @@ ahcl-kit-cargo = { path = "../ahcl-kit-cargo" }
 ahcl-kit-core = { path = "../ahcl-kit-core" }
 ahcl-kit-config = { path = "../ahcl-kit-config" }
 ahcl-kit-license = { path = "../ahcl-kit-license" }
-getrandom = "0.3.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
 url = "2.5.8"
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1.1.4", features = ["fs"] }
+rustix = { version = "1.1.4", features = ["fs", "rand"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
 ] }

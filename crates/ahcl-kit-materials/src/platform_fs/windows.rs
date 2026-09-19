@@ -52,6 +52,9 @@ use windows_sys::Win32::Foundation::{
     ERROR_NOT_SUPPORTED, ERROR_PATH_NOT_FOUND, GENERIC_READ, GENERIC_WRITE, HANDLE,
     INVALID_HANDLE_VALUE,
 };
+use windows_sys::Win32::Security::Cryptography::{
+    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
+};
 use windows_sys::Win32::Storage::FileSystem::{
     CREATE_NEW, CreateDirectoryW, CreateFileW, DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY,
     FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO,
@@ -70,6 +73,24 @@ const OPEN_NO_REPARSE: u32 = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE
 const RENAME_FLAG_REPLACE_IF_EXISTS: u32 = 0x1;
 const RENAME_FLAG_POSIX_SEMANTICS: u32 = 0x2;
 const MAX_RENAME_UNITS: usize = 32_767;
+
+pub(crate) fn fill_random(output: &mut [u8]) -> Result<(), ()> {
+    if output.is_empty() {
+        return Ok(());
+    }
+    let length = u32::try_from(output.len()).map_err(|_| ())?;
+    // SAFETY: `output` is writable for `length` bytes and remains live through the call.
+    // A null algorithm handle is required with `BCRYPT_USE_SYSTEM_PREFERRED_RNG`.
+    let status = unsafe {
+        BCryptGenRandom(
+            ptr::null_mut(),
+            output.as_mut_ptr(),
+            length,
+            BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+        )
+    };
+    if status >= 0 { Ok(()) } else { Err(()) }
+}
 
 pub(crate) struct PlatformRoot {
     root_chain: Vec<DirectoryHandle>,

@@ -66,6 +66,49 @@ const FILE_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::NOFOLLOW)
     .union(OFlags::NONBLOCK)
     .union(OFlags::CLOEXEC);
+
+#[cfg(any(target_os = "android", target_os = "linux"))]
+pub(crate) fn fill_random(output: &mut [u8]) -> Result<(), ()> {
+    fill_from_reads(output, |remaining| {
+        rustix::rand::getrandom(remaining, rustix::rand::GetRandomFlags::empty())
+    })
+}
+
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+pub(crate) fn fill_random(output: &mut [u8]) -> Result<(), ()> {
+    let source = open(
+        Path::new("/dev/urandom"),
+        OFlags::RDONLY
+            .union(OFlags::NOFOLLOW)
+            .union(OFlags::CLOEXEC),
+        Mode::empty(),
+    )
+    .map_err(|_| ())?;
+    let metadata = fstat(&source).map_err(|_| ())?;
+    if !FileType::from_raw_mode(metadata.st_mode).is_char_device() {
+        return Err(());
+    }
+    fill_from_reads(output, |remaining| rio::read(&source, remaining))
+}
+
+fn fill_from_reads(
+    mut output: &mut [u8],
+    mut read: impl FnMut(&mut [u8]) -> Result<usize, Errno>,
+) -> Result<(), ()> {
+    while !output.is_empty() {
+        match read(output) {
+            Ok(0) => return Err(()),
+            Ok(count) if count <= output.len() => {
+                output = &mut output[count..];
+            }
+            Ok(_) => return Err(()),
+            Err(Errno::INTR) => {}
+            Err(_) => return Err(()),
+        }
+    }
+    Ok(())
+}
+
 pub(crate) struct PlatformRoot {
     handle: OwnedFd,
 }
