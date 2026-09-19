@@ -89,11 +89,7 @@ impl MaterialsError {
         }
     }
 
-    pub(crate) fn filesystem_at(
-        code: &'static str,
-        message: &'static str,
-        path: RepoPath,
-    ) -> Self {
+    pub(crate) fn filesystem_at(code: &'static str, message: &'static str, path: RepoPath) -> Self {
         Self {
             code: MaterialsErrorCode::Filesystem(code),
             message,
