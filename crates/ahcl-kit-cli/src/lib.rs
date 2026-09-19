@@ -46,7 +46,7 @@ pub use output::{
     OutputSeverity, ProjectReport, ProjectStatus, not_wired_report, render_json, render_text,
 };
 pub use runtime::{
-    AdapterKind, CommandRuntime, PlanRequest, PlanScope, ResolvedAdapter, RuntimeError,
-    RuntimePlan, UnavailableRuntime,
+    AdapterKind, CommandRuntime, LanguageAdapterRegistry, PlanRequest, PlanScope, ResolvedAdapter,
+    RuntimeError, RuntimePlan, UnavailableRuntime,
 };
 pub use runtime_impl::{ConcreteRuntime, system_utc_date};

@@ -26,9 +26,9 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::{
-    AdapterKind, CommandReport, CommandRuntime, OutputChange, OutputChangeKind, OutputDiagnostic,
-    OutputSeverity, ParsedInvocation, PlanRequest, PlanScope, ProjectReport, ProjectStatus,
-    ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
+    CommandReport, CommandRuntime, LanguageAdapterRegistry, OutputChange, OutputChangeKind,
+    OutputDiagnostic, OutputSeverity, ParsedInvocation, PlanRequest, PlanScope, ProjectReport,
+    ProjectStatus, ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
 };
 use ahcl_kit_config::{
     CargoLockMode, CargoRuleClassification, EffectiveConfig, Language, ProjectIdentity,
@@ -36,6 +36,7 @@ use ahcl_kit_config::{
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
 use ahcl_kit_materials::ManagedRemoval;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 pub fn run(invocation: &ParsedInvocation, runtime: &mut dyn CommandRuntime) -> CommandReport {
@@ -251,15 +252,18 @@ fn resolve_adapters(
         return Ok(Vec::new());
     }
     let config = config.ok_or_else(|| RuntimeError::operation("config.unavailable"))?;
-    config
-        .languages()
-        .iter()
-        .map(|language| match language {
-            Language::Rust => runtime
-                .resolve_adapter(AdapterKind::Cargo, project, config)
-                .map(|graph| ResolvedAdapter::new(AdapterKind::Cargo, graph)),
-        })
-        .collect()
+    let registry = LanguageAdapterRegistry::installed();
+    let mut adapter_kinds = BTreeSet::new();
+    let mut adapters = Vec::with_capacity(config.languages().len());
+    for language in config.languages() {
+        let adapter = registry.adapter_for(*language)?;
+        if !adapter_kinds.insert(adapter) {
+            return Err(RuntimeError::operation("cli.adapter_duplicate"));
+        }
+        let graph = runtime.resolve_adapter(adapter, project, config)?;
+        adapters.push(ResolvedAdapter::new(adapter, graph));
+    }
+    Ok(adapters)
 }
 
 fn scopes(command_id: CommandId) -> &'static [PlanScope] {

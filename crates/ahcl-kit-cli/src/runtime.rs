@@ -25,16 +25,61 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-use ahcl_kit_config::{AhclVersion, EffectiveConfig, ProjectIdentity};
-use ahcl_kit_core::{ChangePlan, Diagnostic, ProjectRoot, RepoPath, ResolvedGraph, UtcDate};
+use ahcl_kit_config::{AhclVersion, EffectiveConfig, Language, ProjectIdentity};
+use ahcl_kit_core::{
+    ChangePlan, DependencyKind, Diagnostic, ProjectRoot, RepoPath, ResolvedGraph, UtcDate,
+};
 use ahcl_kit_license::VerifiedLicense;
 use ahcl_kit_materials::ManagedRemoval;
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AdapterKind {
-    Cargo,
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct AdapterKind(&'static str);
+
+impl AdapterKind {
+    pub const CARGO: Self = Self::new("cargo");
+
+    #[allow(non_upper_case_globals)]
+    pub const Cargo: Self = Self::CARGO;
+
+    pub const fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+
+    pub const fn name(self) -> &'static str {
+        self.0
+    }
+}
+
+const INSTALLED_LANGUAGE_ADAPTERS: &[(Language, AdapterKind)] =
+    &[(Language::Rust, AdapterKind::CARGO)];
+
+#[derive(Clone, Copy, Debug)]
+pub struct LanguageAdapterRegistry {
+    registrations: &'static [(Language, AdapterKind)],
+}
+
+impl LanguageAdapterRegistry {
+    pub const fn installed() -> Self {
+        Self {
+            registrations: INSTALLED_LANGUAGE_ADAPTERS,
+        }
+    }
+
+    pub fn adapter_for(&self, language: Language) -> Result<AdapterKind, RuntimeError> {
+        let mut resolved = None;
+        for (registered_language, adapter) in self.registrations {
+            if *registered_language != language {
+                continue;
+            }
+            if resolved.replace(*adapter).is_some() {
+                return Err(RuntimeError::operation("cli.language_adapter_duplicate"));
+            }
+        }
+        resolved.ok_or_else(|| RuntimeError::operation("cli.language_adapter_missing"))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,6 +109,50 @@ impl ResolvedAdapter {
 
     pub fn graph(&self) -> &ResolvedGraph {
         &self.graph
+    }
+
+    pub fn merge_all(adapters: &[Self]) -> Result<ResolvedGraph, RuntimeError> {
+        let mut ordered = adapters.iter().collect::<Vec<_>>();
+        ordered.sort_by_key(|adapter| adapter.adapter);
+
+        let mut adapter_kinds = BTreeSet::new();
+        let mut package_ids = BTreeSet::new();
+        let mut merged = ResolvedGraph::default();
+        for adapter in ordered {
+            if !adapter_kinds.insert(adapter.adapter) {
+                return Err(RuntimeError::operation("cli.adapter_duplicate"));
+            }
+            for package in &adapter.graph.packages {
+                if !package_ids.insert(package.id.clone()) {
+                    return Err(RuntimeError::operation("cli.adapter_package_id_duplicate"));
+                }
+                merged.packages.push(package.clone());
+            }
+            merged.edges.extend(adapter.graph.edges.iter().cloned());
+        }
+
+        merged
+            .packages
+            .sort_by(|left, right| left.id.cmp(&right.id));
+        merged.edges.sort_by(|left, right| {
+            left.from_package_id
+                .cmp(&right.from_package_id)
+                .then_with(|| left.to_package_id.cmp(&right.to_package_id))
+                .then_with(|| {
+                    dependency_kind_rank(left.kind).cmp(&dependency_kind_rank(right.kind))
+                })
+                .then_with(|| left.target_conditions.cmp(&right.target_conditions))
+                .then_with(|| left.direct.cmp(&right.direct))
+        });
+        Ok(merged)
+    }
+}
+
+const fn dependency_kind_rank(kind: DependencyKind) -> u8 {
+    match kind {
+        DependencyKind::Normal => 0,
+        DependencyKind::Build => 1,
+        DependencyKind::Development => 2,
     }
 }
 

@@ -206,24 +206,23 @@ impl CommandRuntime for ConcreteRuntime {
         project: &ProjectRoot,
         config: &EffectiveConfig,
     ) -> Result<ResolvedGraph, RuntimeError> {
-        match adapter {
-            AdapterKind::Cargo => {
-                let limits = config.limits();
-                let request = CargoResolveRequest::from_config(
-                    project.clone(),
-                    config,
-                    config.generation().strict_license_files(),
-                )
-                .with_limits(EvidenceLimits::new(
-                    limits.evidence_file_bytes(),
-                    limits.files_per_package(),
-                    limits.aggregate_evidence_bytes(),
-                ));
-                CargoAdapter::new()
-                    .resolve_request(&request)
-                    .map_err(|error| RuntimeError::with_source(error.code(), error))
-            }
+        if adapter != AdapterKind::CARGO {
+            return Err(RuntimeError::operation("cli.adapter_unsupported"));
         }
+        let limits = config.limits();
+        let request = CargoResolveRequest::from_config(
+            project.clone(),
+            config,
+            config.generation().strict_license_files(),
+        )
+        .with_limits(EvidenceLimits::new(
+            limits.evidence_file_bytes(),
+            limits.files_per_package(),
+            limits.aggregate_evidence_bytes(),
+        ));
+        CargoAdapter::new()
+            .resolve_request(&request)
+            .map_err(|error| RuntimeError::with_source(error.code(), error))
     }
 
     fn plan(
@@ -416,11 +415,7 @@ fn runtime_plan(generated: MaterialGenerationPlan, materials_directory: RepoPath
 }
 
 fn resolved_graph(adapters: &[ResolvedAdapter]) -> Result<ResolvedGraph, RuntimeError> {
-    match adapters {
-        [] => Ok(ResolvedGraph::default()),
-        [adapter] if adapter.adapter() == AdapterKind::Cargo => Ok(adapter.graph().clone()),
-        _ => Err(RuntimeError::operation("cli.adapter_set")),
-    }
+    ResolvedAdapter::merge_all(adapters)
 }
 
 fn required_config(config: Option<&EffectiveConfig>) -> Result<&EffectiveConfig, RuntimeError> {
