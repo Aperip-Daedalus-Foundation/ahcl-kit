@@ -180,12 +180,28 @@ enum ThirdPartyCommand {
     Generate(ProjectWriteArgs),
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct InvocationRegistry;
+#[derive(Clone, Copy, Debug)]
+pub struct InvocationRegistry {
+    canonical_name: &'static str,
+    aliases: &'static [&'static str],
+}
+
+impl Default for InvocationRegistry {
+    fn default() -> Self {
+        Self::installed()
+    }
+}
 
 impl InvocationRegistry {
+    pub const fn new(canonical_name: &'static str, aliases: &'static [&'static str]) -> Self {
+        Self {
+            canonical_name,
+            aliases,
+        }
+    }
+
     pub const fn installed() -> Self {
-        Self
+        Self::new("ahcl", &[])
     }
 
     pub fn parse_from<I, T>(
@@ -204,7 +220,11 @@ impl InvocationRegistry {
         let Some(observed) = argv.first() else {
             return Err(InvocationError::MissingArgv0);
         };
-        let invocation_name = normalize_invocation(observed)?;
+        let (observed, normalized) = normalize_invocation(observed)?;
+        if !self.accepts(&normalized) {
+            return Err(InvocationError::UnknownInvocation { observed });
+        }
+        let invocation_name = self.canonical_name.to_owned();
         if let Some(program) = argv.first_mut() {
             *program = OsString::from(&invocation_name);
         }
@@ -214,6 +234,14 @@ impl InvocationRegistry {
             initial_cwd,
             cli,
         })
+    }
+
+    fn accepts(&self, invocation_name: &str) -> bool {
+        self.canonical_name.eq_ignore_ascii_case(invocation_name)
+            || self
+                .aliases
+                .iter()
+                .any(|alias| alias.eq_ignore_ascii_case(invocation_name))
     }
 }
 
@@ -397,7 +425,7 @@ impl Error for InvocationError {
     }
 }
 
-fn normalize_invocation(value: &OsStr) -> Result<String, InvocationError> {
+fn normalize_invocation(value: &OsStr) -> Result<(String, String), InvocationError> {
     let observed = value.to_string_lossy();
     let basename = observed
         .rsplit(['/', '\\'])
@@ -412,11 +440,5 @@ fn normalize_invocation(value: &OsStr) -> Result<String, InvocationError> {
     } else {
         basename
     };
-    if normalized.eq_ignore_ascii_case("ahcl") {
-        Ok("ahcl".to_owned())
-    } else {
-        Err(InvocationError::UnknownInvocation {
-            observed: basename.to_owned(),
-        })
-    }
+    Ok((basename.to_owned(), normalized.to_owned()))
 }
