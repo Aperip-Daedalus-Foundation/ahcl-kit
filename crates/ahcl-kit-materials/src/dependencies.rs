@@ -316,10 +316,11 @@ fn render_package(
             "{}/THIRD-PARTY-LICENSES/{directory}/{basename}",
             config.materials_directory().as_str()
         );
+        let evidence_href = format!("THIRD-PARTY-LICENSES/{directory}/{basename}");
         rendered.push_str("- [`");
         rendered.push_str(&evidence_path);
         rendered.push_str("`](");
-        rendered.push_str(&evidence_path);
+        rendered.push_str(&evidence_href);
         rendered.push_str(")\n  - SHA-256: `");
         rendered.push_str(&sha256_hex(&artifact.bytes));
         rendered.push_str("`\n  - Bytes: ");
