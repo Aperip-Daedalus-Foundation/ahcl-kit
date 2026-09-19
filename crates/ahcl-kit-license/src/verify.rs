@@ -80,7 +80,7 @@ pub(crate) fn verify_response(
     response: LicenseResponse,
     response_limit: usize,
 ) -> Result<VerifiedLicense, LicenseError> {
-    if response.redirected() || !has_official_origin(response.final_url()) {
+    if response.redirected() || !has_official_endpoint(record, response.final_url()) {
         return failure(LicenseErrorCode::RedirectOrigin);
     }
     if response.status() != 200 {
@@ -122,13 +122,16 @@ pub(crate) fn verify_response(
     })
 }
 
-fn has_official_origin(value: &str) -> bool {
+fn has_official_endpoint(record: &OfficialRecord, value: &str) -> bool {
     Url::parse(value).is_ok_and(|url| {
         url.scheme() == "https"
             && url.host_str() == Some("ahcl.aperip.com")
             && url.port_or_known_default() == Some(443)
             && url.username().is_empty()
             && url.password().is_none()
+            && url.path().strip_prefix("/api/licenses/") == Some(record.slug)
+            && url.query().is_none()
+            && url.fragment().is_none()
     })
 }
 
@@ -161,4 +164,84 @@ fn sha256(bytes: &[u8]) -> String {
 
 fn failure<T>(code: LicenseErrorCode) -> Result<T, LicenseError> {
     Err(LicenseError::new(code))
+}
+
+#[cfg(test)]
+mod endpoint_contracts {
+    use super::{official_record, verify_response};
+    use crate::{LicenseErrorCode, LicenseResponse};
+    use ahcl_kit_config::AhclVersion;
+
+    fn response(final_url: &str) -> LicenseResponse {
+        LicenseResponse::new(
+            200,
+            final_url.to_owned(),
+            Some("application/json".to_owned()),
+            false,
+            b"not-json".to_vec(),
+        )
+    }
+
+    #[test]
+    fn normalized_official_endpoint_reaches_document_validation() {
+        for (version, slug) in [
+            (AhclVersion::V1_0, "ahcl-1-0"),
+            (AhclVersion::V1_1, "ahcl-1-1"),
+        ] {
+            let record = official_record(version);
+            let final_url = format!("https://AHCL.APERIP.COM:443/api/licenses/{slug}");
+            let error = verify_response(&record, response(&final_url), 1_048_576)
+                .expect_err("invalid body must reach JSON validation");
+
+            assert_eq!(error.code(), LicenseErrorCode::JsonShape);
+        }
+    }
+
+    #[test]
+    fn same_origin_non_endpoint_urls_are_rejected_for_each_version() {
+        for (version, slug, other_slug) in [
+            (AhclVersion::V1_0, "ahcl-1-0", "ahcl-1-1"),
+            (AhclVersion::V1_1, "ahcl-1-1", "ahcl-1-0"),
+        ] {
+            let record = official_record(version);
+            let cases = [
+                format!("https://ahcl.aperip.com/api/licenses/{other_slug}"),
+                format!("https://ahcl.aperip.com/api/licenses/{slug}/"),
+                format!("https://ahcl.aperip.com/api/licenses/{slug}?download=1"),
+                format!("https://ahcl.aperip.com/api/licenses/{slug}?"),
+                format!("https://ahcl.aperip.com/api/licenses/{slug}#record"),
+                format!("https://ahcl.aperip.com/api/licenses/{slug}#"),
+                format!("https://user@ahcl.aperip.com/api/licenses/{slug}"),
+                format!("https://ahcl.aperip.com:444/api/licenses/{slug}"),
+                format!("http://ahcl.aperip.com/api/licenses/{slug}"),
+            ];
+
+            for final_url in cases {
+                let error = verify_response(&record, response(&final_url), 1_048_576)
+                    .expect_err("non-endpoint URL must fail");
+                assert_eq!(
+                    error.code(),
+                    LicenseErrorCode::RedirectOrigin,
+                    "accepted non-endpoint URL: {final_url}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn redirect_origin_error_is_stable_and_does_not_leak_the_url() {
+        let record = official_record(AhclVersion::V1_1);
+        let final_url = "https://ahcl.aperip.com/api/licenses/ahcl-1-1?secret=do-not-leak#private";
+        let error = verify_response(&record, response(final_url), 1_048_576)
+            .expect_err("query and fragment must fail endpoint validation");
+        let rendered = error.to_string();
+
+        assert_eq!(error.code(), LicenseErrorCode::RedirectOrigin);
+        assert_eq!(
+            rendered,
+            "official license response redirected or used an unexpected origin"
+        );
+        assert!(!rendered.contains("do-not-leak"));
+        assert!(!rendered.contains(final_url));
+    }
 }
