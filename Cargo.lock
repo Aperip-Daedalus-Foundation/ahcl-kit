@@ -16,7 +16,9 @@ dependencies = [
 name = "ahcl-kit-cli"
 version = "0.1.0"
 dependencies = [
+ "ahcl-kit-config",
  "ahcl-kit-core",
+ "ahcl-kit-license",
  "clap",
  "serde",
  "serde_json",

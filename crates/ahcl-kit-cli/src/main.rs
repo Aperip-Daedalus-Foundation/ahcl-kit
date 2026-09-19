@@ -1,5 +1,6 @@
 use ahcl_kit_cli::{
-    InvocationError, InvocationRegistry, OutputFormat, not_wired_report, render_json, render_text,
+    InvocationError, InvocationRegistry, OutputFormat, UnavailableRuntime, render_json,
+    render_text, run,
 };
 use std::ffi::OsString;
 use std::io::Write;
@@ -25,7 +26,7 @@ fn main() -> ExitCode {
         }
         Err(error) => return write_error(error.code(), &error.to_string()),
     };
-    let report = not_wired_report(&invocation);
+    let report = run(&invocation, &mut UnavailableRuntime);
     let rendered = match invocation.output_format() {
         OutputFormat::Text => render_text(&report),
         OutputFormat::Json => match render_json(&report) {

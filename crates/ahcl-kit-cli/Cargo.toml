@@ -15,7 +15,9 @@ name = "ahcl"
 path = "src/main.rs"
 
 [dependencies]
+ahcl-kit-config = { path = "../ahcl-kit-config" }
 ahcl-kit-core = { path = "../ahcl-kit-core" }
+ahcl-kit-license = { path = "../ahcl-kit-license" }
 clap = { version = "=4.6.7", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
