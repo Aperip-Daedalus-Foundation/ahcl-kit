@@ -280,11 +280,7 @@ fn render_package(
     }
     render_optional(rendered, "Repository", package.repository.as_deref());
     render_optional(rendered, "Homepage", package.homepage.as_deref());
-    rendered.push_str("\n- Manifest: `");
-    rendered.push_str(&inline(
-        &package.manifest_path.to_string_lossy().replace('\\', "/"),
-    ));
-    rendered.push_str("`\n- Contributing lockfiles: ");
+    rendered.push_str("\n- Contributing lockfiles: ");
     if package.contributing_lockfiles.is_empty() {
         rendered.push_str("None.\n");
     } else {
