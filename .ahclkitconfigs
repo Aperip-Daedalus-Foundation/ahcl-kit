@@ -1,0 +1,27 @@
+# AHCL Kit project configuration.
+schema = 1
+materials-directory = ".ahcl"
+languages:
+  - "rust"
+
+[project]
+name = "AHCL Kit"
+canonical-repository = "https://github.com/Aperip-Daedalus-Foundation/ahcl-kit"
+canonical-branch = "master"
+right-holders:
+  - "Aperip Daedalus Foundation"
+contact = ""
+adoption-date = "2026-09-19"
+
+[license]
+version = "1.1"
+special-authorization-channel = ""
+
+[generation]
+strict-license-files = true
+
+[rust.cargo]
+manifests:
+  - "Cargo.toml"
+packages = []
+rules = []

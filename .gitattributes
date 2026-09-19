@@ -1,0 +1,8 @@
+# Keep byte-exact AHCL inputs and generated text stable across platforms.
+/.gitattributes text eol=lf
+/.ahclkitconfigs text eol=lf
+/LICENSE text eol=lf
+/.ahcl/*.md text eol=lf
+/.ahcl/AHCL-RESTRICTIONS/*.md text eol=lf
+/.ahcl/THIRD-PARTY-LICENSES/** -text
+/.ahcl/THIRD-PARTY-LICENSES/.ahcl-kit-state.json text eol=lf
