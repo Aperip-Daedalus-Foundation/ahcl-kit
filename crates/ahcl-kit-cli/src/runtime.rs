@@ -1,6 +1,7 @@
 use ahcl_kit_config::{AhclVersion, EffectiveConfig, ProjectIdentity};
-use ahcl_kit_core::{ChangePlan, ProjectRoot, ResolvedGraph, UtcDate};
+use ahcl_kit_core::{ChangePlan, Diagnostic, ProjectRoot, RepoPath, ResolvedGraph, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
+use ahcl_kit_materials::ManagedRemoval;
 use std::error::Error;
 use std::fmt;
 
@@ -47,6 +48,7 @@ pub struct PlanRequest<'a> {
     adapters: &'a [ResolvedAdapter],
     current_date: Option<UtcDate>,
     force: bool,
+    identity: Option<&'a ProjectIdentity>,
 }
 
 impl<'a> PlanRequest<'a> {
@@ -57,6 +59,7 @@ impl<'a> PlanRequest<'a> {
         adapters: &'a [ResolvedAdapter],
         current_date: Option<UtcDate>,
         force: bool,
+        identity: Option<&'a ProjectIdentity>,
     ) -> Self {
         Self {
             scopes,
@@ -65,6 +68,7 @@ impl<'a> PlanRequest<'a> {
             adapters,
             current_date,
             force,
+            identity,
         }
     }
 
@@ -90,6 +94,65 @@ impl<'a> PlanRequest<'a> {
 
     pub fn force(&self) -> bool {
         self.force
+    }
+
+    pub fn identity(&self) -> Option<&ProjectIdentity> {
+        self.identity
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RuntimePlan {
+    changes: ChangePlan,
+    managed_removals: Vec<ManagedRemoval>,
+    diagnostics: Vec<Diagnostic>,
+    managed_materials_directory: Option<RepoPath>,
+}
+
+impl RuntimePlan {
+    pub fn from_changes(changes: ChangePlan) -> Self {
+        Self {
+            changes,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn new(
+        changes: ChangePlan,
+        managed_removals: Vec<ManagedRemoval>,
+        diagnostics: Vec<Diagnostic>,
+        managed_materials_directory: Option<RepoPath>,
+    ) -> Self {
+        Self {
+            changes,
+            managed_removals,
+            diagnostics,
+            managed_materials_directory,
+        }
+    }
+
+    pub fn changes(&self) -> &ChangePlan {
+        &self.changes
+    }
+
+    pub fn managed_removals(&self) -> &[ManagedRemoval] {
+        &self.managed_removals
+    }
+
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    pub fn managed_materials_directory(&self) -> Option<&RepoPath> {
+        self.managed_materials_directory.as_ref()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.changes.is_empty() && self.managed_removals.is_empty()
+    }
+
+    pub(crate) fn with_changes(self, changes: ChangePlan) -> Self {
+        Self { changes, ..self }
     }
 }
 
@@ -130,6 +193,34 @@ pub trait CommandRuntime {
     ) -> Result<ChangePlan, RuntimeError>;
 
     fn apply(&mut self, project: &ProjectRoot, plan: &ChangePlan) -> Result<(), RuntimeError>;
+
+    fn plan_project(
+        &mut self,
+        project: &ProjectRoot,
+        request: PlanRequest<'_>,
+    ) -> Result<RuntimePlan, RuntimeError> {
+        self.plan(project, request).map(RuntimePlan::from_changes)
+    }
+
+    fn compare_project(
+        &mut self,
+        project: &ProjectRoot,
+        plan: RuntimePlan,
+    ) -> Result<RuntimePlan, RuntimeError> {
+        let changes = self.compare(project, plan.changes())?;
+        Ok(plan.with_changes(changes))
+    }
+
+    fn apply_project(
+        &mut self,
+        project: &ProjectRoot,
+        plan: &RuntimePlan,
+    ) -> Result<(), RuntimeError> {
+        if !plan.managed_removals().is_empty() {
+            return Err(RuntimeError::operation("cli.managed_removals_unsupported"));
+        }
+        self.apply(project, plan.changes())
+    }
 }
 
 pub struct RuntimeError {

@@ -6,6 +6,7 @@ mod discovery;
 mod dispatch;
 mod output;
 mod runtime;
+mod runtime_impl;
 
 pub use args::{
     InvocationError, InvocationRegistry, OutputFormat, ParsedInvocation, ProjectIdentityArgs,
@@ -19,5 +20,6 @@ pub use output::{
 };
 pub use runtime::{
     AdapterKind, CommandRuntime, PlanRequest, PlanScope, ResolvedAdapter, RuntimeError,
-    UnavailableRuntime,
+    RuntimePlan, UnavailableRuntime,
 };
+pub use runtime_impl::{ConcreteRuntime, system_utc_date};

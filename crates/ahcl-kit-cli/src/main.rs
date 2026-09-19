@@ -1,7 +1,8 @@
 use ahcl_kit_cli::{
-    InvocationError, InvocationRegistry, OutputFormat, UnavailableRuntime, render_json,
-    render_text, run,
+    ConcreteRuntime, InvocationError, InvocationRegistry, OutputFormat, render_json, render_text,
+    run, system_utc_date,
 };
+use ahcl_kit_core::CommandId;
 use std::ffi::OsString;
 use std::io::Write;
 use std::process::ExitCode;
@@ -26,7 +27,15 @@ fn main() -> ExitCode {
         }
         Err(error) => return write_error(error.code(), &error.to_string()),
     };
-    let report = run(&invocation, &mut UnavailableRuntime);
+    let current_date = if invocation.command_id() == CommandId::ProjectInit {
+        match system_utc_date() {
+            Ok(date) => Some(date),
+            Err(error) => return write_error(error.code(), &error.to_string()),
+        }
+    } else {
+        None
+    };
+    let report = run(&invocation, &mut ConcreteRuntime::new(current_date));
     let rendered = match invocation.output_format() {
         OutputFormat::Text => render_text(&report),
         OutputFormat::Json => match render_json(&report) {

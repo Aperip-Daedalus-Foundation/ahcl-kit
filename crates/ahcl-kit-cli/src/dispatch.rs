@@ -1,11 +1,12 @@
 use crate::{
     AdapterKind, CommandReport, CommandRuntime, OutputChange, OutputChangeKind, OutputDiagnostic,
     OutputSeverity, ParsedInvocation, PlanRequest, PlanScope, ProjectReport, ProjectStatus,
-    ResolvedAdapter, RuntimeError, execute_batch,
+    ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
 };
 use ahcl_kit_config::{EffectiveConfig, Language, ProjectIdentity};
-use ahcl_kit_core::{ChangeKind, ChangePlan, CommandId, ProjectRoot, UtcDate};
+use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
+use ahcl_kit_materials::ManagedRemoval;
 use std::path::Path;
 
 pub fn run(invocation: &ParsedInvocation, runtime: &mut dyn CommandRuntime) -> CommandReport {
@@ -81,10 +82,12 @@ fn execute_project(
         &adapters,
         current_date,
         invocation.force(),
+        identity,
     );
-    let desired = runtime.plan(&project, request)?;
-    let compared = runtime.compare(&project, &desired)?;
+    let desired = runtime.plan_project(&project, request)?;
+    let compared = runtime.compare_project(&project, desired)?;
     let planned_changes = output_changes(&compared);
+    let diagnostics = output_diagnostics(compared.diagnostics());
 
     if command_id == CommandId::ProjectCheck {
         let drift = !compared.is_empty();
@@ -95,7 +98,7 @@ fn execute_project(
             } else {
                 ProjectStatus::Success
             },
-            Vec::new(),
+            diagnostics,
             planned_changes,
         );
         return if drift {
@@ -106,12 +109,12 @@ fn execute_project(
     }
 
     if !invocation.dry_run() {
-        runtime.apply(&project, &compared)?;
+        runtime.apply_project(&project, &compared)?;
     }
     Ok(crate::BatchValue::success(ProjectReport::new(
         path.to_path_buf(),
         ProjectStatus::Success,
-        Vec::new(),
+        diagnostics,
         planned_changes,
     )))
 }
@@ -237,8 +240,10 @@ fn scopes(command_id: CommandId) -> &'static [PlanScope] {
     }
 }
 
-fn output_changes(plan: &ChangePlan) -> Vec<OutputChange> {
-    plan.changes()
+fn output_changes(plan: &RuntimePlan) -> Vec<OutputChange> {
+    let mut changes = plan
+        .changes()
+        .changes()
         .into_iter()
         .map(|change| {
             let kind = match change.kind() {
@@ -247,6 +252,40 @@ fn output_changes(plan: &ChangePlan) -> Vec<OutputChange> {
                 ChangeKind::Remove => OutputChangeKind::Remove,
             };
             OutputChange::new(change.path().as_str(), kind)
+        })
+        .collect::<Vec<_>>();
+    if let Some(materials_directory) = plan.managed_materials_directory() {
+        let base = format!("{}/THIRD-PARTY-LICENSES", materials_directory.as_str());
+        changes.extend(plan.managed_removals().iter().map(|removal| {
+            let path = match removal {
+                ManagedRemoval::Evidence {
+                    package_directory,
+                    evidence_basename,
+                } => format!("{base}/{package_directory}/{evidence_basename}"),
+                ManagedRemoval::PackageDirectory { package_directory } => {
+                    format!("{base}/{package_directory}")
+                }
+            };
+            OutputChange::new(path, OutputChangeKind::Remove)
+        }));
+    }
+    changes
+}
+
+fn output_diagnostics(diagnostics: &[Diagnostic]) -> Vec<OutputDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| {
+            let severity = match diagnostic.severity {
+                DiagnosticSeverity::Error => OutputSeverity::Error,
+                DiagnosticSeverity::Warning => OutputSeverity::Warning,
+                DiagnosticSeverity::Information => OutputSeverity::Information,
+            };
+            OutputDiagnostic::new(
+                diagnostic.code.as_str(),
+                severity,
+                diagnostic.message.clone(),
+            )
         })
         .collect()
 }
