@@ -158,6 +158,24 @@ pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> 
     read_file_with_limit(file, advertised_len, u64::MAX)
 }
 
+pub(crate) fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), PackageFsError> {
+    let directory = PackageDirectory::open(root)?;
+    let components = normal_components(relative)?;
+    let (final_name, parents) = components.split_last().ok_or(PackageFsError::InvalidPath)?;
+    let base = directory.chain.last().ok_or(PackageFsError::InvalidPath)?;
+    let mut directories = Vec::new();
+    for component in parents {
+        let parent = directories.last().unwrap_or(base);
+        let directory = open_directory_path(&append_component(&parent.final_path, component))
+            .map_err(map_directory_error)?;
+        directories.push(directory);
+    }
+    let parent = directories.last().unwrap_or(base);
+    open_regular_file_path(&append_component(&parent.final_path, final_name))?
+        .map(|_| ())
+        .ok_or(PackageFsError::InvalidPath)
+}
+
 fn normal_components(path: &Path) -> Result<Vec<OsString>, PackageFsError> {
     if path.as_os_str().is_empty() {
         return Err(PackageFsError::InvalidPath);

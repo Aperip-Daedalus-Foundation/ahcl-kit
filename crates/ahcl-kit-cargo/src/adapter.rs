@@ -141,6 +141,9 @@ impl EcosystemAdapter for CargoAdapter {
 
 #[derive(Debug)]
 pub enum CargoError {
+    ManifestInvalid {
+        manifest: RepoPath,
+    },
     Metadata {
         manifest: RepoPath,
         message: String,
@@ -197,6 +200,7 @@ pub enum CargoError {
 impl CargoError {
     pub const fn code(&self) -> &'static str {
         match self {
+            Self::ManifestInvalid { .. } => "cargo.manifest_invalid",
             Self::Metadata { .. } => "cargo.metadata_failed",
             Self::MissingResolve { .. } => "cargo.resolve_missing",
             Self::PackageSelection { .. } => "cargo.package_selection",
@@ -219,6 +223,10 @@ impl CargoError {
 impl fmt::Display for CargoError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ManifestInvalid { manifest } => write!(
+                formatter,
+                "Cargo manifest is not a safe regular file: {manifest}"
+            ),
             Self::Metadata { manifest, .. } => {
                 write!(formatter, "Cargo metadata failed for {manifest}")
             }

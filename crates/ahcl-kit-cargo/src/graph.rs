@@ -93,6 +93,10 @@ fn metadata_for(
     request: &CargoResolveRequest,
     manifest: &RepoPath,
 ) -> Result<Metadata, CargoError> {
+    platform_fs::validate_regular_file(request.project_root().as_path(), manifest.as_path())
+        .map_err(|_| CargoError::ManifestInvalid {
+            manifest: manifest.clone(),
+        })?;
     let manifest_path = request.project_root().resolve(manifest);
     let mut command = MetadataCommand::new();
     command

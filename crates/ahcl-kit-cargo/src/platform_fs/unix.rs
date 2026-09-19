@@ -150,6 +150,20 @@ pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> 
     read_file_with_limit(File::from(handle), advertised_len, u64::MAX)
 }
 
+pub(crate) fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), PackageFsError> {
+    let directory = PackageDirectory::open(root)?;
+    let components = normal_components(relative)?;
+    let (final_name, parents) = components.split_last().ok_or(PackageFsError::InvalidPath)?;
+    let mut current =
+        rio::dup(&directory.handle).map_err(|error| PackageFsError::Io(io_error(error)))?;
+    for component in parents {
+        current = open_directory_at(&current, component).map_err(map_directory_error)?;
+    }
+    open_regular_file_at(&current, final_name)?
+        .map(|_| ())
+        .ok_or(PackageFsError::InvalidPath)
+}
+
 fn normal_components(path: &Path) -> Result<Vec<OsString>, PackageFsError> {
     if path.as_os_str().is_empty() {
         return Err(PackageFsError::InvalidPath);
