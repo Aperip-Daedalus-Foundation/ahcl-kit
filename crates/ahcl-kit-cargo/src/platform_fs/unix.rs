@@ -140,6 +140,16 @@ impl PackageDirectory {
     }
 }
 
+pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> {
+    let parent = path.parent().ok_or(PackageFsError::InvalidPath)?;
+    let name = path.file_name().ok_or(PackageFsError::InvalidPath)?;
+    let directory = PackageDirectory::open(parent)?;
+    let Some((handle, advertised_len)) = open_regular_file_at(&directory.handle, name)? else {
+        return Err(PackageFsError::InvalidPath);
+    };
+    read_file_with_limit(File::from(handle), advertised_len, u64::MAX)
+}
+
 fn normal_components(path: &Path) -> Result<Vec<OsString>, PackageFsError> {
     if path.as_os_str().is_empty() {
         return Err(PackageFsError::InvalidPath);

@@ -34,9 +34,9 @@ mod unix;
 mod windows;
 
 #[cfg(unix)]
-pub(crate) use unix::PackageDirectory;
+pub(crate) use unix::{PackageDirectory, read_regular_file};
 #[cfg(windows)]
-pub(crate) use windows::PackageDirectory;
+pub(crate) use windows::{PackageDirectory, read_regular_file};
 
 #[derive(Debug)]
 pub(crate) enum PackageFsError {
@@ -46,6 +46,19 @@ pub(crate) enum PackageFsError {
     PathEncoding,
     TooManyFiles(u64),
     FileTooLarge(u64),
+}
+
+impl PackageFsError {
+    pub(crate) fn into_io_error(self) -> io::Error {
+        match self {
+            Self::Io(source) => source,
+            Self::InvalidPath => io::Error::new(io::ErrorKind::InvalidInput, "invalid file path"),
+            Self::LinkOrReparsePoint => io::Error::other("file path uses a link or reparse point"),
+            Self::PathEncoding => io::Error::new(io::ErrorKind::InvalidData, "path is not Unicode"),
+            Self::TooManyFiles(_) => io::Error::other("file count limit exceeded"),
+            Self::FileTooLarge(_) => io::Error::other("file size limit exceeded"),
+        }
+    }
 }
 
 pub(super) fn read_file_with_limit(

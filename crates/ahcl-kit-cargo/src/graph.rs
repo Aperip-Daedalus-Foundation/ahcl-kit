@@ -27,6 +27,7 @@
 
 use crate::adapter::{CargoError, CargoResolveRequest};
 use crate::collector::{self, EvidenceBudget};
+use crate::platform_fs;
 use ahcl_kit_config::CargoRuleClassification;
 use ahcl_kit_core::{
     DependencyEdge, DependencyKind, LockfileEvidence, RepoPath, ResolvedGraph, ResolvedPackage,
@@ -36,7 +37,6 @@ use cargo_metadata::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
-use std::fs;
 
 pub(crate) fn resolve(request: &CargoResolveRequest) -> Result<ResolvedGraph, CargoError> {
     let mut packages = BTreeMap::<String, ResolvedPackage>::new();
@@ -297,10 +297,11 @@ fn lockfile_evidence(
     let path = RepoPath::parse(&relative_text).map_err(|_| CargoError::InvalidRepositoryPath {
         path: relative_text,
     })?;
-    let bytes = fs::read(&lockfile).map_err(|source| CargoError::LockfileRead {
-        path: lockfile,
-        source,
-    })?;
+    let bytes =
+        platform_fs::read_regular_file(&lockfile).map_err(|error| CargoError::LockfileRead {
+            path: lockfile,
+            source: error.into_io_error(),
+        })?;
     Ok(LockfileEvidence {
         path,
         sha256: sha256_hex(&bytes),
