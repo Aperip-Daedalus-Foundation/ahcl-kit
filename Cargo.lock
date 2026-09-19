@@ -51,9 +51,14 @@ dependencies = [
 name = "ahcl-kit-materials"
 version = "0.1.0"
 dependencies = [
+ "ahcl-kit-cargo",
  "ahcl-kit-config",
  "ahcl-kit-core",
  "ahcl-kit-license",
+ "serde",
+ "serde_json",
+ "sha2",
+ "url",
 ]
 
 [[package]]

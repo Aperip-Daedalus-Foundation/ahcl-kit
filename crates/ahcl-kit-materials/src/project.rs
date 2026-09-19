@@ -15,6 +15,9 @@ pub enum MaterialsErrorCode {
     InvalidConfig,
     InvalidLayout,
     LicenseVersionMismatch,
+    StateInvalid,
+    LinkOrReparsePoint,
+    ManagedTreeInvalid,
     Plan,
     View,
 }
@@ -27,6 +30,9 @@ impl MaterialsErrorCode {
             Self::InvalidConfig => "config.invalid",
             Self::InvalidLayout => "materials.layout_invalid",
             Self::LicenseVersionMismatch => "license.version_mismatch",
+            Self::StateInvalid => "materials.state_invalid",
+            Self::LinkOrReparsePoint => "materials.link_or_reparse",
+            Self::ManagedTreeInvalid => "materials.managed_tree_invalid",
             Self::Plan => "materials.plan",
             Self::View => "materials.view",
         }
@@ -46,6 +52,10 @@ impl MaterialsError {
     pub fn code(&self) -> MaterialsErrorCode {
         self.code
     }
+
+    pub(crate) fn from_plan(error: PlanError) -> Self {
+        map_plan_error(error)
+    }
 }
 
 impl fmt::Display for MaterialsError {
@@ -62,6 +72,11 @@ impl fmt::Display for MaterialsError {
             MaterialsErrorCode::LicenseVersionMismatch => {
                 "verified license version does not match project configuration"
             }
+            MaterialsErrorCode::StateInvalid => "managed third-party state is invalid",
+            MaterialsErrorCode::LinkOrReparsePoint => {
+                "managed third-party tree contains a link or reparse point"
+            }
+            MaterialsErrorCode::ManagedTreeInvalid => "managed third-party tree is invalid",
             MaterialsErrorCode::Plan => "AHCL material plan could not be constructed",
             MaterialsErrorCode::View => "project entries could not be observed",
         };
