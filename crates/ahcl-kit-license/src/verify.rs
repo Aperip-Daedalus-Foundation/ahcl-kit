@@ -31,7 +31,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use url::Url;
 
-pub(crate) const OFFICIAL_ORIGIN: &str = "https://ahcl.aperip.com";
+const OFFICIAL_ORIGIN: &str = "https://ahcl.aperip.com";
 
 pub(crate) struct OfficialRecord {
     pub(crate) version: AhclVersion,
@@ -39,6 +39,33 @@ pub(crate) struct OfficialRecord {
     pub(crate) title: &'static str,
     pub(crate) source_filename: &'static str,
     pub(crate) sha256: &'static str,
+}
+
+impl OfficialRecord {
+    fn endpoint_path(&self) -> String {
+        format!("/api/licenses/{}", self.slug)
+    }
+
+    pub(crate) fn endpoint_url(&self) -> Url {
+        let mut endpoint =
+            Url::parse(OFFICIAL_ORIGIN).expect("the built-in official origin must be valid");
+        endpoint.set_path(&self.endpoint_path());
+        endpoint
+    }
+
+    fn matches_endpoint(&self, value: &str) -> bool {
+        let endpoint = self.endpoint_url();
+        Url::parse(value).is_ok_and(|observed| {
+            observed.scheme() == endpoint.scheme()
+                && observed.host_str() == endpoint.host_str()
+                && observed.port_or_known_default() == endpoint.port_or_known_default()
+                && observed.username().is_empty()
+                && observed.password().is_none()
+                && observed.path() == endpoint.path()
+                && observed.query().is_none()
+                && observed.fragment().is_none()
+        })
+    }
 }
 
 pub(crate) fn official_record(version: AhclVersion) -> OfficialRecord {
@@ -80,7 +107,7 @@ pub(crate) fn verify_response(
     response: LicenseResponse,
     response_limit: usize,
 ) -> Result<VerifiedLicense, LicenseError> {
-    if response.redirected() || !has_official_endpoint(record, response.final_url()) {
+    if response.redirected() || !record.matches_endpoint(response.final_url()) {
         return failure(LicenseErrorCode::RedirectOrigin);
     }
     if response.status() != 200 {
@@ -122,19 +149,6 @@ pub(crate) fn verify_response(
     })
 }
 
-fn has_official_endpoint(record: &OfficialRecord, value: &str) -> bool {
-    Url::parse(value).is_ok_and(|url| {
-        url.scheme() == "https"
-            && url.host_str() == Some("ahcl.aperip.com")
-            && url.port_or_known_default() == Some(443)
-            && url.username().is_empty()
-            && url.password().is_none()
-            && url.path().strip_prefix("/api/licenses/") == Some(record.slug)
-            && url.query().is_none()
-            && url.fragment().is_none()
-    })
-}
-
 fn is_json_content_type(value: Option<&str>) -> bool {
     value
         .and_then(|value| value.parse::<mime::Mime>().ok())
@@ -169,8 +183,25 @@ fn failure<T>(code: LicenseErrorCode) -> Result<T, LicenseError> {
 #[cfg(test)]
 mod endpoint_contracts {
     use super::{official_record, verify_response};
-    use crate::{LicenseErrorCode, LicenseResponse};
+    use crate::{
+        LicenseErrorCode, LicenseRequest, LicenseResponse, LicenseTransport, LicenseTransportError,
+        OfficialLicenseClient,
+    };
     use ahcl_kit_config::AhclVersion;
+
+    struct EchoEndpointTransport {
+        expected_url: &'static str,
+    }
+
+    impl LicenseTransport for EchoEndpointTransport {
+        fn execute(
+            &self,
+            request: &LicenseRequest,
+        ) -> Result<LicenseResponse, LicenseTransportError> {
+            assert_eq!(request.url(), self.expected_url);
+            Ok(response(request.url()))
+        }
+    }
 
     fn response(final_url: &str) -> LicenseResponse {
         LicenseResponse::new(
@@ -191,6 +222,28 @@ mod endpoint_contracts {
             let record = official_record(version);
             let final_url = format!("https://AHCL.APERIP.COM:443/api/licenses/{slug}");
             let error = verify_response(&record, response(&final_url), 1_048_576)
+                .expect_err("invalid body must reach JSON validation");
+
+            assert_eq!(error.code(), LicenseErrorCode::JsonShape);
+        }
+    }
+
+    #[test]
+    fn client_requests_the_exact_endpoint_accepted_by_verification() {
+        for (version, expected_url) in [
+            (
+                AhclVersion::V1_0,
+                "https://ahcl.aperip.com/api/licenses/ahcl-1-0",
+            ),
+            (
+                AhclVersion::V1_1,
+                "https://ahcl.aperip.com/api/licenses/ahcl-1-1",
+            ),
+        ] {
+            let client =
+                OfficialLicenseClient::with_transport(EchoEndpointTransport { expected_url });
+            let error = client
+                .fetch(version)
                 .expect_err("invalid body must reach JSON validation");
 
             assert_eq!(error.code(), LicenseErrorCode::JsonShape);

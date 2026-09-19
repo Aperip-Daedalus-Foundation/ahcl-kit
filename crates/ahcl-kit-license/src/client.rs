@@ -26,7 +26,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::model::{LicenseError, LicenseErrorCode, LicenseRequest, LicenseResponse};
-use crate::verify::{OFFICIAL_ORIGIN, official_record, verify_response};
+use crate::verify::{official_record, verify_response};
 use crate::{LicenseTransportError, VerifiedLicense};
 use ahcl_kit_config::AhclVersion;
 use std::time::Duration;
@@ -56,8 +56,7 @@ impl OfficialLicenseClient {
 
     pub fn fetch(&self, version: AhclVersion) -> Result<VerifiedLicense, LicenseError> {
         let record = official_record(version);
-        let request =
-            LicenseRequest::official(format!("{OFFICIAL_ORIGIN}/api/licenses/{}", record.slug));
+        let request = LicenseRequest::official(record.endpoint_url().to_string());
         let response = self
             .transport
             .execute(&request)
