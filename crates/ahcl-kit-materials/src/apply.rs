@@ -1,6 +1,8 @@
-use crate::view::ProjectFilesystem;
-use crate::{MaterialsError, SafeRelPath};
-use ahcl_kit_core::{ChangeKind, ChangePlan};
+use crate::dependencies::validate_basename;
+use crate::third_party::validate_managed_package_identity;
+use crate::view::{ManagedThirdPartyDir, ProjectFilesystem};
+use crate::{ManagedRemoval, MaterialsError, MaterialsErrorCode, SafeRelPath};
+use ahcl_kit_core::{ChangeKind, ChangePlan, RepoPath};
 
 pub struct PlanApplier;
 
@@ -34,4 +36,73 @@ impl PlanApplier {
         }
         Ok(())
     }
+
+    pub fn apply_managed_removals(
+        managed: &ManagedThirdPartyDir<'_>,
+        removals: &[ManagedRemoval],
+    ) -> Result<(), MaterialsError> {
+        if removals.is_empty() {
+            return Ok(());
+        }
+
+        let mut validated = Vec::with_capacity(removals.len());
+        for removal in removals {
+            validated.push(ValidatedManagedRemoval::from_removal(removal)?);
+        }
+        managed.ensure_present()?;
+
+        for removal in validated {
+            match removal {
+                ValidatedManagedRemoval::Evidence(path) => managed.remove_evidence(&path)?,
+                ValidatedManagedRemoval::PackageDirectory(path) => {
+                    managed.remove_empty_package(&path)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+enum ValidatedManagedRemoval {
+    Evidence(SafeRelPath),
+    PackageDirectory(SafeRelPath),
+}
+
+impl ValidatedManagedRemoval {
+    fn from_removal(removal: &ManagedRemoval) -> Result<Self, MaterialsError> {
+        match removal {
+            ManagedRemoval::Evidence {
+                package_directory,
+                evidence_basename,
+            } => {
+                validate_package_directory(package_directory)?;
+                validate_evidence_basename(evidence_basename)?;
+                Ok(Self::Evidence(managed_path(&[
+                    package_directory,
+                    evidence_basename,
+                ])?))
+            }
+            ManagedRemoval::PackageDirectory { package_directory } => {
+                validate_package_directory(package_directory)?;
+                Ok(Self::PackageDirectory(managed_path(&[package_directory])?))
+            }
+        }
+    }
+}
+
+fn validate_package_directory(value: &str) -> Result<(), MaterialsError> {
+    validate_managed_package_identity(value)
+}
+
+fn validate_evidence_basename(value: &str) -> Result<(), MaterialsError> {
+    validate_basename(value)
+}
+
+fn managed_path(components: &[&str]) -> Result<SafeRelPath, MaterialsError> {
+    let path = RepoPath::parse(components.join("/")).map_err(|_| managed_tree_error())?;
+    SafeRelPath::from_repo_path(&path).map_err(|_| managed_tree_error())
+}
+
+fn managed_tree_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid)
 }

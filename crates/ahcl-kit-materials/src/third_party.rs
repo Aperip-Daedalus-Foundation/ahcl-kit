@@ -8,7 +8,8 @@ use ahcl_kit_core::{
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-const STATE_BASENAME: &str = ".ahcl-kit-state.json";
+pub(crate) const MANAGED_STATE_BASENAME: &str = ".ahcl-kit-state.json";
+pub(crate) const MANAGED_STAGING_BASENAME: &str = ".ahcl-kit-staging";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedEntryKind {
@@ -206,7 +207,7 @@ fn desired_state_and_writes(
         let directory = directories
             .get(&package.id)
             .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid))?;
-        validate_identity(directory)?;
+        validate_managed_package_identity(directory)?;
         let basenames = evidence_basenames(package)?;
         let mut evidence = Vec::new();
         for (artifact, basename) in package.license_artifacts.iter().zip(basenames) {
@@ -275,7 +276,7 @@ fn parse_state(bytes: &[u8]) -> Result<StateManifest, MaterialsError> {
     }
     let mut directories = BTreeSet::new();
     for package in &manifest.packages {
-        validate_identity(&package.directory)
+        validate_managed_package_identity(&package.directory)
             .map_err(|_| MaterialsError::new(MaterialsErrorCode::StateInvalid))?;
         if !directories.insert(package.directory.to_ascii_lowercase()) {
             return Err(MaterialsError::new(MaterialsErrorCode::StateInvalid));
@@ -315,7 +316,7 @@ fn validate_inventory(inventory: &ManagedThirdPartyInventory) -> Result<(), Mate
     }
     let mut packages = BTreeSet::new();
     for package in &inventory.packages {
-        validate_identity(&package.directory)?;
+        validate_managed_package_identity(&package.directory)?;
         if !packages.insert(package.directory.to_ascii_lowercase()) {
             return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
         }
@@ -343,8 +344,10 @@ fn validate_inventory(inventory: &ManagedThirdPartyInventory) -> Result<(), Mate
     for entry in &inventory.extra_root_entries {
         validate_basename(&entry.name)?;
         let key = entry.name.to_ascii_lowercase();
-        if matches!(key.as_str(), ".ahcl-kit-state.json" | ".ahcl-kit-staging")
-            || !root_entries.insert(key)
+        if matches!(
+            key.as_str(),
+            MANAGED_STATE_BASENAME | MANAGED_STAGING_BASENAME
+        ) || !root_entries.insert(key)
         {
             return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
         }
@@ -563,14 +566,19 @@ fn validate_state_kind(kind: ManagedEntryKind) -> Result<(), MaterialsError> {
     }
 }
 
-fn validate_identity(value: &str) -> Result<(), MaterialsError> {
+pub(crate) fn validate_managed_package_identity(value: &str) -> Result<(), MaterialsError> {
     validate_basename(value)?;
+    let portable = value.to_ascii_lowercase();
     if !value.is_ascii()
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
         || !value.as_bytes().contains(&b'-')
         || matches!(value, "LICENSE" | "COPYING" | "NOTICE" | "COPYRIGHT")
+        || matches!(
+            portable.as_str(),
+            MANAGED_STATE_BASENAME | MANAGED_STAGING_BASENAME
+        )
     {
         return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
     }
@@ -593,7 +601,7 @@ fn third_party_base(layout: &LayoutPolicy) -> Result<RepoPath, MaterialsError> {
 }
 
 fn state_path(base: &RepoPath) -> Result<RepoPath, MaterialsError> {
-    root_entry_path(base, STATE_BASENAME)
+    root_entry_path(base, MANAGED_STATE_BASENAME)
 }
 
 fn root_entry_path(base: &RepoPath, name: &str) -> Result<RepoPath, MaterialsError> {
@@ -607,7 +615,7 @@ fn managed_path(
     directory: &str,
     basename: Option<&str>,
 ) -> Result<RepoPath, MaterialsError> {
-    validate_identity(directory)?;
+    validate_managed_package_identity(directory)?;
     let value = match basename {
         Some(basename) => {
             validate_basename(basename)?;
@@ -646,4 +654,25 @@ struct StatePackage {
 struct StateEvidence {
     basename: String,
     sha256: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_managed_package_identity;
+
+    #[test]
+    fn package_identity_rejects_reserved_names_case_insensitively() {
+        for name in [
+            ".ahcl-kit-state.json",
+            ".AHCL-KIT-STATE.JSON",
+            ".ahcl-kit-staging",
+            ".AHCL-KIT-STAGING",
+        ] {
+            assert!(
+                validate_managed_package_identity(name).is_err(),
+                "accepted {name:?}"
+            );
+        }
+        assert!(validate_managed_package_identity("package-1.0.0").is_ok());
+    }
 }

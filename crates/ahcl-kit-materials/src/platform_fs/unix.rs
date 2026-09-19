@@ -1,4 +1,16 @@
-use crate::{MaterialsError, SafeRelPath, is_dot_entry, is_safe_os_component, temp_component};
+use super::{
+    MAX_MANAGED_EVIDENCE_PER_PACKAGE, MAX_MANAGED_PACKAGES, MAX_MANAGED_ROOT_ENTRIES,
+    MAX_MANAGED_TOTAL_ENTRIES, inventory_limit_error,
+};
+use crate::dependencies::validate_basename;
+use crate::third_party::{
+    MANAGED_STAGING_BASENAME, MANAGED_STATE_BASENAME, validate_managed_package_identity,
+};
+use crate::{
+    ManagedEntryKind, ManagedEvidenceInventory, ManagedPackageInventory, ManagedRootInventoryEntry,
+    ManagedThirdPartyInventory, MaterialsError, MaterialsErrorCode, SafeRelPath, is_dot_entry,
+    temp_component,
+};
 use ahcl_kit_core::ProjectEntry;
 use rustix::fd::OwnedFd;
 use rustix::fs::{
@@ -27,22 +39,12 @@ const FILE_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::NOFOLLOW)
     .union(OFlags::NONBLOCK)
     .union(OFlags::CLOEXEC);
-const MAX_REMOVAL_DEPTH: usize = 256;
-
 pub(crate) struct PlatformRoot {
     handle: OwnedFd,
 }
 
 pub(crate) struct ManagedDirectory {
-    handle: OwnedFd,
-}
-
-struct RemovalNode {
-    name: OsString,
-    handle: OwnedFd,
-    metadata: Stat,
-    is_directory: bool,
-    children: Vec<RemovalNode>,
+    handle: Option<OwnedFd>,
 }
 
 enum DirectoryOpenError {
@@ -55,7 +57,6 @@ enum DirectoryOpenError {
 enum NodeOpenError {
     Missing,
     Reparse,
-    Other,
     Io,
 }
 
@@ -122,7 +123,7 @@ impl PlatformRoot {
                 }
                 Ok(_) => return Err(commit_error(path)),
                 Err(NodeOpenError::Reparse) => return Err(reparse_error(path)),
-                Err(NodeOpenError::Missing | NodeOpenError::Other | NodeOpenError::Io) => {
+                Err(NodeOpenError::Missing | NodeOpenError::Io) => {
                     return Err(commit_error(path));
                 }
             }
@@ -164,33 +165,181 @@ impl PlatformRoot {
     ) -> Result<ManagedDirectory, MaterialsError> {
         let mut current = rio::dup(&self.handle).map_err(|_| path_io_error(namespace))?;
         for component in namespace.components() {
-            current = open_directory_at(&current, component)
-                .map_err(|error| map_path_directory_error(namespace, error))?;
+            current = match open_directory_at(&current, component) {
+                Ok(directory) => directory,
+                Err(DirectoryOpenError::Missing) => return Ok(ManagedDirectory { handle: None }),
+                Err(error) => return Err(map_path_directory_error(namespace, error)),
+            };
         }
-        Ok(ManagedDirectory { handle: current })
+        Ok(ManagedDirectory {
+            handle: Some(current),
+        })
     }
 }
 
 impl ManagedDirectory {
-    pub(crate) fn remove_tree(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
-        let (parent, final_name) = match walk_parent(&self.handle, path, false)? {
+    pub(crate) fn inventory(&self) -> Result<ManagedThirdPartyInventory, MaterialsError> {
+        match &self.handle {
+            None => Ok(ManagedThirdPartyInventory::absent()),
+            Some(handle) => inventory_directory(handle),
+        }
+    }
+
+    pub(crate) fn ensure_present(&self) -> Result<(), MaterialsError> {
+        if self.handle.is_some() {
+            Ok(())
+        } else {
+            Err(managed_tree_error())
+        }
+    }
+
+    pub(crate) fn remove_file(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        let handle = self.handle.as_ref().ok_or_else(managed_tree_error)?;
+        let (parent, final_name) = match walk_parent(handle, path, false)? {
             Some(value) => value,
             None => return Ok(()),
         };
-        let node = match build_removal_node(&parent, &final_name, 0) {
-            Ok(node) => node,
+        let (target, metadata) = match open_node_at(&parent, &final_name) {
+            Ok(value) => value,
             Err(NodeOpenError::Missing) => return Ok(()),
-            Err(NodeOpenError::Reparse) => return Err(reparse_error(path)),
-            Err(NodeOpenError::Other | NodeOpenError::Io) => return Err(path_io_error(path)),
+            Err(NodeOpenError::Reparse) => return Err(managed_link_error()),
+            Err(NodeOpenError::Io) => return Err(managed_remove_error(path)),
         };
-        delete_removal_node(&parent, node).map_err(|_| {
-            MaterialsError::at_path(
-                "materials.managed.remove",
-                "managed entry could not be removed",
-                path,
-            )
-        })
+        if !FileType::from_raw_mode(metadata.st_mode).is_file()
+            || !name_matches_handle(&parent, &final_name, &target)
+        {
+            return Err(managed_tree_error());
+        }
+        unlinkat(&parent, &final_name, AtFlags::empty()).map_err(|_| managed_remove_error(path))
     }
+
+    pub(crate) fn remove_empty_directory(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        let handle = self.handle.as_ref().ok_or_else(managed_tree_error)?;
+        let (parent, final_name) = match walk_parent(handle, path, false)? {
+            Some(value) => value,
+            None => return Ok(()),
+        };
+        let (target, metadata) = match open_node_at(&parent, &final_name) {
+            Ok(value) => value,
+            Err(NodeOpenError::Missing) => return Ok(()),
+            Err(NodeOpenError::Reparse) => return Err(managed_link_error()),
+            Err(NodeOpenError::Io) => return Err(managed_remove_error(path)),
+        };
+        if !FileType::from_raw_mode(metadata.st_mode).is_dir() {
+            return Err(managed_tree_error());
+        }
+        let mut entries = Dir::read_from(&target).map_err(|_| managed_remove_error(path))?;
+        while let Some(entry) = entries.read() {
+            let entry = entry.map_err(|_| managed_remove_error(path))?;
+            let name = OsStr::from_bytes(entry.file_name().to_bytes());
+            if !is_dot_entry(name) {
+                return Err(managed_tree_error());
+            }
+        }
+        if !name_matches_handle(&parent, &final_name, &target) {
+            return Err(managed_tree_error());
+        }
+        unlinkat(&parent, &final_name, AtFlags::REMOVEDIR).map_err(|_| managed_remove_error(path))
+    }
+}
+
+fn inventory_directory(root: &OwnedFd) -> Result<ManagedThirdPartyInventory, MaterialsError> {
+    let mut state_kind = ManagedEntryKind::Absent;
+    let mut staging_kind = ManagedEntryKind::Absent;
+    let mut packages = Vec::new();
+    let mut extra_root_entries = Vec::new();
+    let root_entries = managed_entry_names(root, MAX_MANAGED_ROOT_ENTRIES)?;
+    let mut remaining_total = MAX_MANAGED_TOTAL_ENTRIES - root_entries.len();
+
+    for (name, os_name) in root_entries {
+        let is_package = validate_managed_package_identity(&name).is_ok();
+        if is_package && packages.len() == MAX_MANAGED_PACKAGES {
+            return Err(inventory_limit_error());
+        }
+        let (kind, directory) = inspect_managed_entry(root, &os_name)?;
+        match name.as_str() {
+            MANAGED_STATE_BASENAME => state_kind = kind,
+            MANAGED_STAGING_BASENAME => staging_kind = kind,
+            _ if is_package => {
+                let mut evidence = Vec::new();
+                if let Some(directory) = directory {
+                    let evidence_entries = managed_entry_names(
+                        &directory,
+                        MAX_MANAGED_EVIDENCE_PER_PACKAGE.min(remaining_total),
+                    )?;
+                    remaining_total -= evidence_entries.len();
+                    evidence.reserve(evidence_entries.len());
+                    for (basename, os_basename) in evidence_entries {
+                        let (entry_kind, _) = inspect_managed_entry(&directory, &os_basename)?;
+                        evidence.push(ManagedEvidenceInventory::new(basename, entry_kind));
+                    }
+                }
+                packages.push(ManagedPackageInventory::new(name, kind, evidence));
+            }
+            _ => extra_root_entries.push(ManagedRootInventoryEntry::new(name, kind)),
+        }
+    }
+
+    Ok(ManagedThirdPartyInventory::new(
+        ManagedEntryKind::Directory,
+        state_kind,
+        staging_kind,
+        packages,
+        extra_root_entries,
+    ))
+}
+
+fn managed_entry_names(
+    directory: &OwnedFd,
+    max_entries: usize,
+) -> Result<Vec<(String, OsString)>, MaterialsError> {
+    let mut names = Vec::new();
+    let mut entries = Dir::read_from(directory).map_err(|_| inventory_error())?;
+    while let Some(entry) = entries.read() {
+        let entry = entry.map_err(|_| inventory_error())?;
+        let name = OsStr::from_bytes(entry.file_name().to_bytes());
+        if is_dot_entry(name) {
+            continue;
+        }
+        if names.len() == max_entries {
+            return Err(inventory_limit_error());
+        }
+        let string = name.to_str().ok_or_else(inventory_error)?.to_owned();
+        validate_basename(&string)?;
+        names.push((string, name.to_os_string()));
+    }
+    names.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(names)
+}
+
+fn inspect_managed_entry(
+    parent: &OwnedFd,
+    name: &OsStr,
+) -> Result<(ManagedEntryKind, Option<OwnedFd>), MaterialsError> {
+    let metadata =
+        statat(parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(|_| inventory_error())?;
+    let file_type = FileType::from_raw_mode(metadata.st_mode);
+    if file_type.is_symlink() {
+        return Ok((ManagedEntryKind::LinkOrReparsePoint, None));
+    }
+    if file_type.is_file() {
+        return Ok((ManagedEntryKind::File, None));
+    }
+    if !file_type.is_dir() {
+        return Ok((ManagedEntryKind::Other, None));
+    }
+    match open_directory_at(parent, name) {
+        Ok(directory) => Ok((ManagedEntryKind::Directory, Some(directory))),
+        Err(DirectoryOpenError::Reparse) => Ok((ManagedEntryKind::LinkOrReparsePoint, None)),
+        Err(_) => Err(inventory_error()),
+    }
+}
+
+fn inventory_error() -> MaterialsError {
+    MaterialsError::filesystem(
+        "materials.managed.inventory",
+        "managed third-party inventory could not be read",
+    )
 }
 
 fn walk_parent(
@@ -264,7 +413,7 @@ fn read_open_node(
         Ok(value) => value,
         Err(NodeOpenError::Missing) => return Ok(ProjectEntry::Absent),
         Err(NodeOpenError::Reparse) => return Err(reparse_error(path)),
-        Err(NodeOpenError::Other | NodeOpenError::Io) => return Err(path_io_error(path)),
+        Err(NodeOpenError::Io) => return Err(path_io_error(path)),
     };
     if !FileType::from_raw_mode(metadata.st_mode).is_file() {
         return Ok(ProjectEntry::Other);
@@ -362,83 +511,6 @@ fn name_matches_handle(parent: &OwnedFd, name: &OsStr, handle: impl AsFd) -> boo
     opened.st_dev == named.st_dev && opened.st_ino == named.st_ino
 }
 
-fn build_removal_node(
-    parent: &OwnedFd,
-    name: &OsStr,
-    depth: usize,
-) -> Result<RemovalNode, NodeOpenError> {
-    if depth > MAX_REMOVAL_DEPTH {
-        return Err(NodeOpenError::Io);
-    }
-    if !is_safe_os_component(name) {
-        return Err(NodeOpenError::Other);
-    }
-
-    let named = statat(parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(|error| match error {
-        Errno::NOENT => NodeOpenError::Missing,
-        _ => NodeOpenError::Io,
-    })?;
-    let file_type = FileType::from_raw_mode(named.st_mode);
-    if file_type.is_symlink() {
-        return Err(NodeOpenError::Reparse);
-    }
-    if !file_type.is_file() && !file_type.is_dir() {
-        return Err(NodeOpenError::Other);
-    }
-
-    let flags = if file_type.is_dir() {
-        DIRECTORY_FLAGS
-    } else {
-        FILE_FLAGS
-    };
-    let handle = openat(parent, name, flags, Mode::empty()).map_err(|error| match error {
-        Errno::NOENT => NodeOpenError::Missing,
-        Errno::LOOP => NodeOpenError::Reparse,
-        _ => NodeOpenError::Io,
-    })?;
-    let opened = fstat(&handle).map_err(|_| NodeOpenError::Io)?;
-    if opened.st_dev != named.st_dev || opened.st_ino != named.st_ino {
-        return Err(NodeOpenError::Io);
-    }
-
-    let mut children = Vec::new();
-    if file_type.is_dir() {
-        let mut directory = Dir::read_from(&handle).map_err(|_| NodeOpenError::Io)?;
-        while let Some(entry) = directory.read() {
-            let entry = entry.map_err(|_| NodeOpenError::Io)?;
-            let child_name = OsStr::from_bytes(entry.file_name().to_bytes());
-            if is_dot_entry(child_name) {
-                continue;
-            }
-            children.push(build_removal_node(&handle, child_name, depth + 1)?);
-        }
-    }
-
-    Ok(RemovalNode {
-        name: name.to_os_string(),
-        handle,
-        metadata: opened,
-        is_directory: file_type.is_dir(),
-        children,
-    })
-}
-
-fn delete_removal_node(parent: &OwnedFd, node: RemovalNode) -> rio::Result<()> {
-    for child in node.children {
-        delete_removal_node(&node.handle, child)?;
-    }
-    let named = statat(parent, &node.name, AtFlags::SYMLINK_NOFOLLOW)?;
-    if named.st_dev != node.metadata.st_dev || named.st_ino != node.metadata.st_ino {
-        return Err(Errno::STALE);
-    }
-    let flags = if node.is_directory {
-        AtFlags::REMOVEDIR
-    } else {
-        AtFlags::empty()
-    };
-    unlinkat(parent, &node.name, flags)
-}
-
 fn map_root_directory_error(error: DirectoryOpenError) -> MaterialsError {
     match error {
         DirectoryOpenError::Reparse => MaterialsError::root(
@@ -499,4 +571,20 @@ fn path_io_error(path: &SafeRelPath) -> MaterialsError {
 
 fn commit_error(path: &SafeRelPath) -> MaterialsError {
     MaterialsError::at_path("materials.apply.commit", "atomic file commit failed", path)
+}
+
+fn managed_tree_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid)
+}
+
+fn managed_link_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::LinkOrReparsePoint)
+}
+
+fn managed_remove_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.managed.remove",
+        "managed entry could not be removed",
+        path,
+    )
 }

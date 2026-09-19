@@ -1,5 +1,5 @@
 use crate::platform_fs::{ManagedDirectory, PlatformRoot};
-use crate::{MaterialsError, SafeRelPath};
+use crate::{ManagedThirdPartyInventory, MaterialsError, SafeRelPath};
 use ahcl_kit_core::{ProjectEntry, ProjectView, ProjectViewError, RepoPath};
 use std::fmt;
 use std::marker::PhantomData;
@@ -46,9 +46,20 @@ pub struct ManagedThirdPartyDir<'a> {
 }
 
 impl ManagedThirdPartyDir<'_> {
-    pub fn remove_tree(&self, relative_path: &RepoPath) -> Result<(), MaterialsError> {
-        let safe_path = SafeRelPath::from_repo_path(relative_path)?;
-        self.directory.remove_tree(&safe_path)
+    pub fn inventory(&self) -> Result<ManagedThirdPartyInventory, MaterialsError> {
+        self.directory.inventory()
+    }
+
+    pub(crate) fn ensure_present(&self) -> Result<(), MaterialsError> {
+        self.directory.ensure_present()
+    }
+
+    pub(crate) fn remove_evidence(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        self.directory.remove_file(path)
+    }
+
+    pub(crate) fn remove_empty_package(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        self.directory.remove_empty_directory(path)
     }
 }
 

@@ -217,6 +217,7 @@ pub(crate) fn temp_component() -> Result<OsString, MaterialsError> {
     Ok(OsString::from(name))
 }
 
+#[cfg(unix)]
 pub(crate) fn is_dot_entry(name: &OsStr) -> bool {
     name == OsStr::new(".") || name == OsStr::new("..")
 }

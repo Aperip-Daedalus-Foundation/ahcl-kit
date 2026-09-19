@@ -1,4 +1,16 @@
-use crate::{MaterialsError, SafeRelPath, is_dot_entry, is_safe_os_component, temp_component};
+use super::{
+    MAX_MANAGED_EVIDENCE_PER_PACKAGE, MAX_MANAGED_PACKAGES, MAX_MANAGED_ROOT_ENTRIES,
+    MAX_MANAGED_TOTAL_ENTRIES, inventory_limit_error,
+};
+use crate::dependencies::validate_basename;
+use crate::third_party::{
+    MANAGED_STAGING_BASENAME, MANAGED_STATE_BASENAME, validate_managed_package_identity,
+};
+use crate::{
+    ManagedEntryKind, ManagedEvidenceInventory, ManagedPackageInventory, ManagedRootInventoryEntry,
+    ManagedThirdPartyInventory, MaterialsError, MaterialsErrorCode, SafeRelPath,
+    is_safe_os_component, temp_component,
+};
 use ahcl_kit_core::ProjectEntry;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -31,14 +43,13 @@ const OPEN_NO_REPARSE: u32 = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE
 const RENAME_FLAG_REPLACE_IF_EXISTS: u32 = 0x1;
 const RENAME_FLAG_POSIX_SEMANTICS: u32 = 0x2;
 const MAX_RENAME_UNITS: usize = 32_767;
-const MAX_REMOVAL_DEPTH: usize = 256;
 
 pub(crate) struct PlatformRoot {
     root_chain: Vec<DirectoryHandle>,
 }
 
 pub(crate) struct ManagedDirectory {
-    chain: Vec<DirectoryHandle>,
+    chain: Option<Vec<DirectoryHandle>>,
 }
 
 struct DirectoryHandle {
@@ -50,11 +61,6 @@ struct OpenedNode {
     handle: OwnedHandle,
     attributes: u32,
     final_path: Option<PathBuf>,
-}
-
-struct RemovalNode {
-    handle: OwnedHandle,
-    children: Vec<RemovalNode>,
 }
 
 enum DirectoryOpenError {
@@ -184,11 +190,16 @@ impl PlatformRoot {
         for component in namespace.components() {
             let parent = select_parent(&self.root_chain, &chain).ok_or_else(internal_path_error)?;
             let path = append_component(&parent.final_path, component);
-            let directory = open_directory_path(&path, DIRECTORY_READ_ACCESS)
-                .map_err(|error| map_path_directory_error(namespace, error))?;
+            let directory = match open_directory_path(&path, DIRECTORY_READ_ACCESS) {
+                Ok(directory) => directory,
+                Err(DirectoryOpenError::Missing) => {
+                    return Ok(ManagedDirectory { chain: None });
+                }
+                Err(error) => return Err(map_path_directory_error(namespace, error)),
+            };
             chain.push(directory);
         }
-        Ok(ManagedDirectory { chain })
+        Ok(ManagedDirectory { chain: Some(chain) })
     }
 
     fn open_operation_root(
@@ -245,38 +256,190 @@ impl PlatformRoot {
 }
 
 impl ManagedDirectory {
-    pub(crate) fn remove_tree(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
-        let base = current_directory(&self.chain).ok_or_else(internal_path_error)?;
-        let components = path.components();
-        let final_name = match components.last() {
-            Some(name) => name.clone(),
-            None => return Err(internal_path_error()),
-        };
-        let mut directories = Vec::new();
-        for component in &components[..components.len() - 1] {
-            let parent =
-                select_parent_from_base(base, &directories).ok_or_else(internal_path_error)?;
-            let child_path = append_component(&parent.final_path, component);
-            let directory = open_directory_path(&child_path, DIRECTORY_READ_ACCESS)
-                .map_err(|error| map_path_directory_error(path, error))?;
-            directories.push(directory);
+    pub(crate) fn inventory(&self) -> Result<ManagedThirdPartyInventory, MaterialsError> {
+        match &self.chain {
+            None => Ok(ManagedThirdPartyInventory::absent()),
+            Some(chain) => inventory_directory(chain),
         }
+    }
+
+    pub(crate) fn ensure_present(&self) -> Result<(), MaterialsError> {
+        if self.chain.is_some() {
+            Ok(())
+        } else {
+            Err(managed_tree_error())
+        }
+    }
+
+    pub(crate) fn remove_file(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        let chain = self.chain.as_ref().ok_or_else(managed_tree_error)?;
+        let Some((directories, final_name)) = walk_managed_parent(chain, path)? else {
+            return Ok(());
+        };
+        let base = current_directory(chain).ok_or_else(internal_path_error)?;
         let parent = select_parent_from_base(base, &directories).ok_or_else(internal_path_error)?;
         let target_path = append_component(&parent.final_path, &final_name);
-        let node = match build_removal_node(&target_path, 0) {
+        let node = match open_node_path(&target_path, DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE) {
             Ok(node) => node,
             Err(NodeOpenError::Missing) => return Ok(()),
-            Err(NodeOpenError::Reparse) => return Err(reparse_error(path)),
-            Err(NodeOpenError::Io) => return Err(path_io_error(path)),
+            Err(NodeOpenError::Reparse) => return Err(managed_link_error()),
+            Err(NodeOpenError::Io) => return Err(managed_remove_error(path)),
         };
-        delete_removal_node(node).map_err(|_| {
-            MaterialsError::at_path(
-                "materials.managed.remove",
-                "managed entry could not be removed",
-                path,
-            )
-        })
+        if node.attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
+            return Err(managed_tree_error());
+        }
+        delete_open_handle(node.handle.as_raw_handle()).map_err(|_| managed_remove_error(path))
     }
+
+    pub(crate) fn remove_empty_directory(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        let chain = self.chain.as_ref().ok_or_else(managed_tree_error)?;
+        let Some((directories, final_name)) = walk_managed_parent(chain, path)? else {
+            return Ok(());
+        };
+        let base = current_directory(chain).ok_or_else(internal_path_error)?;
+        let parent = select_parent_from_base(base, &directories).ok_or_else(internal_path_error)?;
+        let target_path = append_component(&parent.final_path, &final_name);
+        let node = match open_node_path(
+            &target_path,
+            DELETE | FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        ) {
+            Ok(node) => node,
+            Err(NodeOpenError::Missing) => return Ok(()),
+            Err(NodeOpenError::Reparse) => return Err(managed_link_error()),
+            Err(NodeOpenError::Io) => return Err(managed_remove_error(path)),
+        };
+        if node.attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
+            return Err(managed_tree_error());
+        }
+        let directory_path = node.final_path.as_ref().ok_or_else(managed_tree_error)?;
+        if !directory_is_empty(directory_path).map_err(|_| managed_remove_error(path))? {
+            return Err(managed_tree_error());
+        }
+        delete_open_handle(node.handle.as_raw_handle()).map_err(|_| managed_remove_error(path))
+    }
+}
+
+fn walk_managed_parent(
+    chain: &[DirectoryHandle],
+    path: &SafeRelPath,
+) -> Result<Option<(Vec<DirectoryHandle>, OsString)>, MaterialsError> {
+    let base = current_directory(chain).ok_or_else(internal_path_error)?;
+    let components = path.components();
+    let final_name = components.last().cloned().ok_or_else(internal_path_error)?;
+    let mut directories = Vec::new();
+    for component in &components[..components.len() - 1] {
+        let parent = select_parent_from_base(base, &directories).ok_or_else(internal_path_error)?;
+        let child_path = append_component(&parent.final_path, component);
+        let directory = match open_directory_path(&child_path, DIRECTORY_READ_ACCESS) {
+            Ok(directory) => directory,
+            Err(DirectoryOpenError::Missing) => return Ok(None),
+            Err(DirectoryOpenError::Reparse) => return Err(managed_link_error()),
+            Err(DirectoryOpenError::NotDirectory) => return Err(managed_tree_error()),
+            Err(DirectoryOpenError::Io) => return Err(managed_remove_error(path)),
+        };
+        directories.push(directory);
+    }
+    Ok(Some((directories, final_name)))
+}
+
+fn inventory_directory(
+    chain: &[DirectoryHandle],
+) -> Result<ManagedThirdPartyInventory, MaterialsError> {
+    let root = current_directory(chain).ok_or_else(inventory_error)?;
+    let mut state_kind = ManagedEntryKind::Absent;
+    let mut staging_kind = ManagedEntryKind::Absent;
+    let mut packages = Vec::new();
+    let mut extra_root_entries = Vec::new();
+    let root_entries = managed_entry_names(root, MAX_MANAGED_ROOT_ENTRIES)?;
+    let mut remaining_total = MAX_MANAGED_TOTAL_ENTRIES - root_entries.len();
+
+    for (name, os_name) in root_entries {
+        let is_package = validate_managed_package_identity(&name).is_ok();
+        if is_package && packages.len() == MAX_MANAGED_PACKAGES {
+            return Err(inventory_limit_error());
+        }
+        let (kind, directory) = inspect_managed_entry(root, &os_name)?;
+        match name.as_str() {
+            MANAGED_STATE_BASENAME => state_kind = kind,
+            MANAGED_STAGING_BASENAME => staging_kind = kind,
+            _ if is_package => {
+                let mut evidence = Vec::new();
+                if let Some(directory) = directory {
+                    let evidence_entries = managed_entry_names(
+                        &directory,
+                        MAX_MANAGED_EVIDENCE_PER_PACKAGE.min(remaining_total),
+                    )?;
+                    remaining_total -= evidence_entries.len();
+                    evidence.reserve(evidence_entries.len());
+                    for (basename, os_basename) in evidence_entries {
+                        let (entry_kind, _) = inspect_managed_entry(&directory, &os_basename)?;
+                        evidence.push(ManagedEvidenceInventory::new(basename, entry_kind));
+                    }
+                }
+                packages.push(ManagedPackageInventory::new(name, kind, evidence));
+            }
+            _ => extra_root_entries.push(ManagedRootInventoryEntry::new(name, kind)),
+        }
+    }
+
+    Ok(ManagedThirdPartyInventory::new(
+        ManagedEntryKind::Directory,
+        state_kind,
+        staging_kind,
+        packages,
+        extra_root_entries,
+    ))
+}
+
+fn managed_entry_names(
+    directory: &DirectoryHandle,
+    max_entries: usize,
+) -> Result<Vec<(String, OsString)>, MaterialsError> {
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&directory.final_path).map_err(|_| inventory_error())? {
+        if names.len() == max_entries {
+            return Err(inventory_limit_error());
+        }
+        let name = entry.map_err(|_| inventory_error())?.file_name();
+        let string = name.to_str().ok_or_else(inventory_error)?.to_owned();
+        validate_basename(&string)?;
+        names.push((string, name));
+    }
+    names.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(names)
+}
+
+fn inspect_managed_entry(
+    parent: &DirectoryHandle,
+    name: &OsStr,
+) -> Result<(ManagedEntryKind, Option<DirectoryHandle>), MaterialsError> {
+    let path = append_component(&parent.final_path, name);
+    let handle = open_handle(
+        &path,
+        FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        OPEN_EXISTING,
+        OPEN_NO_REPARSE,
+    )
+    .map_err(|_| inventory_error())?;
+    let attributes = query_attributes(&handle).map_err(|_| inventory_error())?;
+    if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Ok((ManagedEntryKind::LinkOrReparsePoint, None));
+    }
+    if attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
+        return Ok((ManagedEntryKind::File, None));
+    }
+    let final_path = final_path(&handle).map_err(|_| inventory_error())?;
+    Ok((
+        ManagedEntryKind::Directory,
+        Some(DirectoryHandle { handle, final_path }),
+    ))
+}
+
+fn inventory_error() -> MaterialsError {
+    MaterialsError::filesystem(
+        "materials.managed.inventory",
+        "managed third-party inventory could not be read",
+    )
 }
 
 fn split_absolute_path(path: &Path) -> Result<(PathBuf, Vec<OsString>), MaterialsError> {
@@ -594,79 +757,18 @@ fn set_rename_information(
 }
 
 fn mark_delete(handle: RawHandle) {
-    let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
-    let size = match u32::try_from(size_of::<FILE_DISPOSITION_INFO>()) {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    // SAFETY: `disposition` is a correctly sized immutable Win32 structure and the caller
-    // keeps the handle live. Cleanup is best effort, so failure is intentionally ignored.
-    let _ = unsafe {
-        SetFileInformationByHandle(
-            handle,
-            FileDispositionInfo,
-            (&raw const disposition).cast(),
-            size,
-        )
-    };
+    let _ = delete_open_handle(handle);
 }
 
-fn flush_directory(handle: RawHandle) {
-    // SAFETY: the borrowed directory handle remains live. Directory flushing is best effort
-    // because some Windows filesystems reject `FlushFileBuffers` for directory handles.
-    let _ = unsafe { FlushFileBuffers(handle) };
-}
-
-fn build_removal_node(path: &Path, depth: usize) -> Result<RemovalNode, NodeOpenError> {
-    if depth > MAX_REMOVAL_DEPTH {
-        return Err(NodeOpenError::Io);
-    }
-    let access = GENERIC_READ | FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE;
-    let node = open_node_path(path, access)?;
-    let mut children = Vec::new();
-    if node.attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
-        let directory_path = match &node.final_path {
-            Some(value) => value,
-            None => return Err(NodeOpenError::Io),
-        };
-        let entries = fs_entries(directory_path).map_err(|_| NodeOpenError::Io)?;
-        for name in entries {
-            if is_dot_entry(&name) {
-                continue;
-            }
-            if !is_safe_os_component(&name) {
-                return Err(NodeOpenError::Io);
-            }
-            let child_path = append_component(directory_path, &name);
-            children.push(build_removal_node(&child_path, depth + 1)?);
-        }
-    }
-    Ok(RemovalNode {
-        handle: node.handle,
-        children,
-    })
-}
-
-fn fs_entries(path: &Path) -> io::Result<Vec<OsString>> {
-    let mut entries = Vec::new();
-    for entry in std::fs::read_dir(path)? {
-        entries.push(entry?.file_name());
-    }
-    Ok(entries)
-}
-
-fn delete_removal_node(node: RemovalNode) -> io::Result<()> {
-    for child in node.children {
-        delete_removal_node(child)?;
-    }
+fn delete_open_handle(handle: RawHandle) -> io::Result<()> {
     let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
     let size = u32::try_from(size_of::<FILE_DISPOSITION_INFO>())
         .map_err(|_| io::Error::other("disposition buffer is too large"))?;
-    // SAFETY: the disposition structure and size match, and this function owns the live
-    // handle until after the call. Children have already been deleted and closed.
+    // SAFETY: `disposition` is a correctly sized immutable Win32 structure and the caller keeps
+    // the handle live through the call.
     let succeeded = unsafe {
         SetFileInformationByHandle(
-            node.handle.as_raw_handle(),
+            handle,
             FileDispositionInfo,
             (&raw const disposition).cast(),
             size,
@@ -677,6 +779,19 @@ fn delete_removal_node(node: RemovalNode) -> io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+fn flush_directory(handle: RawHandle) {
+    // SAFETY: the borrowed directory handle remains live. Directory flushing is best effort
+    // because some Windows filesystems reject `FlushFileBuffers` for directory handles.
+    let _ = unsafe { FlushFileBuffers(handle) };
+}
+
+fn directory_is_empty(path: &Path) -> io::Result<bool> {
+    std::fs::read_dir(path)?
+        .next()
+        .transpose()
+        .map(|entry| entry.is_none())
 }
 
 fn wide_null(value: &OsStr) -> io::Result<Vec<u16>> {
@@ -811,4 +926,20 @@ fn path_io_error(path: &SafeRelPath) -> MaterialsError {
 
 fn commit_error(path: &SafeRelPath) -> MaterialsError {
     MaterialsError::at_path("materials.apply.commit", "atomic file commit failed", path)
+}
+
+fn managed_tree_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid)
+}
+
+fn managed_link_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::LinkOrReparsePoint)
+}
+
+fn managed_remove_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.managed.remove",
+        "managed entry could not be removed",
+        path,
+    )
 }
