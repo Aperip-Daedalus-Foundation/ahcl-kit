@@ -25,6 +25,9 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
+use crate::schema::LATEST_SCHEMA;
+use std::sync::LazyLock;
+
 /// Renders a complete, deterministic starter configuration with no adapters enabled.
 pub struct ConfigSkeleton;
 
@@ -64,44 +67,50 @@ impl ProjectIdentity {
 
 impl ConfigSkeleton {
     pub fn render() -> &'static str {
-        concat!(
-            "# AHCL Kit project configuration.\n",
-            "schema = 1\n",
-            "materials-directory = \".ahcl\"\n",
-            "languages = []\n",
-            "\n",
-            "[project]\n",
-            "name = \"\"\n",
-            "canonical-repository = \"\"\n",
-            "canonical-branch = \"master\"\n",
-            "right-holders = []\n",
-            "contact = \"\"\n",
-            "adoption-date = \"\"\n",
-            "\n",
-            "[license]\n",
-            "version = \"1.1\"\n",
-            "special-authorization-channel = \"\"\n",
-            "\n",
-            "[generation]\n",
-            "strict-license-files = true\n",
-            "\n",
-            "# To enable the Rust adapter, replace `languages = []` above with:\n",
-            "# languages:\n",
-            "#   - \"rust\"\n",
-            "#\n",
-            "# Then add:\n",
-            "# [rust.cargo]\n",
-            "# manifests:\n",
-            "#   - \"Cargo.toml\"\n",
-            "# packages = []\n",
-            "# rules = []\n",
-        )
+        static RENDERED: LazyLock<String> = LazyLock::new(|| {
+            format!(
+                concat!(
+                    "# AHCL Kit project configuration.\n",
+                    "schema = {LATEST_SCHEMA}\n",
+                    "materials-directory = \".ahcl\"\n",
+                    "languages = []\n",
+                    "\n",
+                    "[project]\n",
+                    "name = \"\"\n",
+                    "canonical-repository = \"\"\n",
+                    "canonical-branch = \"master\"\n",
+                    "right-holders = []\n",
+                    "contact = \"\"\n",
+                    "adoption-date = \"\"\n",
+                    "\n",
+                    "[license]\n",
+                    "version = \"1.1\"\n",
+                    "special-authorization-channel = \"\"\n",
+                    "\n",
+                    "[generation]\n",
+                    "strict-license-files = true\n",
+                    "\n",
+                    "# To enable the Rust adapter, replace `languages = []` above with:\n",
+                    "# languages:\n",
+                    "#   - \"rust\"\n",
+                    "#\n",
+                    "# Then add:\n",
+                    "# [rust.cargo]\n",
+                    "# manifests:\n",
+                    "#   - \"Cargo.toml\"\n",
+                    "# packages = []\n",
+                    "# rules = []\n",
+                ),
+                LATEST_SCHEMA = LATEST_SCHEMA,
+            )
+        });
+        RENDERED.as_str()
     }
 
     /// Renders a complete no-language configuration from project-init flags.
     pub fn render_populated(identity: &ProjectIdentity) -> String {
-        let mut rendered = String::from(
-            "schema = 1\nmaterials-directory = \".ahcl\"\nlanguages = []\n\n[project]\n",
+        let mut rendered = format!(
+            "schema = {LATEST_SCHEMA}\nmaterials-directory = \".ahcl\"\nlanguages = []\n\n[project]\n",
         );
         rendered.push_str("name = ");
         rendered.push_str(&quoted(identity.name()));

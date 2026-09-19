@@ -36,6 +36,7 @@ pub use ast::ScalarValue;
 pub use parser::{ConfigDocument, ConfigError};
 pub use schema::{
     AhclVersion, CargoLockMode, CargoRule, CargoRuleClassification, CargoSettings, ConfigLimits,
-    EffectiveConfig, GenerationSettings, Language, LicenseSettings, ProjectSettings, RustSettings,
+    EffectiveConfig, GenerationSettings, LATEST_SCHEMA, Language, LicenseSettings, ProjectSettings,
+    RustSettings,
 };
 pub use skeleton::{ConfigSkeleton, ProjectIdentity};

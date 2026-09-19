@@ -31,6 +31,9 @@ use ahcl_kit_core::{RepoPath, UtcDate};
 use std::collections::BTreeSet;
 use url::Url;
 
+/// Latest supported configuration schema version.
+pub const LATEST_SCHEMA: u32 = 1;
+
 const EVIDENCE_FILE_BYTES: u64 = 2_097_152;
 const FILES_PER_PACKAGE: u64 = 64;
 const AGGREGATE_EVIDENCE_BYTES: u64 = 536_870_912;
@@ -379,8 +382,9 @@ pub struct EffectiveConfig {
 impl EffectiveConfig {
     pub fn resolve(document: &ConfigDocument) -> Result<Self, ConfigError> {
         let ast = document.ast();
-        let schema = optional_integer(ast, None, "schema")?.unwrap_or(1);
-        if schema != 1 {
+        let latest_schema = i64::from(LATEST_SCHEMA);
+        let schema = optional_integer(ast, None, "schema")?.unwrap_or(latest_schema);
+        if schema != latest_schema {
             return Err(ConfigError::InvalidSchema(format!(
                 "unsupported schema version: {schema}"
             )));
@@ -460,7 +464,7 @@ impl EffectiveConfig {
         };
 
         Ok(Self {
-            schema: 1,
+            schema: LATEST_SCHEMA,
             materials_directory,
             languages,
             project,
