@@ -121,7 +121,11 @@ struct ProjectReadArgs {
 }
 
 #[derive(Clone, Debug, Parser)]
-#[command(name = "ahcl")]
+#[command(
+    name = "ahcl",
+    version = env!("CARGO_PKG_VERSION"),
+    about = env!("CARGO_PKG_DESCRIPTION")
+)]
 struct Cli {
     #[command(subcommand)]
     command: TopCommand,

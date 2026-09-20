@@ -33,11 +33,24 @@ members = [
     "crates/ahcl-kit-cargo",
     "crates/ahcl-kit-materials",
     "crates/ahcl-kit-cli",
+    "assets/packaging",
 ]
 resolver = "3"
 
 [workspace.package]
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+authors = ["Aperip Daedalus Foundation"]
+description = "Initialize, generate, and maintain AHCL materials for projects"
+homepage = "https://ahcl.aperip.com"
 license = "AHCL-1.1"
 repository = "https://github.com/Aperip-Daedalus-Foundation/ahcl-kit"
+
+[workspace.metadata.ahcl-kit]
+product-name = "AHCL Kit"
+binary-name = "ahcl"
+publisher = "Aperip Daedalus Foundation"
+copyright = "Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved."
+identifier = "com.aperip.ahcl-kit"
+language = "neutral"

@@ -27,11 +27,15 @@
 
 [package]
 name = "ahcl-kit-cli"
-version = "0.1.0"
+version.workspace = true
+description.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
 license.workspace = true
 repository.workspace = true
+build = "build.rs"
 
 [lib]
 name = "ahcl_kit_cli"
@@ -51,3 +55,7 @@ clap = { version = "=4.6.7", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 time = { version = "=0.3.44", default-features = false, features = ["std"] }
+
+[build-dependencies]
+toml = "=0.8.23"
+winresource = "=0.1.31"

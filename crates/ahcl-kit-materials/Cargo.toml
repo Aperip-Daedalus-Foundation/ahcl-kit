@@ -27,10 +27,12 @@
 
 [package]
 name = "ahcl-kit-materials"
-version = "0.1.0"
+version.workspace = true
 description = "Deterministic AHCL material planning and capability-scoped application"
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
 license.workspace = true
 repository.workspace = true
 
