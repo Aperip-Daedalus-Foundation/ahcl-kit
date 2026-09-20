@@ -1,0 +1,4 @@
+- [ ] No plans, non-public documents, temporary files, test code, caches, or other development-only files are included.
+- [ ] Cargo formatting, checks, Clippy, and workspace tests pass.
+- [ ] AHCL and distribution assets, including dependency licenses, are synchronized.
+- [ ] This contribution is mine to submit and is provided under the project's applicable AHCL terms.
