@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">AHCL Kit</title>
+  <desc id="desc">Four suspended project-material segments forming an open continuous loop.</desc>
+  <defs>
+    <linearGradient id="cobalt" x1="86" y1="84" x2="372" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#203f79"/>
+      <stop offset="1" stop-color="#5579df"/>
+    </linearGradient>
+    <linearGradient id="mineral" x1="130" y1="392" x2="414" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#168c78"/>
+      <stop offset="1" stop-color="#62dfc2"/>
+    </linearGradient>
+    <filter id="lift" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#0b1730" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <g fill="none" stroke-width="64" stroke-linecap="square" stroke-linejoin="round" filter="url(#lift)">
+    <path stroke="url(#cobalt)" d="M104 238V104h134l66 66"/>
+    <path stroke="url(#mineral)" d="M274 104h134v134l-66 66"/>
+    <path stroke="url(#cobalt)" d="M408 274v134H274l-66-66"/>
+    <path stroke="url(#mineral)" d="M238 408H104V274l66-66"/>
+  </g>
+  <path fill="#d7b66a" d="m256 224 32 32-32 32-32-32z"/>
+</svg>
