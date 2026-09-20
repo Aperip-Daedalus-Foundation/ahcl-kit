@@ -3,7 +3,6 @@ name: Release builds
 on:
   push:
     branches: [master]
-    paths: [Cargo.toml]
   workflow_dispatch:
 
 permissions:
@@ -29,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect a new workspace version
+      - name: Detect an untagged workspace version
         id: version
         shell: bash
         run: |
@@ -40,20 +39,16 @@ jobs:
           print(tomllib.loads(pathlib.Path('Cargo.toml').read_text(encoding='utf-8'))['workspace']['package']['version'])
           PY
           )"
-          previous=""
-          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            previous="$(git show HEAD^:Cargo.toml 2>/dev/null | python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read()).get("workspace",{}).get("package",{}).get("version",""))' || true)"
-          fi
           tag="v$current"
-          changed=false
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$current" != "$previous" ]]; then changed=true; fi
           exists=false
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then exists=true; fi
           release_needed=false
-          if [[ "$changed" == true && "$exists" == false ]]; then release_needed=true; fi
-          echo "version=$current" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "release_needed=$release_needed" >> "$GITHUB_OUTPUT"
+          if [[ "$exists" == false ]]; then release_needed=true; fi
+          {
+            echo "version=$current"
+            echo "tag=$tag"
+            echo "release_needed=$release_needed"
+          } >> "$GITHUB_OUTPUT"
 
   quality:
     needs: version
