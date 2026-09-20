@@ -58,9 +58,9 @@ pub fn build(root: &Path, product: &ProductMetadata, output: &Path) -> Result<()
     fsutil::set_executable(&executable)?;
     command::run(
         Command::new("lipo")
+            .arg(&executable)
             .arg("-verify_arch")
-            .args(["x86_64", "arm64"])
-            .arg(&executable),
+            .args(["x86_64", "arm64"]),
         "verify Universal 2 executable",
     )?;
 
