@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  workspace:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check all targets
+        run: cargo check --locked --workspace --all-targets
+
+      - name: Run Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Verify self-hosted material state
+        shell: bash
+        run: |
+          cargo build --locked --package ahcl-kit-cli --bin ahcl
+          executable="target/debug/ahcl"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then executable="target/debug/ahcl.exe"; fi
+          "$executable" project generate --dry-run --format json
+          "$executable" project check --format json
