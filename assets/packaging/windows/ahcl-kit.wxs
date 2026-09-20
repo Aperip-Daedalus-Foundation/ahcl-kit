@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- assets/packaging/windows/ahcl-kit.wxs - Native Windows installer definition. -->
+<!-- Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved. -->
+<!-- SPDX-License-Identifier: LicenseRef-AHCL-1.1 -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="$(var.ProductName)"
+      Manufacturer="$(var.Publisher)"
+      Version="$(var.ProductVersion)"
+      UpgradeCode="93E0BC36-708A-4895-87A9-4866AD8A58E1"
+      Scope="perMachine"
+      InstallerVersion="500"
+      Language="1033">
+    <SummaryInformation Description="$(var.Description)" Manufacturer="$(var.Publisher)" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="$(var.ProductName)">
+        <Component Id="ProductFiles" Guid="*" Bitness="always64">
+          <File Id="AhclExecutable" Source="$(var.BinaryPath)" Name="ahcl.exe" KeyPath="yes" />
+          <File Id="ProjectLicense" Source="$(var.LicensePath)" Name="LICENSE" />
+          <File Id="AhclMaterials" Source="$(var.MaterialsArchivePath)" Name="AHCL-MATERIALS.zip" />
+          <Environment Id="SystemPathEntry" Name="PATH" Value="[INSTALLFOLDER]" Action="set" Part="last" System="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="ProductFeature" Title="$(var.ProductName)" Level="1">
+      <ComponentRef Id="ProductFiles" />
+    </Feature>
+    <Icon Id="ProductIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="$(var.Homepage)" />
+    <Property Id="ARPCONTACT" Value="$(var.Publisher)" />
+  </Package>
+</Wix>

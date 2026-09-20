@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>@IDENTIFIER@</id>
+  <name>@PRODUCT_NAME@</name>
+  <summary>@DESCRIPTION@</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-AHCL-1.1</project_license>
+  <developer_name>@PUBLISHER@</developer_name>
+  <launchable type="commandline">@BINARY_NAME@</launchable>
+  <url type="homepage">@HOMEPAGE@</url>
+  <icon type="stock">ahcl-kit</icon>
+  <releases>
+    <release version="@VERSION@" date="@RELEASE_DATE@"/>
+  </releases>
+  <description>
+    <p>@DESCRIPTION@.</p>
+    <p>AHCL Kit currently includes a Rust and Cargo adapter and is designed for additional project ecosystems.</p>
+  </description>
+</component>
