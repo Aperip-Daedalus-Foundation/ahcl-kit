@@ -169,34 +169,26 @@ pub(crate) fn render_document(
 }
 
 fn render_lockfiles(rendered: &mut String, graph: &ResolvedGraph) -> Result<(), MaterialsError> {
-    let mut lockfiles: BTreeMap<String, (LockfileEvidence, BTreeSet<String>)> = BTreeMap::new();
+    let mut lockfiles: BTreeMap<String, LockfileEvidence> = BTreeMap::new();
     for package in &graph.packages {
         for lockfile in &package.contributing_lockfiles {
             let entry = lockfiles
                 .entry(lockfile.path.as_str().to_owned())
-                .or_insert_with(|| (lockfile.clone(), BTreeSet::new()));
-            if entry.0.sha256 != lockfile.sha256 || entry.0.byte_len != lockfile.byte_len {
+                .or_insert_with(|| lockfile.clone());
+            if entry.sha256 != lockfile.sha256 || entry.byte_len != lockfile.byte_len {
                 return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
             }
-            entry.1.insert(package.id.clone());
         }
     }
     if lockfiles.is_empty() {
         rendered.push_str("None.\n");
         return Ok(());
     }
-    rendered
-        .push_str("| Path | SHA-256 | Bytes | Resolved packages |\n| --- | --- | ---: | ---: |\n");
-    for (_, (lockfile, packages)) in lockfiles {
+    rendered.push_str("| Path |\n| --- |\n");
+    for (path, _) in lockfiles {
         rendered.push_str("| `");
-        rendered.push_str(lockfile.path.as_str());
-        rendered.push_str("` | `");
-        rendered.push_str(&lockfile.sha256);
-        rendered.push_str("` | ");
-        rendered.push_str(&lockfile.byte_len.to_string());
-        rendered.push_str(" | ");
-        rendered.push_str(&packages.len().to_string());
-        rendered.push_str(" |\n");
+        rendered.push_str(&path);
+        rendered.push_str("` |\n");
     }
     Ok(())
 }

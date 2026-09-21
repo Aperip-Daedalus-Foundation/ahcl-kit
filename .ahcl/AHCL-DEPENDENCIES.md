@@ -13,9 +13,9 @@ Configuration summary:
 
 ## Contributing Lockfiles
 
-| Path | SHA-256 | Bytes | Resolved packages |
-| --- | --- | ---: | ---: |
-| `Cargo.lock` | `dfd85850e921711ca9bcdd410a9818624bd011dd81afd04758dbed85ff3f9386` | 34168 | 149 |
+| Path |
+| --- |
+| `Cargo.lock` |
 
 ## Upstream: `https://github.com/BenjaminRi/winresource`
 
