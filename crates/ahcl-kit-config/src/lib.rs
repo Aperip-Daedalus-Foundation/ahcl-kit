@@ -35,8 +35,8 @@ mod skeleton;
 pub use ast::ScalarValue;
 pub use parser::{ConfigDocument, ConfigError};
 pub use schema::{
-    AhclVersion, CargoLockMode, CargoRule, CargoRuleClassification, CargoSettings, ConfigLimits,
-    EffectiveConfig, GenerationSettings, LATEST_SCHEMA, Language, LicenseSettings, ProjectSettings,
-    RustSettings,
+    AhclVersion, CargoComponent, CargoEvidence, CargoEvidenceKind, CargoLockMode, CargoRule,
+    CargoRuleClassification, CargoSettings, ComponentLayout, ConfigLimits, EffectiveConfig,
+    GenerationSettings, LATEST_SCHEMA, Language, LicenseSettings, ProjectSettings, RustSettings,
 };
 pub use skeleton::{ConfigSkeleton, ProjectIdentity};

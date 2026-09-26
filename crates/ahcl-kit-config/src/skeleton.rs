@@ -84,7 +84,7 @@ impl ConfigSkeleton {
                     "adoption-date = \"\"\n",
                     "\n",
                     "[license]\n",
-                    "version = \"1.1\"\n",
+                    "version = \"1.2\"\n",
                     "special-authorization-channel = \"\"\n",
                     "\n",
                     "[generation]\n",
@@ -128,7 +128,7 @@ impl ConfigSkeleton {
             rendered.push('\n');
         }
         rendered.push_str(
-            "contact = \"\"\nadoption-date = \"\"\n\n[license]\nversion = \"1.1\"\nspecial-authorization-channel = \"\"\n\n[generation]\nstrict-license-files = true\n",
+            "contact = \"\"\nadoption-date = \"\"\n\n[license]\nversion = \"1.2\"\nspecial-authorization-channel = \"\"\n\n[generation]\nstrict-license-files = true\n",
         );
         rendered
     }

@@ -579,7 +579,9 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
         if !matches!(
             section.as_str(),
             "project" | "license" | "generation" | "rust.cargo"
-        ) {
+        ) && !dynamic_section(section, "rust.cargo.evidence.")
+            && !dynamic_section(section, "rust.cargo.component.")
+        {
             return Err(ConfigError::UnknownSection(section.clone()));
         }
     }
@@ -600,12 +602,38 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
             ),
             Some("license") => matches!(
                 assignment.key.as_str(),
-                "version" | "special-authorization-channel"
+                "version" | "enabled" | "covered-scope" | "special-authorization-channel"
             ),
             Some("generation") => assignment.key == "strict-license-files",
             Some("rust.cargo") => matches!(
                 assignment.key.as_str(),
                 "manifests" | "packages" | "rules" | "lock-mode"
+            ),
+            Some(section) if dynamic_section(section, "rust.cargo.evidence.") => matches!(
+                assignment.key.as_str(),
+                "package"
+                    | "version"
+                    | "source"
+                    | "repository"
+                    | "revision"
+                    | "path"
+                    | "url"
+                    | "kind"
+            ),
+            Some(section) if dynamic_section(section, "rust.cargo.component.") => matches!(
+                assignment.key.as_str(),
+                "package"
+                    | "enabled"
+                    | "layout"
+                    | "materials-directory"
+                    | "license-version"
+                    | "covered-scope"
+                    | "right-holders"
+                    | "canonical-repository"
+                    | "canonical-branch"
+                    | "contact"
+                    | "adoption-date"
+                    | "special-authorization-channel"
             ),
             Some(_) => false,
         };
@@ -617,6 +645,10 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
         }
     }
     Ok(())
+}
+
+fn dynamic_section(section: &str, prefix: &str) -> bool {
+    section.strip_prefix(prefix).is_some_and(is_name)
 }
 
 fn is_name(value: &str) -> bool {

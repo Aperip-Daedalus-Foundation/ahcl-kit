@@ -84,6 +84,13 @@ pub(crate) fn official_record(version: AhclVersion) -> OfficialRecord {
             source_filename: "AHCL-1.1.md",
             sha256: "41bfa8d3621494b84ba87a0b2a07748be339c10146787fe0d89ef7c38358d702",
         },
+        AhclVersion::V1_2 => OfficialRecord {
+            version,
+            slug: "ahcl-1-2",
+            title: "Aperip Heimdall Commons License 1.2",
+            source_filename: "AHCL-1.2.md",
+            sha256: "35c2d95517938a8269d7be168984e2a040b7c496b8cdb043e01314051248e200",
+        },
     }
 }
 
