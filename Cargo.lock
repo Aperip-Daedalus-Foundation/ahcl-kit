@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ahcl-kit-cargo"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
@@ -20,7 +20,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-cli"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ahcl-kit-cargo",
  "ahcl-kit-config",
@@ -37,7 +37,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-config"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ahcl-kit-core",
  "url",
@@ -45,11 +45,11 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-core"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "ahcl-kit-dist"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "clap",
  "serde_json",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-license"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ahcl-kit-config",
  "mime",
@@ -70,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-materials"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ahcl-kit-cargo",
  "ahcl-kit-config",
