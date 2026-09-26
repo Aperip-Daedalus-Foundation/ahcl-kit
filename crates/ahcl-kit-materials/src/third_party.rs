@@ -32,7 +32,6 @@ use ahcl_kit_core::{
     ChangePlan, Diagnostic, DiagnosticCode, DiagnosticSeverity, ProjectEntry, ProjectView,
     RepoPath, ResolvedGraph,
 };
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const MANAGED_STATE_BASENAME: &str = ".ahcl-kit-state.json";
@@ -145,6 +144,10 @@ pub enum ManagedRemoval {
     PackageDirectory {
         package_directory: String,
     },
+    /// Removes a legacy `.ahcl-kit-state.json` without interpreting its contents.
+    LegacyState {
+        expected_sha256: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -196,15 +199,9 @@ impl ThirdPartyMaterialGenerator {
         validate_inventory(inventory)?;
         let layout = LayoutPolicy::from_config(config)?;
         let base = third_party_base(&layout)?;
-        let previous = read_state(view, &base, inventory.state_kind)?;
-        let desired = desired_state_and_writes(graph, &base)?;
-        validate_replacement_targets(inventory, &desired.manifest)?;
-        let (managed_removals, diagnostics) =
-            cleanup_plan(view, &base, inventory, &previous, &desired.manifest)?;
-        let changes = desired
-            .writes
-            .compare(view)
-            .map_err(MaterialsError::from_plan)?;
+        let (writes, diagnostics, managed_removals) =
+            desired_writes(view, graph, &base, inventory)?;
+        let changes = writes.compare(view).map_err(MaterialsError::from_plan)?;
         Ok(MaterialGenerationPlan::new(
             changes,
             managed_removals,
@@ -213,15 +210,12 @@ impl ThirdPartyMaterialGenerator {
     }
 }
 
-struct DesiredTree {
-    manifest: StateManifest,
-    writes: ChangePlan,
-}
-
-fn desired_state_and_writes(
+fn desired_writes(
+    view: &dyn ProjectView,
     graph: &ResolvedGraph,
     base: &RepoPath,
-) -> Result<DesiredTree, MaterialsError> {
+    inventory: &ManagedThirdPartyInventory,
+) -> Result<(ChangePlan, Vec<Diagnostic>, Vec<ManagedRemoval>), MaterialsError> {
     let directories = package_directories(graph);
     let mut packages = graph
         .packages
@@ -229,98 +223,101 @@ fn desired_state_and_writes(
         .filter(|package| !package.first_party)
         .collect::<Vec<_>>();
     packages.sort_by(|left, right| left.id.cmp(&right.id));
-    let mut state_packages = Vec::new();
     let mut writes = ChangePlan::new();
+    let mut diagnostics = BTreeMap::new();
+    let mut desired_entries = BTreeSet::new();
     for package in packages {
         let directory = directories
             .get(&package.id)
             .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid))?;
         validate_managed_package_identity(directory)?;
         let basenames = evidence_basenames(package)?;
-        let mut evidence = Vec::new();
         for (artifact, basename) in package.license_artifacts.iter().zip(basenames) {
-            writes
-                .write(
-                    managed_path(base, directory, Some(&basename))?,
-                    artifact.bytes.clone(),
-                )
-                .map_err(MaterialsError::from_plan)?;
-            evidence.push(StateEvidence {
-                basename,
-                sha256: sha256_hex(&artifact.bytes),
-            });
-        }
-        evidence.sort_by(|left, right| left.basename.cmp(&right.basename));
-        state_packages.push(StatePackage {
-            directory: directory.clone(),
-            evidence,
-        });
-    }
-    state_packages.sort_by(|left, right| left.directory.cmp(&right.directory));
-    let manifest = StateManifest {
-        schema: 1,
-        packages: state_packages,
-    };
-    let mut state_bytes = serde_json::to_string_pretty(&manifest)
-        .map_err(|_| MaterialsError::new(MaterialsErrorCode::StateInvalid))?
-        .into_bytes();
-    state_bytes.push(b'\n');
-    writes
-        .write(state_path(base)?, state_bytes)
-        .map_err(MaterialsError::from_plan)?;
-    Ok(DesiredTree { manifest, writes })
-}
-
-fn read_state(
-    view: &dyn ProjectView,
-    base: &RepoPath,
-    state_kind: ManagedEntryKind,
-) -> Result<StateManifest, MaterialsError> {
-    match state_kind {
-        ManagedEntryKind::Absent => Ok(StateManifest::empty()),
-        ManagedEntryKind::File => {
-            let entry = view
-                .entry(&state_path(base)?)
-                .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?;
-            let ProjectEntry::File(bytes) = entry else {
-                return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
-            };
-            parse_state(&bytes)
-        }
-        ManagedEntryKind::LinkOrReparsePoint => {
-            Err(MaterialsError::new(MaterialsErrorCode::LinkOrReparsePoint))
-        }
-        ManagedEntryKind::Directory | ManagedEntryKind::Other => {
-            Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid))
-        }
-    }
-}
-
-fn parse_state(bytes: &[u8]) -> Result<StateManifest, MaterialsError> {
-    let manifest: StateManifest = serde_json::from_slice(bytes)
-        .map_err(|_| MaterialsError::new(MaterialsErrorCode::StateInvalid))?;
-    if manifest.schema != 1 {
-        return Err(MaterialsError::new(MaterialsErrorCode::StateInvalid));
-    }
-    let mut directories = BTreeSet::new();
-    for package in &manifest.packages {
-        validate_managed_package_identity(&package.directory)
-            .map_err(|_| MaterialsError::new(MaterialsErrorCode::StateInvalid))?;
-        if !directories.insert(package.directory.to_ascii_lowercase()) {
-            return Err(MaterialsError::new(MaterialsErrorCode::StateInvalid));
-        }
-        let mut basenames = BTreeSet::new();
-        for evidence in &package.evidence {
-            validate_basename(&evidence.basename)
-                .map_err(|_| MaterialsError::new(MaterialsErrorCode::StateInvalid))?;
-            if !basenames.insert(evidence.basename.to_ascii_lowercase())
-                || !valid_sha256(&evidence.sha256)
+            desired_entries.insert(entry_key(directory, &basename));
+            let path = managed_path(base, directory, Some(&basename))?;
+            match view
+                .entry(&path)
+                .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?
             {
-                return Err(MaterialsError::new(MaterialsErrorCode::StateInvalid));
+                ProjectEntry::Absent | ProjectEntry::File(_) => {
+                    writes
+                        .write(path, artifact.bytes.clone())
+                        .map_err(MaterialsError::from_plan)?;
+                }
+                ProjectEntry::Other => {
+                    return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
+                }
             }
         }
     }
-    Ok(manifest)
+    // Evidence outside the current graph stays in place. There is no ownership
+    // ledger, so generate and check only converge the desired license files.
+    for package in &inventory.packages {
+        for evidence in &package.evidence {
+            if evidence.kind == ManagedEntryKind::Absent {
+                continue;
+            }
+            if desired_entries.contains(&entry_key(&package.directory, &evidence.basename)) {
+                continue;
+            }
+            add_unowned_diagnostic(
+                &mut diagnostics,
+                managed_path(base, &package.directory, Some(&evidence.basename))?,
+            );
+        }
+    }
+    for entry in &inventory.extra_root_entries {
+        if entry.kind != ManagedEntryKind::Absent {
+            add_unowned_diagnostic(&mut diagnostics, root_entry_path(base, &entry.name)?);
+        }
+    }
+    let managed_removals = legacy_state_removal(view, base, inventory.state_kind)?;
+    Ok((
+        writes,
+        diagnostics.into_values().collect(),
+        managed_removals,
+    ))
+}
+
+fn legacy_state_removal(
+    view: &dyn ProjectView,
+    base: &RepoPath,
+    state_kind: ManagedEntryKind,
+) -> Result<Vec<ManagedRemoval>, MaterialsError> {
+    if state_kind == ManagedEntryKind::Absent {
+        return Ok(Vec::new());
+    }
+    let path = root_entry_path(base, MANAGED_STATE_BASENAME)?;
+    match view
+        .entry(&path)
+        .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?
+    {
+        ProjectEntry::Absent => Ok(Vec::new()),
+        ProjectEntry::File(bytes) => Ok(vec![ManagedRemoval::LegacyState {
+            expected_sha256: sha256_hex(&bytes),
+        }]),
+        ProjectEntry::Other => Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid)),
+    }
+}
+
+fn add_unowned_diagnostic(diagnostics: &mut BTreeMap<String, Diagnostic>, path: RepoPath) {
+    diagnostics
+        .entry(path.as_str().to_owned())
+        .or_insert_with(|| {
+            Diagnostic::new(
+                DiagnosticCode::new("materials.third_party_unowned"),
+                DiagnosticSeverity::Warning,
+                "unowned third-party entry was preserved",
+            )
+            .at_path(path)
+        });
+}
+
+fn entry_key(directory: &str, basename: &str) -> (String, String) {
+    (
+        directory.to_ascii_lowercase(),
+        basename.to_ascii_lowercase(),
+    )
 }
 
 fn validate_inventory(inventory: &ManagedThirdPartyInventory) -> Result<(), MaterialsError> {
@@ -386,191 +383,6 @@ fn validate_inventory(inventory: &ManagedThirdPartyInventory) -> Result<(), Mate
     Ok(())
 }
 
-fn validate_replacement_targets(
-    inventory: &ManagedThirdPartyInventory,
-    desired: &StateManifest,
-) -> Result<(), MaterialsError> {
-    for package in &desired.packages {
-        if let Some(observed) = inventory_package(inventory, &package.directory) {
-            if observed.directory != package.directory {
-                return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
-            }
-            for evidence in &package.evidence {
-                if let Some(entry) = inventory_evidence(observed, &evidence.basename) {
-                    match entry.kind {
-                        ManagedEntryKind::Absent | ManagedEntryKind::File => {}
-                        ManagedEntryKind::LinkOrReparsePoint => {
-                            return Err(MaterialsError::new(
-                                MaterialsErrorCode::LinkOrReparsePoint,
-                            ));
-                        }
-                        ManagedEntryKind::Directory | ManagedEntryKind::Other => {
-                            return Err(MaterialsError::new(
-                                MaterialsErrorCode::ManagedTreeInvalid,
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn cleanup_plan(
-    view: &dyn ProjectView,
-    base: &RepoPath,
-    inventory: &ManagedThirdPartyInventory,
-    previous: &StateManifest,
-    desired: &StateManifest,
-) -> Result<(Vec<ManagedRemoval>, Vec<Diagnostic>), MaterialsError> {
-    let desired_entries = state_entries(desired);
-    let previous_entries = state_entries(previous);
-    let mut removals = Vec::new();
-    let mut removed_entries = BTreeSet::new();
-    let mut diagnostics = BTreeMap::new();
-
-    for package in &previous.packages {
-        let Some(observed) = inventory_package(inventory, &package.directory) else {
-            continue;
-        };
-        for evidence in &package.evidence {
-            let key = entry_key(&package.directory, &evidence.basename);
-            if desired_entries.contains(&key) {
-                continue;
-            }
-            let Some(entry) = inventory_evidence(observed, &evidence.basename) else {
-                continue;
-            };
-            match entry.kind {
-                ManagedEntryKind::Absent => {}
-                ManagedEntryKind::File => {
-                    let path = managed_path(base, &package.directory, Some(&evidence.basename))?;
-                    let observed_entry = view
-                        .entry(&path)
-                        .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?;
-                    let ProjectEntry::File(bytes) = observed_entry else {
-                        return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
-                    };
-                    if sha256_hex(&bytes) == evidence.sha256 {
-                        removals.push(ManagedRemoval::Evidence {
-                            package_directory: package.directory.clone(),
-                            evidence_basename: evidence.basename.clone(),
-                            expected_sha256: evidence.sha256.clone(),
-                        });
-                        removed_entries.insert(key);
-                    } else {
-                        add_unowned_diagnostic(&mut diagnostics, path);
-                    }
-                }
-                ManagedEntryKind::LinkOrReparsePoint => {
-                    return Err(MaterialsError::new(MaterialsErrorCode::LinkOrReparsePoint));
-                }
-                ManagedEntryKind::Directory | ManagedEntryKind::Other => {
-                    return Err(MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid));
-                }
-            }
-        }
-    }
-
-    for package in &inventory.packages {
-        for evidence in &package.evidence {
-            if evidence.kind == ManagedEntryKind::Absent {
-                continue;
-            }
-            let key = entry_key(&package.directory, &evidence.basename);
-            if desired_entries.contains(&key) || removed_entries.contains(&key) {
-                continue;
-            }
-            let path = managed_path(base, &package.directory, Some(&evidence.basename))?;
-            if !previous_entries.contains(&key) || !diagnostics.contains_key(path.as_str()) {
-                add_unowned_diagnostic(&mut diagnostics, path);
-            }
-        }
-    }
-
-    for entry in &inventory.extra_root_entries {
-        if entry.kind != ManagedEntryKind::Absent {
-            add_unowned_diagnostic(&mut diagnostics, root_entry_path(base, &entry.name)?);
-        }
-    }
-
-    for package in &previous.packages {
-        let Some(observed) = inventory_package(inventory, &package.directory) else {
-            continue;
-        };
-        let has_desired = desired
-            .packages
-            .iter()
-            .any(|candidate| candidate.directory.eq_ignore_ascii_case(&package.directory));
-        let all_existing_removed = observed
-            .evidence
-            .iter()
-            .filter(|entry| entry.kind != ManagedEntryKind::Absent)
-            .all(|entry| removed_entries.contains(&entry_key(&package.directory, &entry.basename)));
-        if !has_desired && all_existing_removed {
-            removals.push(ManagedRemoval::PackageDirectory {
-                package_directory: package.directory.clone(),
-            });
-        }
-    }
-
-    Ok((removals, diagnostics.into_values().collect()))
-}
-
-fn add_unowned_diagnostic(diagnostics: &mut BTreeMap<String, Diagnostic>, path: RepoPath) {
-    diagnostics
-        .entry(path.as_str().to_owned())
-        .or_insert_with(|| {
-            Diagnostic::new(
-                DiagnosticCode::new("materials.third_party_unowned"),
-                DiagnosticSeverity::Warning,
-                "unowned third-party entry was preserved",
-            )
-            .at_path(path)
-        });
-}
-
-fn state_entries(manifest: &StateManifest) -> BTreeSet<(String, String)> {
-    manifest
-        .packages
-        .iter()
-        .flat_map(|package| {
-            package
-                .evidence
-                .iter()
-                .map(|evidence| entry_key(&package.directory, &evidence.basename))
-        })
-        .collect()
-}
-
-fn entry_key(directory: &str, basename: &str) -> (String, String) {
-    (
-        directory.to_ascii_lowercase(),
-        basename.to_ascii_lowercase(),
-    )
-}
-
-fn inventory_package<'a>(
-    inventory: &'a ManagedThirdPartyInventory,
-    directory: &str,
-) -> Option<&'a ManagedPackageInventory> {
-    inventory
-        .packages
-        .iter()
-        .find(|package| package.directory.eq_ignore_ascii_case(directory))
-}
-
-fn inventory_evidence<'a>(
-    package: &'a ManagedPackageInventory,
-    basename: &str,
-) -> Option<&'a ManagedEvidenceInventory> {
-    package
-        .evidence
-        .iter()
-        .find(|entry| entry.basename.eq_ignore_ascii_case(basename))
-}
-
 fn validate_root_kind(kind: ManagedEntryKind) -> Result<(), MaterialsError> {
     match kind {
         ManagedEntryKind::Absent | ManagedEntryKind::Directory => Ok(()),
@@ -629,10 +441,6 @@ fn third_party_base(layout: &LayoutPolicy) -> Result<RepoPath, MaterialsError> {
     .map_err(|_| MaterialsError::new(MaterialsErrorCode::InvalidLayout))
 }
 
-fn state_path(base: &RepoPath) -> Result<RepoPath, MaterialsError> {
-    root_entry_path(base, MANAGED_STATE_BASENAME)
-}
-
 fn root_entry_path(base: &RepoPath, name: &str) -> Result<RepoPath, MaterialsError> {
     validate_basename(name)?;
     RepoPath::parse(format!("{}/{name}", base.as_str()))
@@ -653,36 +461,6 @@ fn managed_path(
         None => format!("{}/{directory}", base.as_str()),
     };
     RepoPath::parse(value).map_err(|_| MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid))
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct StateManifest {
-    schema: u32,
-    packages: Vec<StatePackage>,
-}
-
-impl StateManifest {
-    fn empty() -> Self {
-        Self {
-            schema: 1,
-            packages: Vec::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct StatePackage {
-    directory: String,
-    evidence: Vec<StateEvidence>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct StateEvidence {
-    basename: String,
-    sha256: String,
 }
 
 #[cfg(test)]

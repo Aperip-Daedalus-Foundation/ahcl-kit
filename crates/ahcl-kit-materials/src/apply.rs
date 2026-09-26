@@ -26,7 +26,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::dependencies::validate_basename;
-use crate::third_party::{valid_sha256, validate_managed_package_identity};
+use crate::third_party::{MANAGED_STATE_BASENAME, valid_sha256, validate_managed_package_identity};
 use crate::view::{ManagedThirdPartyDir, ProjectFilesystem};
 use crate::{ManagedRemoval, MaterialsError, MaterialsErrorCode, SafeRelPath};
 use ahcl_kit_core::{ChangeKind, ChangePlan, RepoPath};
@@ -118,6 +118,17 @@ impl ValidatedManagedRemoval {
             ManagedRemoval::PackageDirectory { package_directory } => {
                 validate_package_directory(package_directory)?;
                 Ok(Self::PackageDirectory(managed_path(&[package_directory])?))
+            }
+            ManagedRemoval::LegacyState { expected_sha256 } => {
+                if !valid_sha256(expected_sha256) {
+                    return Err(managed_tree_error());
+                }
+                let path =
+                    RepoPath::parse(MANAGED_STATE_BASENAME).map_err(|_| managed_tree_error())?;
+                Ok(Self::Evidence(
+                    SafeRelPath::from_repo_path(&path).map_err(|_| managed_tree_error())?,
+                    expected_sha256.clone(),
+                ))
             }
         }
     }
