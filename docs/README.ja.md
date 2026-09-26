@@ -96,6 +96,8 @@ adoption-date = "2026-09-20"
 
 [license]
 version = "1.1"
+enabled = true
+covered-scope = "サンプルプログラム"
 special-authorization-channel = ""
 
 [generation]
@@ -106,9 +108,36 @@ manifests:
   - "Cargo.toml"
 packages = []
 rules = []
+
+[rust.cargo.evidence.example]
+package = "example-crate"
+version = "1.0.0"
+source = "git+https://example.com/example-crate"
+repository = "https://example.com/example-crate"
+revision = "0123456789abcdef0123456789abcdef01234567"
+path = "LICENSE"
+url = "https://example.com/example-crate/LICENSE"
+kind = "license"
+
+[rust.cargo.component.example]
+package = "example-crate"
+enabled = true
+layout = "independent"
+materials-directory = ".ahcl"
+license-version = "1.2"
+covered-scope = "サンプルコンポーネント"
+right-holders:
+  - "Example Foundation"
+canonical-repository = "https://example.com/example.git"
+canonical-branch = "main"
+contact = ""
+adoption-date = "2026-09-20"
+special-authorization-channel = ""
 ```
 
-`schema` を省略すると最新の対応スキーマ、`materials-directory` を省略すると
+`enabled`、`covered-scope`、`[rust.cargo.evidence.*]`、`[rust.cargo.component.*]`
+は任意です。証拠の `kind` は `license`、`notice`、`materials` です。コンポーネントの
+`layout` は `independent` または `centralized` です。`schema` を省略すると最新の対応スキーマ、`materials-directory` を省略すると
 `.ahcl` が使用されます。言語を省略すると空の集合になります。言語が空でも一般的な
 AHCL プロジェクトマテリアルのコマンドは実行できますが、エコシステムアダプターは
 呼び出されません。

@@ -114,6 +114,8 @@ adoption-date = "2026-09-20"
 
 [license]
 version = "1.1"
+enabled = true
+covered-scope = "the example program"
 special-authorization-channel = ""
 
 [generation]
@@ -124,9 +126,37 @@ manifests:
   - "Cargo.toml"
 packages = []
 rules = []
+
+[rust.cargo.evidence.example]
+package = "example-crate"
+version = "1.0.0"
+source = "git+https://example.com/example-crate"
+repository = "https://example.com/example-crate"
+revision = "0123456789abcdef0123456789abcdef01234567"
+path = "LICENSE"
+url = "https://example.com/example-crate/LICENSE"
+kind = "license"
+
+[rust.cargo.component.example]
+package = "example-crate"
+enabled = true
+layout = "independent"
+materials-directory = ".ahcl"
+license-version = "1.2"
+covered-scope = "the example component"
+right-holders:
+  - "Example Foundation"
+canonical-repository = "https://example.com/example.git"
+canonical-branch = "main"
+contact = ""
+adoption-date = "2026-09-20"
+special-authorization-channel = ""
 ```
 
-Omitted `schema` uses the latest supported schema, omitted
+`enabled`, `covered-scope`, `[rust.cargo.evidence.*]`, and
+`[rust.cargo.component.*]` are optional. Evidence `kind` is `license`,
+`notice`, or `materials`. Component `layout` is `independent` or
+`centralized`. Omitted `schema` uses the latest supported schema, omitted
 `materials-directory` uses `.ahcl`, and omitted languages resolve to an empty
 set. Empty languages allow the generic AHCL project material commands to run
 without invoking an ecosystem adapter.

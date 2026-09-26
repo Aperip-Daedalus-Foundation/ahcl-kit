@@ -90,6 +90,8 @@ adoption-date = "2026-09-20"
 
 [license]
 version = "1.1"
+enabled = true
+covered-scope = "示例程序"
 special-authorization-channel = ""
 
 [generation]
@@ -100,9 +102,37 @@ manifests:
   - "Cargo.toml"
 packages = []
 rules = []
+
+[rust.cargo.evidence.example]
+package = "example-crate"
+version = "1.0.0"
+source = "git+https://example.com/example-crate"
+repository = "https://example.com/example-crate"
+revision = "0123456789abcdef0123456789abcdef01234567"
+path = "LICENSE"
+url = "https://example.com/example-crate/LICENSE"
+kind = "license"
+
+[rust.cargo.component.example]
+package = "example-crate"
+enabled = true
+layout = "independent"
+materials-directory = ".ahcl"
+license-version = "1.2"
+covered-scope = "示例组件"
+right-holders:
+  - "Example Foundation"
+canonical-repository = "https://example.com/example.git"
+canonical-branch = "main"
+contact = ""
+adoption-date = "2026-09-20"
+special-authorization-channel = ""
 ```
 
-省略 `schema` 时使用最新支持的 schema；省略 `materials-directory` 时使用
+`enabled`、`covered-scope`、`[rust.cargo.evidence.*]` 和
+`[rust.cargo.component.*]` 是可选项。证据 `kind` 为 `license`、`notice` 或
+`materials`。组件 `layout` 为 `independent` 或 `centralized`。省略 `schema`
+时使用最新支持的 schema；省略 `materials-directory` 时使用
 `.ahcl`；省略语言时解析为空集合。语言集合为空时仍可执行通用 AHCL 项目材料命令，
 但不会调用任何生态适配器。
 
