@@ -25,6 +25,7 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
+use ahcl_kit_cargo::{CargoComponentError, CargoError};
 use ahcl_kit_config::{AhclVersion, EffectiveConfig, Language, ProjectIdentity};
 use ahcl_kit_core::{
     ChangePlan, DependencyKind, Diagnostic, ProjectRoot, RepoPath, ResolvedGraph, UtcDate,
@@ -375,11 +376,26 @@ impl RuntimeError {
     pub fn code(&self) -> &str {
         &self.code
     }
+
+    fn safe_source_message(&self) -> Option<String> {
+        let source = self.source.as_deref()?;
+        if let Some(error) = source.downcast_ref::<CargoError>() {
+            return Some(error.to_string());
+        }
+        if let Some(error) = source.downcast_ref::<CargoComponentError>() {
+            return Some(error.to_string());
+        }
+        None
+    }
 }
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("runtime operation failed")
+        formatter.write_str(&self.code)?;
+        if let Some(source) = self.safe_source_message() {
+            write!(formatter, ": {source}")?;
+        }
+        Ok(())
     }
 }
 

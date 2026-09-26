@@ -31,7 +31,8 @@ use crate::{
     ProjectStatus, ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
 };
 use ahcl_kit_config::{
-    CargoLockMode, CargoRuleClassification, EffectiveConfig, Language, ProjectIdentity,
+    CargoEvidenceKind, CargoLockMode, CargoRuleClassification, ComponentLayout, EffectiveConfig,
+    Language, ProjectIdentity,
 };
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
@@ -308,6 +309,9 @@ fn output_changes(plan: &RuntimePlan) -> Vec<OutputChange> {
                 ManagedRemoval::PackageDirectory { package_directory } => {
                     format!("{base}/{package_directory}")
                 }
+                ManagedRemoval::LegacyState { .. } => {
+                    format!("{base}/.ahcl-kit-state.json")
+                }
             };
             OutputChange::new(path, OutputChangeKind::Remove)
         }));
@@ -353,6 +357,8 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
         },
         "license": {
             "version": config.license().version().as_str(),
+            "enabled": config.license().enabled(),
+            "covered_scope": config.license().covered_scope(),
             "special_authorization_channel": config.license().special_authorization_channel(),
         },
         "generation": {
@@ -370,6 +376,32 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
                         CargoRuleClassification::ThirdParty => "third-party",
                         CargoRuleClassification::Exclude => "exclude",
                     },
+                })).collect::<Vec<_>>(),
+                "evidence": cargo.evidence().iter().map(|evidence| serde_json::json!({
+                    "package": evidence.package(),
+                    "version": evidence.version(),
+                    "source": evidence.source(),
+                    "repository": evidence.repository(),
+                    "revision": evidence.revision(),
+                    "path": evidence.path().as_str(),
+                    "url": evidence.url(),
+                    "kind": match evidence.kind() {
+                        CargoEvidenceKind::License => "license",
+                        CargoEvidenceKind::Notice => "notice",
+                        CargoEvidenceKind::Materials => "materials",
+                    },
+                })).collect::<Vec<_>>(),
+                "components": cargo.components().iter().map(|component| serde_json::json!({
+                    "id": component.id(),
+                    "package": component.package(),
+                    "enabled": component.enabled(),
+                    "layout": match component.layout() {
+                        ComponentLayout::Independent => "independent",
+                        ComponentLayout::Centralized => "centralized",
+                    },
+                    "materials_directory": component.materials_directory().map(|path| path.as_str()),
+                    "license_version": component.license_version().map(|version| version.as_str()),
+                    "covered_scope": component.covered_scope(),
                 })).collect::<Vec<_>>(),
                 "lock_mode": match cargo.lock_mode() {
                     CargoLockMode::Locked => "locked",
@@ -416,9 +448,5 @@ fn command_error(
 }
 
 fn runtime_diagnostic(error: &RuntimeError) -> OutputDiagnostic {
-    OutputDiagnostic::new(
-        error.code(),
-        OutputSeverity::Error,
-        "runtime operation failed",
-    )
+    OutputDiagnostic::new(error.code(), OutputSeverity::Error, error.to_string())
 }
