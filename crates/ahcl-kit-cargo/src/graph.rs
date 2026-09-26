@@ -28,6 +28,7 @@
 use crate::adapter::{CargoError, CargoResolveRequest};
 use crate::collector::{self, EvidenceBudget};
 use crate::platform_fs;
+use crate::upstream::{self, CargoEvidenceTransport};
 use ahcl_kit_config::CargoRuleClassification;
 use ahcl_kit_core::{
     DependencyEdge, DependencyKind, LockfileEvidence, RepoPath, ResolvedGraph, ResolvedPackage,
@@ -38,7 +39,10 @@ use cargo_metadata::{
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
-pub(crate) fn resolve(request: &CargoResolveRequest) -> Result<ResolvedGraph, CargoError> {
+pub(crate) fn resolve(
+    request: &CargoResolveRequest,
+    transport: &dyn CargoEvidenceTransport,
+) -> Result<ResolvedGraph, CargoError> {
     let mut packages = BTreeMap::<String, ResolvedPackage>::new();
     let mut edges = BTreeMap::<EdgeKey, bool>::new();
     let mut budget = EvidenceBudget::new();
@@ -54,10 +58,13 @@ pub(crate) fn resolve(request: &CargoResolveRequest) -> Result<ResolvedGraph, Ca
             request,
             manifest,
             &metadata,
-            &mut packages,
-            &mut edges,
-            &mut budget,
-            &mut matched_selections,
+            &mut MetadataMerge {
+                packages: &mut packages,
+                edges: &mut edges,
+                budget: &mut budget,
+                matched_selections: &mut matched_selections,
+            },
+            transport,
         )?;
     }
 
@@ -109,15 +116,26 @@ fn metadata_for(
     })
 }
 
+struct MetadataMerge<'a> {
+    packages: &'a mut BTreeMap<String, ResolvedPackage>,
+    edges: &'a mut BTreeMap<EdgeKey, bool>,
+    budget: &'a mut EvidenceBudget,
+    matched_selections: &'a mut BTreeSet<String>,
+}
+
 fn merge_metadata(
     request: &CargoResolveRequest,
     manifest: &RepoPath,
     metadata: &Metadata,
-    packages: &mut BTreeMap<String, ResolvedPackage>,
-    edges: &mut BTreeMap<EdgeKey, bool>,
-    budget: &mut EvidenceBudget,
-    matched_selections: &mut BTreeSet<String>,
+    merge: &mut MetadataMerge<'_>,
+    transport: &dyn CargoEvidenceTransport,
 ) -> Result<(), CargoError> {
+    let MetadataMerge {
+        packages,
+        edges,
+        budget,
+        matched_selections,
+    } = merge;
     let resolve = metadata
         .resolve
         .as_ref()
@@ -208,10 +226,24 @@ fn merge_metadata(
         let license_artifacts = if first_party {
             Vec::new()
         } else {
-            let artifacts = collector::collect(package, request.limits(), budget)?;
-            if artifacts.is_empty() && request.strict_license_files() {
+            let mut artifacts = collector::collect(package, request.limits(), budget)?;
+            if !has_license_evidence(package, &artifacts) {
+                let recovered = upstream::recover(package, request, transport, budget, &artifacts)?;
+                artifacts.extend(recovered);
+            }
+            let notices =
+                upstream::recover_notice(package, request, transport, budget, &artifacts)?;
+            artifacts.extend(notices);
+            let materials = upstream::supplement_materials(package, request, budget, &artifacts)?;
+            artifacts.extend(materials);
+            if !has_license_evidence(package, &artifacts) && request.strict_license_files() {
                 return Err(CargoError::MissingLicenseEvidence {
                     package_id: package_id.clone(),
+                    package: package.name.to_string(),
+                    version: package.version.to_string(),
+                    location: package.manifest_path.to_string(),
+                    reason: "packaged evidence and exact upstream evidence are unavailable"
+                        .to_owned(),
                 });
             }
             artifacts
@@ -227,6 +259,28 @@ fn merge_metadata(
             && classifications.get(&key.from) != Some(&CargoRuleClassification::Exclude)
     });
     Ok(())
+}
+
+fn has_license_evidence(package: &Package, artifacts: &[ahcl_kit_core::LicenseArtifact]) -> bool {
+    artifacts.iter().any(|artifact| {
+        package
+            .license_file
+            .as_ref()
+            .and_then(|path| path.as_std_path().file_name())
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| artifact.relative_path.as_str().ends_with(name))
+            || artifact
+                .relative_path
+                .as_path()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    let upper = name.to_ascii_uppercase();
+                    upper.starts_with("LICENSE")
+                        || upper.starts_with("COPYING")
+                        || upper.starts_with("COPYRIGHT")
+                })
+    })
 }
 
 fn selected_roots(

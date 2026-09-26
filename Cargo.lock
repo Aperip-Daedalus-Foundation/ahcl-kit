@@ -10,7 +10,11 @@ dependencies = [
  "ahcl-kit-core",
  "cargo_metadata",
  "rustix",
+ "serde_json",
  "sha2",
+ "toml 0.8.23",
+ "ureq",
+ "url",
  "windows-sys 0.61.2",
 ]
 

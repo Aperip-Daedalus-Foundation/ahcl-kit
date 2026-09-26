@@ -40,6 +40,14 @@ impl EvidenceBudget {
     pub(crate) const fn new() -> Self {
         Self { aggregate_bytes: 0 }
     }
+
+    pub(crate) const fn aggregate_bytes(&self) -> u64 {
+        self.aggregate_bytes
+    }
+
+    pub(crate) fn add(&mut self, bytes: u64) {
+        self.aggregate_bytes = self.aggregate_bytes.saturating_add(bytes);
+    }
 }
 
 pub(crate) fn collect(

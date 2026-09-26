@@ -29,9 +29,15 @@
 
 mod adapter;
 mod collector;
+mod components;
 mod graph;
 mod limits;
 mod platform_fs;
+mod upstream;
 
 pub use adapter::{CargoAdapter, CargoError, CargoResolveRequest};
+pub use components::{CargoComponentError, CargoComponentResolution};
 pub use limits::{EvidenceLimits, PackageDirectoryInput, assign_package_directories};
+pub use upstream::{
+    CargoEvidenceRequest, CargoEvidenceResponse, CargoEvidenceTransport, CargoTransportError,
+};

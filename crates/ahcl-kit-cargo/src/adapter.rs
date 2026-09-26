@@ -27,6 +27,7 @@
 
 use crate::graph;
 use crate::limits::EvidenceLimits;
+use crate::upstream::{CargoEvidenceTransport, UreqCargoEvidenceTransport};
 use ahcl_kit_config::{CargoRuleClassification, CargoSettings, EffectiveConfig};
 use ahcl_kit_core::{AdapterRequest, EcosystemAdapter, ProjectRoot, RepoPath, ResolvedGraph};
 use std::error::Error;
@@ -107,6 +108,10 @@ impl CargoResolveRequest {
                 settings.classify(package, source)
             })
     }
+
+    pub(crate) fn settings(&self) -> Option<&CargoSettings> {
+        self.settings.as_ref()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -121,7 +126,16 @@ impl CargoAdapter {
         &self,
         request: &CargoResolveRequest,
     ) -> Result<ResolvedGraph, CargoError> {
-        graph::resolve(request)
+        let transport = UreqCargoEvidenceTransport::new();
+        graph::resolve(request, &transport)
+    }
+
+    pub fn resolve_request_with_transport(
+        &self,
+        request: &CargoResolveRequest,
+        transport: &dyn CargoEvidenceTransport,
+    ) -> Result<ResolvedGraph, CargoError> {
+        graph::resolve(request, transport)
     }
 }
 
@@ -194,6 +208,16 @@ pub enum CargoError {
     },
     MissingLicenseEvidence {
         package_id: String,
+        package: String,
+        version: String,
+        location: String,
+        reason: String,
+    },
+    UpstreamEvidence {
+        package: String,
+        version: String,
+        location: String,
+        reason: String,
     },
 }
 
@@ -216,6 +240,7 @@ impl CargoError {
             Self::TooManyEvidenceFiles { .. } => "cargo.evidence_file_count",
             Self::AggregateEvidenceTooLarge { .. } => "cargo.evidence_aggregate_too_large",
             Self::MissingLicenseEvidence { .. } => "cargo.evidence_missing",
+            Self::UpstreamEvidence { .. } => "cargo.evidence_upstream",
         }
     }
 }
@@ -273,9 +298,27 @@ impl fmt::Display for CargoError {
             Self::AggregateEvidenceTooLarge { .. } => {
                 formatter.write_str("Cargo license evidence exceeds the aggregate limit")
             }
-            Self::MissingLicenseEvidence { .. } => {
-                formatter.write_str("Cargo package has no license evidence")
+            Self::MissingLicenseEvidence {
+                package_id,
+                package,
+                version,
+                location,
+                reason,
+            } => {
+                write!(
+                    formatter,
+                    "Cargo package {package}@{version} ({package_id}) has no license evidence at {location}: {reason}"
+                )
             }
+            Self::UpstreamEvidence {
+                package,
+                version,
+                location,
+                reason,
+            } => write!(
+                formatter,
+                "Cargo upstream evidence failed for {package}@{version} at {location}: {reason}"
+            ),
         }
     }
 }
