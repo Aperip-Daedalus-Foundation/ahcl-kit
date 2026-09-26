@@ -37,7 +37,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/winresource-0.1.31/LICENSE`](THIRD-PARTY-LICENSES/winresource-0.1.31/LICENSE)
   - SHA-256: `3564da09711c475669c15346bb25a1530a7de683c13f4a51489c15a6d74438fa`
   - Bytes: 1049
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/BurntSushi/memchr`
 
@@ -59,11 +58,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/memchr-2.8.3/COPYING`](THIRD-PARTY-LICENSES/memchr-2.8.3/COPYING)
   - SHA-256: `01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f`
   - Bytes: 126
-  - Package origin: `COPYING`
 - [`.ahcl/THIRD-PARTY-LICENSES/memchr-2.8.3/LICENSE-MIT`](THIRD-PARTY-LICENSES/memchr-2.8.3/LICENSE-MIT)
   - SHA-256: `0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f`
   - Bytes: 1081
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/RustCrypto/hashes`
 
@@ -85,11 +82,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-APACHE`](THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-MIT`](THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-MIT)
   - SHA-256: `b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1`
   - Bytes: 1138
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/RustCrypto/traits`
 
@@ -111,11 +106,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-MIT)
   - SHA-256: `3521672491a3479422d5fe1aca6645dd2984090f85da6e5205abfb18fb7a6897`
   - Bytes: 1065
-  - Package origin: `LICENSE-MIT`
 
 ### `digest` 0.10.7
 
@@ -135,11 +128,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-MIT)
   - SHA-256: `9e0dfd2dd4173a530e238cb6adb37aa78c34c6bc7444e0e10c1ab5d8881f63ba`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/RustCrypto/utils`
 
@@ -161,11 +152,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-APACHE`](THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-MIT`](THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-MIT)
   - SHA-256: `d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef`
   - Bytes: 1082
-  - Package origin: `LICENSE-MIT`
 
 ### `cpufeatures` 0.2.17
 
@@ -185,11 +174,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-MIT`](THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-MIT)
   - SHA-256: `ae9baa7beea910273c2f384c2a6b721fb7bd02bda3436074a1072e4ee689f985`
   - Bytes: 1082
-  - Package origin: `LICENSE-MIT`
 
 ### `zeroize` 1.9.0
 
@@ -209,11 +196,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zeroize-1.9.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/zeroize-1.9.0/LICENSE-APACHE)
   - SHA-256: `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/zeroize-1.9.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/zeroize-1.9.0/LICENSE-MIT)
   - SHA-256: `8c7516d4b27b1e495be5e38b612298b63de48d05f49cdac94f70f3cd70f8864b`
   - Bytes: 1082
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/SergioBenitez/version_check`
 
@@ -235,11 +220,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-MIT)
   - SHA-256: `b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e`
   - Bytes: 1085
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/alacritty/vte`
 
@@ -261,11 +244,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8parse-0.2.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/utf8parse-0.2.2/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8parse-0.2.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/utf8parse-0.2.2/LICENSE-MIT)
   - SHA-256: `e4c9b06fa850cb9b540a5e400e9f6394cf15efcf4098144de477d1d3dae10150`
   - Bytes: 1052
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/algesten/ureq`
 
@@ -287,11 +268,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-APACHE)
   - SHA-256: `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`
   - Bytes: 11357
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-MIT)
   - SHA-256: `7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721`
   - Bytes: 1072
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/algesten/ureq-proto`
 
@@ -313,11 +292,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-APACHE.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-APACHE.txt)
   - SHA-256: `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE.txt`
 - [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-MIT.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-MIT.txt)
   - SHA-256: `5b460f37be48ac4cf2181596181cc6cae432fc2caae05944873f380730829a4b`
   - Bytes: 1055
-  - Package origin: `LICENSE-MIT.txt`
 
 ## Upstream: `https://github.com/algesten/utf8-zero`
 
@@ -339,11 +316,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8-zero-0.8.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/utf8-zero-0.8.1/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8-zero-0.8.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/utf8-zero-0.8.1/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/arcnmx/serde-value`
 
@@ -365,7 +340,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde-value-0.7.0/COPYING`](THIRD-PARTY-LICENSES/serde-value-0.7.0/COPYING)
   - SHA-256: `494d714b99fdedc1a7f1cc48e6b9b5f6e478792943500dd554b527080164ffb8`
   - Bytes: 1050
-  - Package origin: `COPYING`
 
 ## Upstream: `https://github.com/bitflags/bitflags`
 
@@ -387,11 +361,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/bitflags-2.13.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/bitflags-2.13.2/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/bitflags-2.13.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/bitflags-2.13.2/LICENSE-MIT)
   - SHA-256: `6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb`
   - Bytes: 1071
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/briansmith/ring`
 
@@ -413,15 +385,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/ring-0.17.14/LICENSE`](THIRD-PARTY-LICENSES/ring-0.17.14/LICENSE)
   - SHA-256: `b3d734001a94efff3579978d953391aa7115f877657d25eb54037a43875d078a`
   - Bytes: 499
-  - Package origin: `LICENSE`
 - [`.ahcl/THIRD-PARTY-LICENSES/ring-0.17.14/LICENSE-BoringSSL`](THIRD-PARTY-LICENSES/ring-0.17.14/LICENSE-BoringSSL)
   - SHA-256: `005fc765ddc5115da796cca915baa9557abae13ff35e0a47c47affc56f6c414d`
   - Bytes: 14870
-  - Package origin: `LICENSE-BoringSSL`
 - [`.ahcl/THIRD-PARTY-LICENSES/ring-0.17.14/LICENSE-other-bits`](THIRD-PARTY-LICENSES/ring-0.17.14/LICENSE-other-bits)
   - SHA-256: `f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f`
   - Bytes: 731
-  - Package origin: `LICENSE-other-bits`
 
 ## Upstream: `https://github.com/briansmith/untrusted`
 
@@ -443,7 +412,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/untrusted-0.9.0/LICENSE.txt`](THIRD-PARTY-LICENSES/untrusted-0.9.0/LICENSE.txt)
   - SHA-256: `7abd9b6960dcf7d4d0a48606a5b71bfe37d472db68d70637f3a58a56785f1621`
   - Bytes: 769
-  - Package origin: `LICENSE.txt`
 
 ## Upstream: `https://github.com/bytecodealliance/rustix`
 
@@ -465,19 +433,15 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/COPYRIGHT`](THIRD-PARTY-LICENSES/rustix-1.1.5/COPYRIGHT)
   - SHA-256: `377c2e7c53250cc5905c0b0532d35973392af16ffb9596a41d99d202cf3617c9`
   - Bytes: 853
-  - Package origin: `COPYRIGHT`
 - [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-Apache-2.0_WITH_LLVM-exception`](THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-Apache-2.0_WITH_LLVM-exception)
   - SHA-256: `268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5`
   - Bytes: 12243
-  - Package origin: `LICENSE-Apache-2.0_WITH_LLVM-exception`
 - [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/bytecodealliance/wasi`
 
@@ -499,15 +463,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/wasi-0.11.1_2Bwasi-snapshot-preview1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/wasi-0.11.1_2Bwasi-snapshot-preview1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/wasi-0.11.1_2Bwasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception`](THIRD-PARTY-LICENSES/wasi-0.11.1_2Bwasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception)
   - SHA-256: `268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5`
   - Bytes: 12243
-  - Package origin: `LICENSE-Apache-2.0_WITH_LLVM-exception`
 - [`.ahcl/THIRD-PARTY-LICENSES/wasi-0.11.1_2Bwasi-snapshot-preview1/LICENSE-MIT`](THIRD-PARTY-LICENSES/wasi-0.11.1_2Bwasi-snapshot-preview1/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/camino-rs/camino`
 
@@ -529,11 +490,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/camino-1.2.6/LICENSE-APACHE`](THIRD-PARTY-LICENSES/camino-1.2.6/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/camino-1.2.6/LICENSE-MIT`](THIRD-PARTY-LICENSES/camino-1.2.6/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/clap-rs/clap`
 
@@ -555,11 +514,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/clap-4.6.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/clap-4.6.7/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/clap-4.6.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/clap-4.6.7/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `clap_builder` 4.6.7
 
@@ -579,11 +536,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/clap_builder-4.6.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/clap_builder-4.6.7/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/clap_builder-4.6.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/clap_builder-4.6.7/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `clap_derive` 4.6.7
 
@@ -603,11 +558,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/clap_derive-4.6.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/clap_derive-4.6.7/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/clap_derive-4.6.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/clap_derive-4.6.7/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `clap_lex` 1.1.1
 
@@ -627,11 +580,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/clap_lex-1.1.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/clap_lex-1.1.1/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/clap_lex-1.1.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/clap_lex-1.1.1/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/comex/rust-shlex`
 
@@ -653,11 +604,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/shlex-2.0.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/shlex-2.0.1/LICENSE-APACHE)
   - SHA-256: `553fffcd9b1cb158bc3e9edc35da85ca5c3b3d7d2e61c883ebcfa8a65814b583`
   - Bytes: 566
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/shlex-2.0.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/shlex-2.0.1/LICENSE-MIT)
   - SHA-256: `4455bf75a91154108304cb283e0fea9948c14f13e20d60887cf2552449dea3b1`
   - Bytes: 1092
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/cuviper/autocfg`
 
@@ -679,11 +628,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/autocfg-1.5.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/autocfg-1.5.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/autocfg-1.5.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/autocfg-1.5.1/LICENSE-MIT)
   - SHA-256: `27995d58ad5c1145c1a8cd86244ce844886958a35eb2b78c6b772748669999ac`
   - Bytes: 1054
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dalek-cryptography/subtle`
 
@@ -705,7 +652,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/subtle-2.6.1/LICENSE`](THIRD-PARTY-LICENSES/subtle-2.6.1/LICENSE)
   - SHA-256: `d1fc1bc0d155df60b2e7705b6b2ae02a05c96f948e1cec6e2fb86360b09f346b`
   - Bytes: 1582
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/dtolnay/erased-serde`
 
@@ -727,11 +673,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/erased-serde-0.4.10/LICENSE-APACHE`](THIRD-PARTY-LICENSES/erased-serde-0.4.10/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/erased-serde-0.4.10/LICENSE-MIT`](THIRD-PARTY-LICENSES/erased-serde-0.4.10/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/itoa`
 
@@ -753,11 +697,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/itoa-1.0.18/LICENSE-APACHE`](THIRD-PARTY-LICENSES/itoa-1.0.18/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/itoa-1.0.18/LICENSE-MIT`](THIRD-PARTY-LICENSES/itoa-1.0.18/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/proc-macro2`
 
@@ -779,11 +721,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/proc-macro2-1.0.107/LICENSE-APACHE`](THIRD-PARTY-LICENSES/proc-macro2-1.0.107/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/proc-macro2-1.0.107/LICENSE-MIT`](THIRD-PARTY-LICENSES/proc-macro2-1.0.107/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/quote`
 
@@ -805,11 +745,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/quote-1.0.47/LICENSE-APACHE`](THIRD-PARTY-LICENSES/quote-1.0.47/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/quote-1.0.47/LICENSE-MIT`](THIRD-PARTY-LICENSES/quote-1.0.47/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/semver`
 
@@ -831,11 +769,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/semver-1.0.28/LICENSE-APACHE`](THIRD-PARTY-LICENSES/semver-1.0.28/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/semver-1.0.28/LICENSE-MIT`](THIRD-PARTY-LICENSES/semver-1.0.28/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/serde-untagged`
 
@@ -857,11 +793,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde-untagged-0.1.9/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde-untagged-0.1.9/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde-untagged-0.1.9/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde-untagged-0.1.9/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/syn`
 
@@ -883,11 +817,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/syn-2.0.119/LICENSE-APACHE`](THIRD-PARTY-LICENSES/syn-2.0.119/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/syn-2.0.119/LICENSE-MIT`](THIRD-PARTY-LICENSES/syn-2.0.119/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `syn` 3.0.6
 
@@ -907,11 +839,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/syn-3.0.6/LICENSE-APACHE`](THIRD-PARTY-LICENSES/syn-3.0.6/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/syn-3.0.6/LICENSE-MIT`](THIRD-PARTY-LICENSES/syn-3.0.6/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/thiserror`
 
@@ -933,11 +863,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-1.0.69/LICENSE-APACHE`](THIRD-PARTY-LICENSES/thiserror-1.0.69/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-1.0.69/LICENSE-MIT`](THIRD-PARTY-LICENSES/thiserror-1.0.69/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `thiserror` 2.0.20
 
@@ -957,11 +885,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-2.0.20/LICENSE-APACHE`](THIRD-PARTY-LICENSES/thiserror-2.0.20/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-2.0.20/LICENSE-MIT`](THIRD-PARTY-LICENSES/thiserror-2.0.20/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `thiserror-impl` 1.0.69
 
@@ -981,11 +907,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-impl-1.0.69/LICENSE-APACHE`](THIRD-PARTY-LICENSES/thiserror-impl-1.0.69/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-impl-1.0.69/LICENSE-MIT`](THIRD-PARTY-LICENSES/thiserror-impl-1.0.69/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `thiserror-impl` 2.0.20
 
@@ -1005,11 +929,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-impl-2.0.20/LICENSE-APACHE`](THIRD-PARTY-LICENSES/thiserror-impl-2.0.20/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/thiserror-impl-2.0.20/LICENSE-MIT`](THIRD-PARTY-LICENSES/thiserror-impl-2.0.20/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/typeid`
 
@@ -1031,11 +953,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/typeid-1.0.3/LICENSE-APACHE`](THIRD-PARTY-LICENSES/typeid-1.0.3/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/typeid-1.0.3/LICENSE-MIT`](THIRD-PARTY-LICENSES/typeid-1.0.3/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/dtolnay/unicode-ident`
 
@@ -1057,15 +977,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/unicode-ident-1.0.26/LICENSE-APACHE`](THIRD-PARTY-LICENSES/unicode-ident-1.0.26/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/unicode-ident-1.0.26/LICENSE-MIT`](THIRD-PARTY-LICENSES/unicode-ident-1.0.26/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 - [`.ahcl/THIRD-PARTY-LICENSES/unicode-ident-1.0.26/LICENSE-UNICODE`](THIRD-PARTY-LICENSES/unicode-ident-1.0.26/LICENSE-UNICODE)
   - SHA-256: `f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1`
   - Bytes: 1995
-  - Package origin: `LICENSE-UNICODE`
 
 ## Upstream: `https://github.com/dtolnay/zmij`
 
@@ -1087,7 +1004,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zmij-1.0.23/LICENSE-MIT`](THIRD-PARTY-LICENSES/zmij-1.0.23/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/fizyk20/generic-array`
 
@@ -1109,7 +1025,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/generic-array-0.14.7/LICENSE`](THIRD-PARTY-LICENSES/generic-array-0.14.7/LICENSE)
   - SHA-256: `c09aae9d3c77b531f56351a9947bc7446511d6b025b3255312d3e3442a9a7583`
   - Bytes: 1107
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/hsivonen/idna_adapter`
 
@@ -1131,11 +1046,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/idna_adapter-1.2.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/idna_adapter-1.2.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/idna_adapter-1.2.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/idna_adapter-1.2.1/LICENSE-MIT)
   - SHA-256: `8b43ce8accd61e9d370b5ca9e9c4f953279b5c239926c62315b40e24df51b726`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/hsivonen/utf8_iter`
 
@@ -1157,15 +1070,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8_iter-1.0.4/COPYRIGHT`](THIRD-PARTY-LICENSES/utf8_iter-1.0.4/COPYRIGHT)
   - SHA-256: `c30152c94a6d75e021adbc52b3a52470366a46edb917e17deae3259251af244c`
   - Bytes: 1742
-  - Package origin: `COPYRIGHT`
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8_iter-1.0.4/LICENSE-APACHE`](THIRD-PARTY-LICENSES/utf8_iter-1.0.4/LICENSE-APACHE)
   - SHA-256: `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/utf8_iter-1.0.4/LICENSE-MIT`](THIRD-PARTY-LICENSES/utf8_iter-1.0.4/LICENSE-MIT)
   - SHA-256: `3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c`
   - Bytes: 1053
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/hyperium/http`
 
@@ -1187,11 +1097,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/http-1.5.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/http-1.5.0/LICENSE-APACHE)
   - SHA-256: `8bb1b50b0e5c9399ae33bd35fab2769010fa6c14e8860c729a52295d84896b7a`
   - Bytes: 10835
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/http-1.5.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/http-1.5.0/LICENSE-MIT)
   - SHA-256: `dc91f8200e4b2a1f9261035d4c18c33c246911a6c0f7b543d75347e61b249cff`
   - Bytes: 1059
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/hyperium/mime`
 
@@ -1213,11 +1121,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-APACHE`](THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-MIT`](THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-MIT)
   - SHA-256: `df9cfd06d8a44d9a671eadd39ffd97f166481da015a30f45dfd27886209c5922`
   - Bytes: 1058
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/indexmap-rs/equivalent`
 
@@ -1239,11 +1145,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/equivalent-1.0.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/equivalent-1.0.2/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/equivalent-1.0.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/equivalent-1.0.2/LICENSE-MIT)
   - SHA-256: `7365cc8878a1d7ce155a58c4ca09c3d7a6be413efa5334a80ea842912b669349`
   - Bytes: 1049
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/indexmap-rs/indexmap`
 
@@ -1265,11 +1169,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/indexmap-2.14.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/indexmap-2.14.2/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/indexmap-2.14.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/indexmap-2.14.2/LICENSE-MIT)
   - SHA-256: `ecc269ef87fd38a1d98e30bfac9ba964a9dbd9315c3770fed98d4d7cb5882055`
   - Bytes: 1049
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/jhpratt/deranged`
 
@@ -1291,11 +1193,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/deranged-0.5.8/LICENSE-Apache`](THIRD-PARTY-LICENSES/deranged-0.5.8/LICENSE-Apache)
   - SHA-256: `edd65bdd88957a205c47d53fa499eed8865a70320f0f03f6391668cb304ea376`
   - Bytes: 11349
-  - Package origin: `LICENSE-Apache`
 - [`.ahcl/THIRD-PARTY-LICENSES/deranged-0.5.8/LICENSE-MIT`](THIRD-PARTY-LICENSES/deranged-0.5.8/LICENSE-MIT)
   - SHA-256: `231c837c45eb53f108fb48929e488965bc4fcc14e9ea21d35f50e6b99d98685b`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/jhpratt/num-conv`
 
@@ -1317,11 +1217,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/num-conv-0.1.0/LICENSE-Apache`](THIRD-PARTY-LICENSES/num-conv-0.1.0/LICENSE-Apache)
   - SHA-256: `c0fd5f9df8d17e13587f8fe403d2326b835e60d532817d0b42ae4aea44209251`
   - Bytes: 11342
-  - Package origin: `LICENSE-Apache`
 - [`.ahcl/THIRD-PARTY-LICENSES/num-conv-0.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/num-conv-0.1.0/LICENSE-MIT)
   - SHA-256: `af85fff507d80e6c7ff242acfc4b0a7f5de9a72286bb3c883c782772ca4b4402`
   - Bytes: 1055
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/jhpratt/powerfmt`
 
@@ -1343,11 +1241,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/powerfmt-0.2.0/LICENSE-Apache`](THIRD-PARTY-LICENSES/powerfmt-0.2.0/LICENSE-Apache)
   - SHA-256: `155420c6403d4e0fca34105e3c03fdd6939b64c393c7ec6f95f5b72c5474eab0`
   - Bytes: 11349
-  - Package origin: `LICENSE-Apache`
 - [`.ahcl/THIRD-PARTY-LICENSES/powerfmt-0.2.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/powerfmt-0.2.0/LICENSE-MIT)
   - SHA-256: `070dbc7dda03a29296f2d58bdb9b7331af90f2abc9f31df22875d1eabaf29852`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/lambda-fairy/rust-errno`
 
@@ -1369,11 +1265,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/errno-0.3.14/LICENSE-APACHE`](THIRD-PARTY-LICENSES/errno-0.3.14/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/errno-0.3.14/LICENSE-MIT`](THIRD-PARTY-LICENSES/errno-0.3.14/LICENSE-MIT)
   - SHA-256: `8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2`
   - Bytes: 1054
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/marshallpierce/rust-base64`
 
@@ -1395,11 +1289,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/base64-0.23.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/base64-0.23.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/base64-0.23.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/base64-0.23.1/LICENSE-MIT)
   - SHA-256: `ab499c75a0f0da8e0fe83bf9ba3a27e5c39705310f07107c6c66b69958d2401c`
   - Bytes: 1093
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/matklad/once_cell`
 
@@ -1421,11 +1313,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/once_cell-1.21.4/LICENSE-APACHE`](THIRD-PARTY-LICENSES/once_cell-1.21.4/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/once_cell-1.21.4/LICENSE-MIT`](THIRD-PARTY-LICENSES/once_cell-1.21.4/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/microsoft/windows-rs`
 
@@ -1447,11 +1337,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-link-0.2.1/license-apache-2.0`](THIRD-PARTY-LICENSES/windows-link-0.2.1/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-link-0.2.1/license-mit`](THIRD-PARTY-LICENSES/windows-link-0.2.1/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows-sys` 0.52.0
 
@@ -1471,11 +1359,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-sys-0.52.0/license-apache-2.0`](THIRD-PARTY-LICENSES/windows-sys-0.52.0/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-sys-0.52.0/license-mit`](THIRD-PARTY-LICENSES/windows-sys-0.52.0/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows-sys` 0.61.2
 
@@ -1495,11 +1381,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-sys-0.61.2/license-apache-2.0`](THIRD-PARTY-LICENSES/windows-sys-0.61.2/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-sys-0.61.2/license-mit`](THIRD-PARTY-LICENSES/windows-sys-0.61.2/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows-targets` 0.52.6
 
@@ -1519,11 +1403,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-targets-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows-targets-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows-targets-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows-targets-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_aarch64_gnullvm` 0.52.6
 
@@ -1543,11 +1425,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_aarch64_gnullvm-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_aarch64_gnullvm-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_aarch64_gnullvm-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_aarch64_gnullvm-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_aarch64_msvc` 0.52.6
 
@@ -1567,11 +1447,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_aarch64_msvc-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_aarch64_msvc-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_aarch64_msvc-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_aarch64_msvc-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_i686_gnu` 0.52.6
 
@@ -1591,11 +1469,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_i686_gnu-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_i686_gnu-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_i686_gnu-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_i686_gnu-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_i686_gnullvm` 0.52.6
 
@@ -1615,11 +1491,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_i686_gnullvm-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_i686_gnullvm-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_i686_gnullvm-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_i686_gnullvm-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_i686_msvc` 0.52.6
 
@@ -1639,11 +1513,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_i686_msvc-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_i686_msvc-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_i686_msvc-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_i686_msvc-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_x86_64_gnu` 0.52.6
 
@@ -1663,11 +1535,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_x86_64_gnu-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_x86_64_gnu-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_x86_64_gnu-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_x86_64_gnu-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_x86_64_gnullvm` 0.52.6
 
@@ -1687,11 +1557,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_x86_64_gnullvm-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_x86_64_gnullvm-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_x86_64_gnullvm-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_x86_64_gnullvm-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ### `windows_x86_64_msvc` 0.52.6
 
@@ -1711,11 +1579,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_x86_64_msvc-0.52.6/license-apache-2.0`](THIRD-PARTY-LICENSES/windows_x86_64_msvc-0.52.6/license-apache-2.0)
   - SHA-256: `c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b`
   - Bytes: 11351
-  - Package origin: `license-apache-2.0`
 - [`.ahcl/THIRD-PARTY-LICENSES/windows_x86_64_msvc-0.52.6/license-mit`](THIRD-PARTY-LICENSES/windows_x86_64_msvc-0.52.6/license-mit)
   - SHA-256: `c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383`
   - Bytes: 1141
-  - Package origin: `license-mit`
 
 ## Upstream: `https://github.com/mystor/synstructure`
 
@@ -1737,7 +1603,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/synstructure-0.14.0/LICENSE`](THIRD-PARTY-LICENSES/synstructure-0.14.0/LICENSE)
   - SHA-256: `219920e865eee70b7dcfc948a86b099e7f4fe2de01bcca2ca9a20c0a033f2b59`
   - Bytes: 1052
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/oli-obk/cargo_metadata`
 
@@ -1759,7 +1624,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cargo_metadata-0.20.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/cargo_metadata-0.20.0/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/paholg/typenum`
 
@@ -1781,15 +1645,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/typenum-1.20.1/LICENSE`](THIRD-PARTY-LICENSES/typenum-1.20.1/LICENSE)
   - SHA-256: `db11fec9946737df39ca3898d9cd8c10ec6f6c3a884a6802b0ad0b81b4e8f23a`
   - Bytes: 17
-  - Package origin: `LICENSE`
 - [`.ahcl/THIRD-PARTY-LICENSES/typenum-1.20.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/typenum-1.20.1/LICENSE-APACHE)
   - SHA-256: `516b24e051bf5630880ebbd55c40a25ce9552ebaf8970a53e8976eb70e522406`
   - Bytes: 10835
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/typenum-1.20.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/typenum-1.20.1/LICENSE-MIT)
   - SHA-256: `a825bd853ab71619a4923d7b4311221427848070ff44d990da39b0b274c1683f`
   - Bytes: 1083
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/polyfill-rs/is_terminal_polyfill`
 
@@ -1811,11 +1672,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/is_terminal_polyfill-1.70.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/is_terminal_polyfill-1.70.2/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/is_terminal_polyfill-1.70.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/is_terminal_polyfill-1.70.2/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/polyfill-rs/once_cell_polyfill`
 
@@ -1837,11 +1696,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/once_cell_polyfill-1.70.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/once_cell_polyfill-1.70.2/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/once_cell_polyfill-1.70.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/once_cell_polyfill-1.70.2/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rapidfuzz/strsim-rs`
 
@@ -1863,7 +1720,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/strsim-0.11.1/LICENSE`](THIRD-PARTY-LICENSES/strsim-0.11.1/LICENSE)
   - SHA-256: `1e697ce8d21401fbf1bddd9b5c3fd4c4c79ae1e3bdf51f81761c85e11d5a89cd`
   - Bytes: 1166
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/reem/rust-ordered-float`
 
@@ -1885,7 +1741,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/ordered-float-2.10.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/ordered-float-2.10.1/LICENSE-MIT)
   - SHA-256: `f7715d38a3fa1b4ac97c5729740752505a39cb92ee83ab5b102aeb5eaa7cdea4`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-cli/anstyle`
 
@@ -1907,11 +1762,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/anstream-1.0.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/anstream-1.0.0/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/anstream-1.0.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/anstream-1.0.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `anstyle` 1.0.14
 
@@ -1931,11 +1784,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-1.0.14/LICENSE-APACHE`](THIRD-PARTY-LICENSES/anstyle-1.0.14/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-1.0.14/LICENSE-MIT`](THIRD-PARTY-LICENSES/anstyle-1.0.14/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `anstyle-parse` 1.0.0
 
@@ -1955,11 +1806,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-parse-1.0.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/anstyle-parse-1.0.0/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-parse-1.0.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/anstyle-parse-1.0.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `anstyle-query` 1.1.5
 
@@ -1979,11 +1828,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-query-1.1.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/anstyle-query-1.1.5/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-query-1.1.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/anstyle-query-1.1.5/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `anstyle-wincon` 3.0.11
 
@@ -2003,11 +1850,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-wincon-3.0.11/LICENSE-APACHE`](THIRD-PARTY-LICENSES/anstyle-wincon-3.0.11/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/anstyle-wincon-3.0.11/LICENSE-MIT`](THIRD-PARTY-LICENSES/anstyle-wincon-3.0.11/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `colorchoice` 1.0.5
 
@@ -2027,11 +1872,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/colorchoice-1.0.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/colorchoice-1.0.5/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/colorchoice-1.0.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/colorchoice-1.0.5/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-lang/cargo`
 
@@ -2053,11 +1896,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cargo-platform-0.2.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cargo-platform-0.2.0/LICENSE-APACHE)
   - SHA-256: `8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb`
   - Bytes: 10860
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/cargo-platform-0.2.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/cargo-platform-0.2.0/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `cargo-util-schemas` 0.2.0
 
@@ -2077,11 +1918,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cargo-util-schemas-0.2.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cargo-util-schemas-0.2.0/LICENSE-APACHE)
   - SHA-256: `8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb`
   - Bytes: 10860
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/cargo-util-schemas-0.2.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/cargo-util-schemas-0.2.0/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-lang/cc-rs`
 
@@ -2103,11 +1942,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cc-1.4.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cc-1.4.7/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/cc-1.4.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/cc-1.4.7/LICENSE-MIT)
   - SHA-256: `378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ### `find-msvc-tools` 0.1.13
 
@@ -2127,11 +1964,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/find-msvc-tools-0.1.13/LICENSE-APACHE`](THIRD-PARTY-LICENSES/find-msvc-tools-0.1.13/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/find-msvc-tools-0.1.13/LICENSE-MIT`](THIRD-PARTY-LICENSES/find-msvc-tools-0.1.13/LICENSE-MIT)
   - SHA-256: `378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-lang/cfg-if`
 
@@ -2153,11 +1988,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cfg-if-1.0.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cfg-if-1.0.5/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/cfg-if-1.0.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/cfg-if-1.0.5/LICENSE-MIT)
   - SHA-256: `378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-lang/hashbrown`
 
@@ -2179,11 +2012,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/hashbrown-0.17.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/hashbrown-0.17.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/hashbrown-0.17.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/hashbrown-0.17.1/LICENSE-MIT)
   - SHA-256: `ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2`
   - Bytes: 1060
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-lang/libc`
 
@@ -2205,11 +2036,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/libc-0.2.189/LICENSE-APACHE`](THIRD-PARTY-LICENSES/libc-0.2.189/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/libc-0.2.189/LICENSE-MIT`](THIRD-PARTY-LICENSES/libc-0.2.189/LICENSE-MIT)
   - SHA-256: `123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e`
   - Bytes: 1066
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-lang/log`
 
@@ -2231,11 +2060,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/log-0.4.34/LICENSE-APACHE`](THIRD-PARTY-LICENSES/log-0.4.34/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/log-0.4.34/LICENSE-MIT`](THIRD-PARTY-LICENSES/log-0.4.34/LICENSE-MIT)
   - SHA-256: `6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb`
   - Bytes: 1071
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-num/num-traits`
 
@@ -2257,11 +2084,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/num-traits-0.2.19/LICENSE-APACHE`](THIRD-PARTY-LICENSES/num-traits-0.2.19/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/num-traits-0.2.19/LICENSE-MIT`](THIRD-PARTY-LICENSES/num-traits-0.2.19/LICENSE-MIT)
   - SHA-256: `6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb`
   - Bytes: 1071
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rust-random/getrandom`
 
@@ -2283,11 +2108,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/getrandom-0.2.17/LICENSE-APACHE`](THIRD-PARTY-LICENSES/getrandom-0.2.17/LICENSE-APACHE)
   - SHA-256: `aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf`
   - Bytes: 10849
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/getrandom-0.2.17/LICENSE-MIT`](THIRD-PARTY-LICENSES/getrandom-0.2.17/LICENSE-MIT)
   - SHA-256: `42fa16951ce7f24b5a467a40e5b449a1d41e662f97ca779864f053f39e097737`
   - Bytes: 1130
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rustls/pki-types`
 
@@ -2309,11 +2132,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/rustls-pki-types-1.15.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-pki-types-1.15.1/LICENSE-APACHE)
   - SHA-256: `45fd05c4865e7c350b98ad7ac50e1b15462d49af4a91e9b0c9dd933dc9a69742`
   - Bytes: 10835
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/rustls-pki-types-1.15.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-pki-types-1.15.1/LICENSE-MIT)
   - SHA-256: `9117d922e667125508dde62b02c1f57ed22f5ad21eb536aa2e2d99e1c796e639`
   - Bytes: 1080
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rustls/rustls`
 
@@ -2335,15 +2156,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC)
   - SHA-256: `7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4`
   - Bytes: 775
-  - Package origin: `LICENSE-ISC`
 - [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT)
   - SHA-256: `709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c`
   - Bytes: 1082
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/rustls/webpki`
 
@@ -2365,7 +2183,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/rustls-webpki-0.103.15/LICENSE`](THIRD-PARTY-LICENSES/rustls-webpki-0.103.15/LICENSE)
   - SHA-256: `5b698ca13897be3afdb7174256fa1574f8c6892b8bea1a66dd6469d3fe27885a`
   - Bytes: 916
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/rustls/webpki-roots`
 
@@ -2387,7 +2204,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/webpki-roots-1.0.9/LICENSE`](THIRD-PARTY-LICENSES/webpki-roots-1.0.9/LICENSE)
   - SHA-256: `e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8`
   - Bytes: 2371
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/seanmonstar/httparse`
 
@@ -2409,11 +2225,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/httparse-1.10.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/httparse-1.10.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/httparse-1.10.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/httparse-1.10.1/LICENSE-MIT)
   - SHA-256: `391a5396cec6230bfabd4ef4eb2350eb895bc5efce377a2218f5702ed020d3e3`
   - Bytes: 1063
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/serde-rs/json`
 
@@ -2435,11 +2249,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/serde-rs/serde`
 
@@ -2461,11 +2273,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde-1.0.229/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde-1.0.229/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde-1.0.229/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde-1.0.229/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `serde_core` 1.0.229
 
@@ -2485,11 +2295,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_core-1.0.229/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_core-1.0.229/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_core-1.0.229/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_core-1.0.229/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `serde_derive` 1.0.229
 
@@ -2509,11 +2317,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_derive-1.0.229/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_derive-1.0.229/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_derive-1.0.229/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_derive-1.0.229/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/servo/rust-smallvec`
 
@@ -2535,11 +2341,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/smallvec-1.16.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/smallvec-1.16.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/smallvec-1.16.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/smallvec-1.16.1/LICENSE-MIT)
   - SHA-256: `0b28172679e0009b655da42797c03fd163a3379d5cfa67ba1f1655e974a2a1a9`
   - Bytes: 1072
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/servo/rust-url`
 
@@ -2561,11 +2365,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/form_urlencoded-1.2.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/form_urlencoded-1.2.2/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/form_urlencoded-1.2.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/form_urlencoded-1.2.2/LICENSE-MIT)
   - SHA-256: `20c7855c364d57ea4c97889a5e8d98470a9952dade37bd9248b9a54431670e5e`
   - Bytes: 1072
-  - Package origin: `LICENSE-MIT`
 
 ### `idna` 1.1.0
 
@@ -2585,11 +2387,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/idna-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/idna-1.1.0/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/idna-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/idna-1.1.0/LICENSE-MIT)
   - SHA-256: `b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5`
   - Bytes: 1072
-  - Package origin: `LICENSE-MIT`
 
 ### `percent-encoding` 2.3.2
 
@@ -2609,11 +2409,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/percent-encoding-2.3.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/percent-encoding-2.3.2/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/percent-encoding-2.3.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/percent-encoding-2.3.2/LICENSE-MIT)
   - SHA-256: `b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5`
   - Bytes: 1072
-  - Package origin: `LICENSE-MIT`
 
 ### `url` 2.5.8
 
@@ -2633,11 +2431,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/url-2.5.8/LICENSE-APACHE`](THIRD-PARTY-LICENSES/url-2.5.8/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/url-2.5.8/LICENSE-MIT`](THIRD-PARTY-LICENSES/url-2.5.8/LICENSE-MIT)
   - SHA-256: `b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5`
   - Bytes: 1072
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/storyyeller/stable_deref_trait`
 
@@ -2659,11 +2455,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/stable_deref_trait-1.2.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/stable_deref_trait-1.2.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/stable_deref_trait-1.2.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/stable_deref_trait-1.2.1/LICENSE-MIT)
   - SHA-256: `5e05b024f653a5ce199e77cbbbd42fb5553562ec714b819421ed0c3e552a75d7`
   - Bytes: 1056
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/sunfishcode/linux-raw-sys`
 
@@ -2685,19 +2479,15 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/COPYRIGHT`](THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/COPYRIGHT)
   - SHA-256: `3290ae0fbc9ddb77d2239121d710f0bb9d31b3b4744e6d97fe01e652b4c1870b`
   - Bytes: 881
-  - Package origin: `COPYRIGHT`
 - [`.ahcl/THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/LICENSE-Apache-2.0_WITH_LLVM-exception`](THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/LICENSE-Apache-2.0_WITH_LLVM-exception)
   - SHA-256: `268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5`
   - Bytes: 12243
-  - Package origin: `LICENSE-Apache-2.0_WITH_LLVM-exception`
 - [`.ahcl/THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/linux-raw-sys-0.12.1/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/time-rs/time`
 
@@ -2719,11 +2509,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-Apache`](THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-Apache)
   - SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`
   - Bytes: 10174
-  - Package origin: `LICENSE-Apache`
 - [`.ahcl/THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-MIT`](THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-MIT)
   - SHA-256: `2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ### `time-core` 0.1.6
 
@@ -2743,11 +2531,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-Apache`](THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-Apache)
   - SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`
   - Bytes: 10174
-  - Package origin: `LICENSE-Apache`
 - [`.ahcl/THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-MIT`](THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-MIT)
   - SHA-256: `2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc`
   - Bytes: 1057
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/tokio-rs/bytes`
 
@@ -2769,7 +2555,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/bytes-1.12.1/LICENSE`](THIRD-PARTY-LICENSES/bytes-1.12.1/LICENSE)
   - SHA-256: `45f522cacecb1023856e46df79ca625dfc550c94910078bd8aec6e02880b3d42`
   - Bytes: 1055
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/toml-rs/toml`
 
@@ -2791,11 +2576,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-0.6.9/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_spanned-0.6.9/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-0.6.9/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_spanned-0.6.9/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `serde_spanned` 1.1.1
 
@@ -2815,11 +2598,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml` 0.8.23
 
@@ -2839,11 +2620,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml-0.8.23/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-0.8.23/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml-0.8.23/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-0.8.23/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml` 1.1.6+spec-1.1.0
 
@@ -2863,11 +2642,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml_datetime` 0.6.11
 
@@ -2887,11 +2664,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-0.6.11/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_datetime-0.6.11/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-0.6.11/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_datetime-0.6.11/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml_datetime` 1.1.1+spec-1.1.0
 
@@ -2911,11 +2686,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml_edit` 0.22.27
 
@@ -2935,11 +2708,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_edit-0.22.27/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_edit-0.22.27/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_edit-0.22.27/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_edit-0.22.27/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml_parser` 1.1.3+spec-1.1.0
 
@@ -2959,11 +2730,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml_write` 0.1.2
 
@@ -2983,11 +2752,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_write-0.1.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_write-0.1.2/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_write-0.1.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_write-0.1.2/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ### `toml_writer` 1.1.2+spec-1.1.0
 
@@ -3007,11 +2774,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/unicode-org/icu4x`
 
@@ -3033,7 +2798,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_collections-2.1.1/LICENSE`](THIRD-PARTY-LICENSES/icu_collections-2.1.1/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `icu_locale_core` 2.1.1
 
@@ -3053,7 +2817,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_locale_core-2.1.1/LICENSE`](THIRD-PARTY-LICENSES/icu_locale_core-2.1.1/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `icu_normalizer` 2.1.1
 
@@ -3073,7 +2836,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_normalizer-2.1.1/LICENSE`](THIRD-PARTY-LICENSES/icu_normalizer-2.1.1/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `icu_normalizer_data` 2.1.1
 
@@ -3093,7 +2855,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_normalizer_data-2.1.1/LICENSE`](THIRD-PARTY-LICENSES/icu_normalizer_data-2.1.1/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `icu_properties` 2.1.2
 
@@ -3113,7 +2874,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_properties-2.1.2/LICENSE`](THIRD-PARTY-LICENSES/icu_properties-2.1.2/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `icu_properties_data` 2.1.2
 
@@ -3133,7 +2893,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_properties_data-2.1.2/LICENSE`](THIRD-PARTY-LICENSES/icu_properties_data-2.1.2/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `icu_provider` 2.1.1
 
@@ -3153,7 +2912,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/icu_provider-2.1.1/LICENSE`](THIRD-PARTY-LICENSES/icu_provider-2.1.1/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `litemap` 0.8.3
 
@@ -3173,7 +2931,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/litemap-0.8.3/LICENSE`](THIRD-PARTY-LICENSES/litemap-0.8.3/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `potential_utf` 0.1.6
 
@@ -3193,7 +2950,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/potential_utf-0.1.6/LICENSE`](THIRD-PARTY-LICENSES/potential_utf-0.1.6/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `tinystr` 0.8.4
 
@@ -3213,7 +2969,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/tinystr-0.8.4/LICENSE`](THIRD-PARTY-LICENSES/tinystr-0.8.4/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `writeable` 0.6.4
 
@@ -3233,7 +2988,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/writeable-0.6.4/LICENSE`](THIRD-PARTY-LICENSES/writeable-0.6.4/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `yoke` 0.8.3
 
@@ -3253,7 +3007,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/yoke-0.8.3/LICENSE`](THIRD-PARTY-LICENSES/yoke-0.8.3/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `yoke-derive` 0.8.3
 
@@ -3273,7 +3026,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/yoke-derive-0.8.3/LICENSE`](THIRD-PARTY-LICENSES/yoke-derive-0.8.3/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `zerofrom` 0.1.8
 
@@ -3293,7 +3045,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zerofrom-0.1.8/LICENSE`](THIRD-PARTY-LICENSES/zerofrom-0.1.8/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `zerofrom-derive` 0.1.8
 
@@ -3313,7 +3064,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zerofrom-derive-0.1.8/LICENSE`](THIRD-PARTY-LICENSES/zerofrom-derive-0.1.8/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `zerotrie` 0.2.5
 
@@ -3333,7 +3083,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zerotrie-0.2.5/LICENSE`](THIRD-PARTY-LICENSES/zerotrie-0.2.5/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `zerovec` 0.11.8
 
@@ -3353,7 +3102,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zerovec-0.11.8/LICENSE`](THIRD-PARTY-LICENSES/zerovec-0.11.8/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ### `zerovec-derive` 0.11.6
 
@@ -3373,7 +3121,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zerovec-derive-0.11.6/LICENSE`](THIRD-PARTY-LICENSES/zerovec-derive-0.11.6/LICENSE)
   - SHA-256: `f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2`
   - Bytes: 2195
-  - Package origin: `LICENSE`
 
 ## Upstream: `https://github.com/unicode-rs/unicode-xid`
 
@@ -3395,15 +3142,12 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/unicode-xid-0.2.6/COPYRIGHT`](THIRD-PARTY-LICENSES/unicode-xid-0.2.6/COPYRIGHT)
   - SHA-256: `23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d`
   - Bytes: 321
-  - Package origin: `COPYRIGHT`
 - [`.ahcl/THIRD-PARTY-LICENSES/unicode-xid-0.2.6/LICENSE-APACHE`](THIRD-PARTY-LICENSES/unicode-xid-0.2.6/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/unicode-xid-0.2.6/LICENSE-MIT`](THIRD-PARTY-LICENSES/unicode-xid-0.2.6/LICENSE-MIT)
   - SHA-256: `7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0`
   - Bytes: 1071
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/winnow-rs/winnow`
 
@@ -3425,7 +3169,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/winnow-0.7.15/LICENSE-MIT`](THIRD-PARTY-LICENSES/winnow-0.7.15/LICENSE-MIT)
   - SHA-256: `cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ### `winnow` 1.0.4
 
@@ -3445,7 +3188,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/winnow-1.0.4/LICENSE-MIT`](THIRD-PARTY-LICENSES/winnow-1.0.4/LICENSE-MIT)
   - SHA-256: `cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/withoutboats/heck`
 
@@ -3467,11 +3209,9 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/heck-0.5.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/heck-0.5.0/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/heck-0.5.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/heck-0.5.0/LICENSE-MIT)
   - SHA-256: `7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0`
   - Bytes: 1071
-  - Package origin: `LICENSE-MIT`
 
 ## Upstream: `https://github.com/yaahc/displaydoc`
 
@@ -3493,10 +3233,8 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/displaydoc-0.2.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/displaydoc-0.2.7/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-  - Package origin: `LICENSE-APACHE`
 - [`.ahcl/THIRD-PARTY-LICENSES/displaydoc-0.2.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/displaydoc-0.2.7/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-  - Package origin: `LICENSE-MIT`
 
 AHCL Kit reports declared metadata and retained evidence without selecting or interpreting legal terms.

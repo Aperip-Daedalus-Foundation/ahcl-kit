@@ -6,7 +6,6 @@
 /.ahcl/*.md text eol=lf
 /.ahcl/AHCL-RESTRICTIONS/*.md text eol=lf
 /.ahcl/THIRD-PARTY-LICENSES/** -text
-/.ahcl/THIRD-PARTY-LICENSES/.ahcl-kit-state.json text eol=lf
 /assets/branding/** linguist-vendored
 /assets/packaging/**/*.plist linguist-vendored
 /assets/packaging/**/*.wxs linguist-vendored
