@@ -53,6 +53,10 @@ impl LayoutPolicy {
                 materials_directory.as_str(),
                 "AHCL" | "licenses/AHCL" | ".AHCL" | ".ahcl"
             ),
+            AhclVersion::V1_2 => matches!(
+                materials_directory.as_str(),
+                "AHCL" | "licenses/AHCL" | ".AHCL" | ".ahcl"
+            ),
         };
         if !valid {
             return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));

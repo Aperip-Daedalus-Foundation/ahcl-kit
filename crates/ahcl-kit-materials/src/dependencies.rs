@@ -299,7 +299,12 @@ fn render_package(
         .get(&package.id)
         .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid))?;
     let basenames = evidence_basenames(package)?;
+    let mut rendered_evidence = 0;
     for (artifact, basename) in package.license_artifacts.iter().zip(basenames) {
+        if is_supplemental_artifact(&basename) {
+            continue;
+        }
+        rendered_evidence += 1;
         let evidence_path = format!(
             "{}/THIRD-PARTY-LICENSES/{directory}/{basename}",
             config.materials_directory().as_str()
@@ -313,11 +318,19 @@ fn render_package(
         rendered.push_str(&sha256_hex(&artifact.bytes));
         rendered.push_str("`\n  - Bytes: ");
         rendered.push_str(&artifact.bytes.len().to_string());
-        rendered.push_str("\n  - Package origin: `");
-        rendered.push_str(artifact.relative_path.as_str());
-        rendered.push_str("`\n");
+        rendered.push('\n');
+        // The normalized graph does not prove provenance for a recovered
+        // artifact, so do not present its package-relative path as origin.
+    }
+    if rendered_evidence == 0 {
+        rendered.push_str("- None.\n");
     }
     Ok(())
+}
+
+pub(crate) fn is_supplemental_artifact(basename: &str) -> bool {
+    basename.eq_ignore_ascii_case("AHCL-EVIDENCE-SOURCE.md")
+        || basename.eq_ignore_ascii_case("AHCL-MATERIALS.url")
 }
 
 fn render_optional(rendered: &mut String, label: &str, value: Option<&str>) {

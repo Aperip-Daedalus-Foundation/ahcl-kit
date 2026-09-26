@@ -58,22 +58,56 @@ pub(crate) fn root_license(
              {directory}/{}\n",
             license.source_filename
         ),
+        AhclVersion::V1_2 => {
+            let scope = covered_scope(config);
+            let key = scope_key(config);
+            format!(
+                "----- BEGIN AHCL NOTICE -----\n\n\
+                 <!-- AHCL KIT MANAGED SCOPE: {key} -->\n\
+                 This license notice applies to:\n\
+                 {project}\n\n\
+                 AHCL-covered portions:\n\
+                 {scope}\n\n\
+                 The portions identified above are licensed under version 1.2 of the\n\
+                 Aperip Heimdall Commons License (AHCL 1.2), subject to its provisions\n\
+                 concerning migration to later official versions.\n\n\
+                 Official AHCL text, announcements, and public notices:\n\
+                 https://ahcl.aperip.com\n\n\
+                 AHCL Materials Directory (relative to the directory containing this LICENSE):\n\
+                 {directory}/\n\n\
+                 Official or recognized AHCL 1.2 copy:\n\
+                 {directory}/{}\n\n\
+                 ----- END AHCL NOTICE -----\n",
+                license.source_filename,
+                project = inline(config.project().name()),
+            )
+        }
     };
 
     let channel = inline(config.license().special_authorization_channel());
     if !channel.is_empty() {
-        rendered.push_str("\nChannels for Non-AHCL Special Authorizations:\n");
-        rendered.push_str(&channel);
-        rendered.push_str(
+        let mut section = String::from("\nChannels for Non-AHCL Special Authorizations:\n");
+        section.push_str(&channel);
+        section.push_str(
             "\n\nThe channel above is solely for applying for or obtaining a separate\n\
              Special Authorization. Channel information does not itself constitute a Special\n\
              Authorization, does not modify AHCL ",
         );
-        rendered.push_str(version);
-        rendered.push_str(
+        section.push_str(version);
+        section.push_str(
             ", and does not waive or reduce any AHCL\n\
              obligation not expressly covered by a valid written Special Authorization.\n",
         );
+        if config.license().version() == AhclVersion::V1_2 {
+            let marker = "\n----- END AHCL NOTICE -----\n";
+            if let Some(index) = rendered.rfind(marker) {
+                rendered.insert_str(index, &section);
+            } else {
+                rendered.push_str(&section);
+            }
+        } else {
+            rendered.push_str(&section);
+        }
     }
     rendered
 }
@@ -98,10 +132,19 @@ pub(crate) fn project_notice(
             rendered.push('\n');
         }
     }
+    if config.license().version() == AhclVersion::V1_2 {
+        rendered.push_str("- Covered scope: ");
+        rendered.push_str(&covered_scope(config));
+        rendered.push_str("\n- Applicable LICENSE: `LICENSE`\n");
+    }
     rendered.push_str("- AHCL origin: <https://ahcl.aperip.com>\n- Applicable version: AHCL ");
     rendered.push_str(config.license().version().as_str());
     rendered.push_str("\n- Continuous AHCL Licensing Segment beginning: ");
     rendered.push_str(&adoption_date.to_string());
+    if config.license().version() == AhclVersion::V1_2 {
+        rendered.push_str("\n- Effective Date: ");
+        rendered.push_str(&adoption_date.to_string());
+    }
     rendered.push_str("\n- Version adoption records: `");
     rendered.push_str(layout.materials_directory().as_str());
     rendered.push_str("/AHCL-VERSION-ADOPTION.md`\n");
@@ -114,20 +157,50 @@ pub(crate) fn source(config: &EffectiveConfig) -> String {
     rendered.push_str(project.canonical_repository());
     rendered.push_str(">\n- Canonical branch: `");
     rendered.push_str(&inline(project.canonical_branch()));
+    rendered.push('`');
+    if config.license().version() == AhclVersion::V1_2 {
+        rendered.push_str("\n- Covered scope: ");
+        rendered.push_str(&covered_scope(config));
+    }
     rendered.push_str(
-        "`\n\nPublic Source Code, Complete Modification History, build materials, and release mappings are available from the canonical repository above.\n",
+        "\n\nPublic Source Code, Complete Modification History, build materials, and release mappings are available from the canonical repository above.\n",
     );
     rendered
 }
 
 pub(crate) fn version_adoption(config: &EffectiveConfig, adoption_date: UtcDate) -> String {
+    if config.license().version() != AhclVersion::V1_2 {
+        return format!(
+            "# AHCL Version Adoption\n\n\
+             - Initial AHCL adoption date: {adoption_date}\n\
+             - Applicable version: AHCL {}\n\n\
+             ## Version Adoption Events\n\n\
+             None.\n",
+            config.license().version().as_str()
+        );
+    }
+    let key = scope_key(config);
     format!(
         "# AHCL Version Adoption\n\n\
+         - Covered scope: {}\n\
          - Initial AHCL adoption date: {adoption_date}\n\
          - Applicable version: AHCL {}\n\n\
          ## Version Adoption Events\n\n\
-         None.\n",
-        config.license().version().as_str()
+         <!-- BEGIN AHCL KIT MANAGED SCOPE: {key} -->\n\
+         - Version adoption event: AHCL {} for {}\n\
+         - Effective Date: {adoption_date}\n\
+         <!-- END AHCL KIT MANAGED SCOPE: {key} -->\n",
+        covered_scope(config),
+        config.license().version().as_str(),
+        config.license().version().as_str(),
+        covered_scope(config),
+    )
+}
+
+pub(crate) fn managed_block(config: &EffectiveConfig, body: &str) -> String {
+    let key = scope_key(config);
+    format!(
+        "<!-- BEGIN AHCL KIT MANAGED SCOPE: {key} -->\n{body}<!-- END AHCL KIT MANAGED SCOPE: {key} -->\n"
     )
 }
 
@@ -169,6 +242,41 @@ pub(crate) fn special_authorizations(config: &EffectiveConfig) -> String {
 
 fn layout_directory(config: &EffectiveConfig) -> &str {
     config.materials_directory().as_str()
+}
+
+pub(crate) fn covered_scope(config: &EffectiveConfig) -> String {
+    let scope = config.license().covered_scope().trim();
+    if scope.is_empty() {
+        "the project as a whole".to_owned()
+    } else {
+        inline(scope)
+    }
+}
+
+pub(crate) fn scope_key(config: &EffectiveConfig) -> String {
+    let source = config.license().covered_scope().trim();
+    if source.is_empty() {
+        return "project".to_owned();
+    }
+    let mut key = String::new();
+    let mut separator = false;
+    for character in source.chars() {
+        if character.is_ascii_alphanumeric() {
+            key.push(character.to_ascii_lowercase());
+            separator = false;
+        } else if !key.is_empty() {
+            separator = true;
+        }
+        if separator && !key.ends_with('-') {
+            key.push('-');
+        }
+    }
+    let key = key.trim_matches('-').to_owned();
+    if key.is_empty() {
+        "project".to_owned()
+    } else {
+        key
+    }
 }
 
 fn inline(value: &str) -> String {
