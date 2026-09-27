@@ -27,7 +27,7 @@
 
 use crate::{LayoutPolicy, MaterialsError, MaterialsErrorCode};
 use ahcl_kit_cargo::{PackageDirectoryInput, assign_package_directories};
-use ahcl_kit_config::{CargoLockMode, EffectiveConfig, Language};
+use ahcl_kit_config::{CargoLockMode, EffectiveConfig, JsPackageManager, Language};
 use ahcl_kit_core::{
     ChangePlan, DependencyKind, LockfileEvidence, ProjectView, ResolvedGraph, ResolvedPackage,
 };
@@ -78,44 +78,95 @@ pub(crate) fn render_document(
                 .iter()
                 .map(|language| match language {
                     Language::Rust => "Rust",
+                    Language::JavaScript => "JavaScript",
                 })
                 .collect::<Vec<_>>()
                 .join(", "),
         );
         rendered.push('\n');
     }
-    rendered.push_str("- Cargo manifests: ");
-    rendered.push_str(
-        &config
-            .rust()
-            .cargo()
-            .manifests()
-            .iter()
-            .map(|path| format!("`{}`", path.as_str()))
-            .collect::<Vec<_>>()
-            .join(", "),
-    );
-    rendered.push_str("\n- Cargo package selection: ");
-    if config.rust().cargo().packages().is_empty() {
-        rendered.push_str("All configured workspace roots.\n");
-    } else {
+    if config.languages().contains(&Language::Rust) {
+        rendered.push_str("- Cargo manifests: ");
         rendered.push_str(
             &config
                 .rust()
                 .cargo()
-                .packages()
+                .manifests()
                 .iter()
-                .map(|package| format!("`{}`", inline(package)))
+                .map(|path| format!("`{}`", path.as_str()))
                 .collect::<Vec<_>>()
                 .join(", "),
         );
+        rendered.push_str("\n- Cargo package selection: ");
+        if config.rust().cargo().packages().is_empty() {
+            rendered.push_str("All configured workspace roots.\n");
+        } else {
+            rendered.push_str(
+                &config
+                    .rust()
+                    .cargo()
+                    .packages()
+                    .iter()
+                    .map(|package| format!("`{}`", inline(package)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            rendered.push('\n');
+        }
+        rendered.push_str("- Cargo lock mode: ");
+        rendered.push_str(match config.rust().cargo().lock_mode() {
+            CargoLockMode::Locked => "locked",
+        });
         rendered.push('\n');
     }
-    rendered.push_str("- Cargo lock mode: ");
-    rendered.push_str(match config.rust().cargo().lock_mode() {
-        CargoLockMode::Locked => "locked",
-    });
-    rendered.push_str("\n- Strict license files: ");
+    if config.languages().contains(&Language::JavaScript) {
+        rendered.push_str("- JavaScript manifests: ");
+        rendered.push_str(
+            &config
+                .javascript()
+                .manifests()
+                .iter()
+                .map(|path| format!("`{}`", path.as_str()))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        rendered.push_str("\n- JavaScript package managers: ");
+        if config.javascript().managers().is_empty() {
+            rendered.push_str("Detect the single lockfile beside each manifest.\n");
+        } else {
+            rendered.push_str(
+                &config
+                    .javascript()
+                    .managers()
+                    .iter()
+                    .map(|manager| match manager {
+                        JsPackageManager::Npm => "npm",
+                        JsPackageManager::Pnpm => "pnpm",
+                        JsPackageManager::Yarn => "yarn",
+                        JsPackageManager::Bun => "bun",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            rendered.push('\n');
+        }
+        rendered.push_str("- JavaScript package selection: ");
+        if config.javascript().packages().is_empty() {
+            rendered.push_str("All workspace roots.\n");
+        } else {
+            rendered.push_str(
+                &config
+                    .javascript()
+                    .packages()
+                    .iter()
+                    .map(|package| format!("`{}`", inline(package)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            rendered.push('\n');
+        }
+    }
+    rendered.push_str("- Strict license files: ");
     rendered.push_str(if config.generation().strict_license_files() {
         "true"
     } else {
@@ -193,6 +244,12 @@ fn render_lockfiles(rendered: &mut String, graph: &ResolvedGraph) -> Result<(), 
     Ok(())
 }
 
+fn javascript_package(package: &ResolvedPackage) -> bool {
+    ["npm:", "pnpm:", "yarn:", "bun:"]
+        .iter()
+        .any(|prefix| package.id.starts_with(prefix))
+}
+
 fn render_package(
     rendered: &mut String,
     config: &EffectiveConfig,
@@ -204,7 +261,11 @@ fn render_package(
     rendered.push_str(&inline(&package.name));
     rendered.push_str("` ");
     rendered.push_str(&inline(&package.version));
-    rendered.push_str("\n\n- Cargo package ID: `");
+    rendered.push_str(if javascript_package(package) {
+        "\n\n- Package ID: `"
+    } else {
+        "\n\n- Cargo package ID: `"
+    });
     rendered.push_str(&inline(&package.id));
     rendered.push_str("`\n- Role: ");
     let relevant_edges = graph
@@ -250,7 +311,15 @@ fn render_package(
                 .join(", "),
         );
     }
-    render_optional(rendered, "Cargo source", package.source.as_deref());
+    render_optional(
+        rendered,
+        if javascript_package(package) {
+            "Source"
+        } else {
+            "Cargo source"
+        },
+        package.source.as_deref(),
+    );
     render_optional(rendered, "Checksum", package.checksum.as_deref());
     render_optional(
         rendered,

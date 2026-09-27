@@ -25,6 +25,7 @@ dependencies = [
  "ahcl-kit-cargo",
  "ahcl-kit-config",
  "ahcl-kit-core",
+ "ahcl-kit-javascript",
  "ahcl-kit-license",
  "ahcl-kit-materials",
  "clap",
@@ -53,6 +54,18 @@ version = "0.2.0"
 dependencies = [
  "clap",
  "serde_json",
+]
+
+[[package]]
+name = "ahcl-kit-javascript"
+version = "0.2.0"
+dependencies = [
+ "ahcl-kit-config",
+ "ahcl-kit-core",
+ "rustix",
+ "serde_json",
+ "sha2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

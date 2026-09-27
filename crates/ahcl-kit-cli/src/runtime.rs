@@ -30,6 +30,7 @@ use ahcl_kit_config::{AhclVersion, EffectiveConfig, Language, ProjectIdentity};
 use ahcl_kit_core::{
     ChangePlan, DependencyKind, Diagnostic, ProjectRoot, RepoPath, ResolvedGraph, UtcDate,
 };
+use ahcl_kit_javascript::JavascriptError;
 use ahcl_kit_license::VerifiedLicense;
 use ahcl_kit_materials::ManagedRemoval;
 use std::collections::BTreeSet;
@@ -41,9 +42,13 @@ pub struct AdapterKind(&'static str);
 
 impl AdapterKind {
     pub const CARGO: Self = Self::new("cargo");
+    pub const JAVASCRIPT: Self = Self::new("javascript");
 
     #[allow(non_upper_case_globals)]
     pub const Cargo: Self = Self::CARGO;
+
+    #[allow(non_upper_case_globals)]
+    pub const Javascript: Self = Self::JAVASCRIPT;
 
     pub const fn new(name: &'static str) -> Self {
         Self(name)
@@ -54,8 +59,10 @@ impl AdapterKind {
     }
 }
 
-const INSTALLED_LANGUAGE_ADAPTERS: &[(Language, AdapterKind)] =
-    &[(Language::Rust, AdapterKind::CARGO)];
+const INSTALLED_LANGUAGE_ADAPTERS: &[(Language, AdapterKind)] = &[
+    (Language::Rust, AdapterKind::CARGO),
+    (Language::JavaScript, AdapterKind::JAVASCRIPT),
+];
 
 #[derive(Clone, Copy, Debug)]
 pub struct LanguageAdapterRegistry {
@@ -383,6 +390,9 @@ impl RuntimeError {
             return Some(error.to_string());
         }
         if let Some(error) = source.downcast_ref::<CargoComponentError>() {
+            return Some(error.to_string());
+        }
+        if let Some(error) = source.downcast_ref::<JavascriptError>() {
             return Some(error.to_string());
         }
         None

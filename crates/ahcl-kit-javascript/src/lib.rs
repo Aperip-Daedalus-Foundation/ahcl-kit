@@ -1,4 +1,4 @@
-// crates/ahcl-kit-config/src/lib.rs - Public API for configuration parsing and resolution.
+// crates/ahcl-kit-javascript/src/lib.rs - Public API for JavaScript dependency resolution.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -25,20 +25,19 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-//! Strict parsing and resolution for `.ahclkitconfigs` files.
+//! JavaScript package-manager resolution from npm, pnpm, Yarn, and Bun lockfiles.
+//!
+//! Resolution reads project manifests and lockfiles only. It does not install
+//! dependencies, traverse `node_modules`, or contact a registry.
 
-mod ast;
-mod javascript;
-mod parser;
-mod schema;
-mod skeleton;
+mod adapter;
+mod bun;
+mod error;
+mod model;
+mod npm;
+mod platform_fs;
+mod pnpm;
+mod yarn;
 
-pub use ast::ScalarValue;
-pub use javascript::{JavascriptSettings, JsPackageManager};
-pub use parser::{ConfigDocument, ConfigError};
-pub use schema::{
-    AhclVersion, CargoComponent, CargoEvidence, CargoEvidenceKind, CargoLockMode, CargoRule,
-    CargoRuleClassification, CargoSettings, ComponentLayout, ConfigLimits, EffectiveConfig,
-    GenerationSettings, LATEST_SCHEMA, Language, LicenseSettings, ProjectSettings, RustSettings,
-};
-pub use skeleton::{ConfigSkeleton, ProjectIdentity};
+pub use adapter::{JavascriptAdapter, JavascriptResolveRequest};
+pub use error::JavascriptError;

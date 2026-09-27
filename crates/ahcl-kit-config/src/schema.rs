@@ -58,6 +58,7 @@ impl AhclVersion {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Language {
     Rust,
+    JavaScript,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -90,6 +91,10 @@ impl CargoRule {
 
     pub fn classification(&self) -> CargoRuleClassification {
         self.classification
+    }
+
+    pub fn applies(&self, package: &str, source: &str) -> bool {
+        self.matches(package, source)
     }
 
     fn matches(&self, package: &str, source: &str) -> bool {
@@ -509,6 +514,7 @@ pub struct EffectiveConfig {
     license: LicenseSettings,
     generation: GenerationSettings,
     rust: RustSettings,
+    javascript: crate::javascript::JavascriptSettings,
     limits: ConfigLimits,
 }
 
@@ -547,6 +553,7 @@ impl EffectiveConfig {
             .into_iter()
             .map(|value| match value.as_str() {
                 "rust" => Ok(Language::Rust),
+                "javascript" => Ok(Language::JavaScript),
                 _ => invalid("languages", format!("unsupported language: {value}")),
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -602,6 +609,7 @@ impl EffectiveConfig {
         let rust = RustSettings {
             cargo: resolve_cargo(ast)?,
         };
+        let javascript = crate::javascript::resolve_javascript(ast)?;
 
         Ok(Self {
             schema: LATEST_SCHEMA,
@@ -611,6 +619,7 @@ impl EffectiveConfig {
             license,
             generation,
             rust,
+            javascript,
             limits: ConfigLimits {
                 evidence_file_bytes: EVIDENCE_FILE_BYTES,
                 files_per_package: FILES_PER_PACKAGE,
@@ -645,6 +654,10 @@ impl EffectiveConfig {
 
     pub fn rust(&self) -> &RustSettings {
         &self.rust
+    }
+
+    pub fn javascript(&self) -> &crate::javascript::JavascriptSettings {
+        &self.javascript
     }
 
     pub fn limits(&self) -> ConfigLimits {
@@ -719,6 +732,7 @@ impl EffectiveConfig {
             license,
             generation: self.generation,
             rust,
+            javascript: self.javascript.clone(),
             limits: self.limits,
         })
     }
@@ -1047,37 +1061,45 @@ fn is_commit_revision(value: &str) -> bool {
 fn resolve_rule(
     fields: std::collections::BTreeMap<String, ScalarValue>,
 ) -> Result<CargoRule, ConfigError> {
+    resolve_package_rule("rust.cargo.rules", fields)
+}
+
+pub(crate) fn resolve_package_rule(
+    prefix: &str,
+    fields: std::collections::BTreeMap<String, ScalarValue>,
+) -> Result<CargoRule, ConfigError> {
     for key in fields.keys() {
         if !matches!(key.as_str(), "package" | "source" | "classification") {
-            return invalid("rust.cargo.rules", format!("unknown rule field: {key}"));
+            return invalid(prefix, format!("unknown rule field: {key}"));
         }
     }
-    let package = string_field(&fields, "package")?.ok_or_else(|| ConfigError::InvalidValue {
-        path: "rust.cargo.rules.package".to_owned(),
-        message: "is required".to_owned(),
-    })?;
+    let package =
+        rule_string(prefix, &fields, "package")?.ok_or_else(|| ConfigError::InvalidValue {
+            path: format!("{prefix}.package"),
+            message: "is required".to_owned(),
+        })?;
     let package = GlobPattern::compile(package).map_err(|message| ConfigError::InvalidValue {
-        path: "rust.cargo.rules.package".to_owned(),
+        path: format!("{prefix}.package"),
         message,
     })?;
-    let source = string_field(&fields, "source")?
+    let source = rule_string(prefix, &fields, "source")?
         .map(GlobPattern::compile)
         .transpose()
         .map_err(|message| ConfigError::InvalidValue {
-            path: "rust.cargo.rules.source".to_owned(),
+            path: format!("{prefix}.source"),
             message,
         })?;
-    let classification = match string_field(&fields, "classification")?.as_deref() {
+    let classification = match rule_string(prefix, &fields, "classification")?.as_deref() {
         Some("first-party") => CargoRuleClassification::FirstParty,
         Some("third-party") => CargoRuleClassification::ThirdParty,
         Some("exclude") => CargoRuleClassification::Exclude,
         Some(value) => {
             return invalid(
-                "rust.cargo.rules.classification",
+                format!("{prefix}.classification"),
                 format!("unsupported classification: {value}"),
             );
         }
-        None => return invalid("rust.cargo.rules.classification", "is required".to_owned()),
+        None => return invalid(format!("{prefix}.classification"), "is required".to_owned()),
     };
     Ok(CargoRule {
         package,
@@ -1086,15 +1108,23 @@ fn resolve_rule(
     })
 }
 
-fn string_field(
+fn rule_string(
+    prefix: &str,
     fields: &std::collections::BTreeMap<String, ScalarValue>,
     key: &str,
 ) -> Result<Option<String>, ConfigError> {
     match fields.get(key) {
         None => Ok(None),
         Some(ScalarValue::String(value)) => Ok(Some(value.clone())),
-        Some(_) => invalid("rust.cargo.rules", format!("{key} must be a string")),
+        Some(_) => invalid(prefix, format!("{key} must be a string")),
     }
+}
+
+fn string_field(
+    fields: &std::collections::BTreeMap<String, ScalarValue>,
+    key: &str,
+) -> Result<Option<String>, ConfigError> {
+    rule_string("rust.cargo.rules", fields, key)
 }
 
 fn optional_string(
@@ -1142,7 +1172,7 @@ fn optional_boolean(
     }
 }
 
-fn optional_string_list(
+pub(crate) fn optional_string_list(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1165,7 +1195,7 @@ fn optional_string_list(
     }
 }
 
-fn optional_object_list(
+pub(crate) fn optional_object_list(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1205,7 +1235,7 @@ fn dynamic_section(section: &str, prefix: &str) -> bool {
     })
 }
 
-fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
+pub(crate) fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
     if value.contains('\\') {
         return invalid(
             path,
@@ -1268,7 +1298,7 @@ fn path(section: Option<&str>, key: &str) -> String {
     section.map_or_else(|| key.to_owned(), |section| format!("{section}.{key}"))
 }
 
-fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, ConfigError> {
+pub(crate) fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, ConfigError> {
     Err(ConfigError::InvalidValue {
         path: path.into(),
         message,

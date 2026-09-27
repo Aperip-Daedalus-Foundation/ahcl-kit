@@ -19,8 +19,8 @@ AHCL Kit initializes, generates, and maintains AHCL materials for projects. It
 uses a project-owned `.ahclkitconfigs` file, produces deterministic output, and
 keeps license downloads and dependency evidence behind explicit commands.
 
-The current adapter supports only Rust projects managed by Cargo. Support for
-other package managers is planned.
+The Rust adapter supports Cargo projects. The JavaScript adapter supports
+npm, pnpm, Yarn, and Bun projects by reading their lockfiles directly.
 
 ## Install
 
@@ -152,6 +152,24 @@ contact = ""
 adoption-date = "2026-09-20"
 special-authorization-channel = ""
 ```
+
+```text
+[javascript]
+manifests:
+  - "package.json"
+managers:
+  - "npm"
+packages = []
+rules = []
+```
+
+`managers` accepts `npm`, `pnpm`, `yarn`, and `bun`. Omit `managers` to use the
+single lockfile beside each manifest: `package-lock.json`, `pnpm-lock.yaml`,
+`yarn.lock`, or text `bun.lock`. npm lockfiles must be version 2 or 3. pnpm
+lockfiles must be version 6 or 9. Yarn classic and Yarn Berry lockfiles are
+both accepted. Binary `bun.lockb` is rejected. The JavaScript adapter does not
+install dependencies, traverse `node_modules`, or contact a registry. When more
+than one lockfile is present, set `managers` explicitly.
 
 `enabled`, `covered-scope`, `[rust.cargo.evidence.*]`, and
 `[rust.cargo.component.*]` are optional. Evidence `kind` is `license`,
