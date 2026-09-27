@@ -33,11 +33,14 @@
 mod adapter;
 mod bun;
 mod error;
+mod host;
 mod model;
 mod npm;
-mod platform_fs;
 mod pnpm;
+mod settings;
 mod yarn;
 
 pub use adapter::{JavascriptAdapter, JavascriptResolveRequest};
 pub use error::JavascriptError;
+pub use host::HOST;
+pub use settings::CONTRIBUTOR;

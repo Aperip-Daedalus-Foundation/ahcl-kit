@@ -77,9 +77,9 @@ pub fn load(root: &Path) -> Result<ProductMetadata, Box<dyn Error>> {
         .and_then(|packages| {
             packages
                 .iter()
-                .find(|package| package["name"].as_str() == Some("ahcl-kit-cli"))
+                .find(|package| package["name"].as_str() == Some("ahcl-kit"))
         })
-        .ok_or_else(|| io::Error::other("cargo metadata did not return ahcl-kit-cli"))?;
+        .ok_or_else(|| io::Error::other("cargo metadata did not return ahcl-kit"))?;
     let product = document["metadata"]["ahcl-kit"]
         .as_object()
         .ok_or_else(|| io::Error::other("missing workspace.metadata.ahcl-kit"))?;

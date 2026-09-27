@@ -124,7 +124,12 @@ struct ProjectReadArgs {
 #[command(
     name = "ahcl",
     version = env!("CARGO_PKG_VERSION"),
-    about = env!("CARGO_PKG_DESCRIPTION")
+    about = env!("CARGO_PKG_DESCRIPTION"),
+    after_help = concat!(
+        "Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.\n",
+        env!("CARGO_PKG_REPOSITORY")
+    ),
+    arg_required_else_help = true
 )]
 struct Cli {
     #[command(subcommand)]

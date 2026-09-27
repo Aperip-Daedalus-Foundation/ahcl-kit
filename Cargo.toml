@@ -28,12 +28,14 @@
 [workspace]
 members = [
     "crates/ahcl-kit-core",
+    "crates/ahcl-kit-fs",
     "crates/ahcl-kit-config",
     "crates/ahcl-kit-license",
     "crates/ahcl-kit-cargo",
     "crates/ahcl-kit-javascript",
     "crates/ahcl-kit-materials",
     "crates/ahcl-kit-cli",
+    "crates/ahcl-kit",
     "assets/packaging",
 ]
 resolver = "3"

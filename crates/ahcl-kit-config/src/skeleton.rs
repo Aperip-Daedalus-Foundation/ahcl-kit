@@ -25,8 +25,8 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
+use crate::binding::LanguageContributor;
 use crate::schema::LATEST_SCHEMA;
-use std::sync::LazyLock;
 
 /// Renders a complete, deterministic starter configuration with no adapters enabled.
 pub struct ConfigSkeleton;
@@ -66,57 +66,32 @@ impl ProjectIdentity {
 }
 
 impl ConfigSkeleton {
-    pub fn render() -> &'static str {
-        static RENDERED: LazyLock<String> = LazyLock::new(|| {
-            format!(
-                concat!(
-                    "# AHCL Kit project configuration.\n",
-                    "schema = {LATEST_SCHEMA}\n",
-                    "materials-directory = \".ahcl\"\n",
-                    "languages = []\n",
-                    "\n",
-                    "[project]\n",
-                    "name = \"\"\n",
-                    "canonical-repository = \"\"\n",
-                    "canonical-branch = \"master\"\n",
-                    "right-holders = []\n",
-                    "contact = \"\"\n",
-                    "adoption-date = \"\"\n",
-                    "\n",
-                    "[license]\n",
-                    "version = \"1.2\"\n",
-                    "special-authorization-channel = \"\"\n",
-                    "\n",
-                    "[generation]\n",
-                    "strict-license-files = true\n",
-                    "\n",
-                    "# To enable the Rust adapter, replace `languages = []` above with:\n",
-                    "# languages:\n",
-                    "#   - \"rust\"\n",
-                    "#\n",
-                    "# Then add:\n",
-                    "# [rust.cargo]\n",
-                    "# manifests:\n",
-                    "#   - \"Cargo.toml\"\n",
-                    "# packages = []\n",
-                    "# rules = []\n",
-                    "#\n",
-                    "# To enable JavaScript package managers, use `javascript` and:\n",
-                    "# [javascript]\n",
-                    "# manifests:\n",
-                    "#   - \"package.json\"\n",
-                    "# managers:\n",
-                    "#   - \"npm\"\n",
-                    "# packages = []\n",
-                    "# rules = []\n",
-                    "#\n",
-                    "# `managers` accepts npm, pnpm, yarn, and bun. Omit it to select\n",
-                    "# the single lockfile beside each manifest.\n",
-                ),
-                LATEST_SCHEMA = LATEST_SCHEMA,
-            )
-        });
-        RENDERED.as_str()
+    pub fn render(contributors: &[&'static dyn LanguageContributor]) -> String {
+        let mut rendered = format!(
+            "# AHCL Kit project configuration.\n\
+             schema = {LATEST_SCHEMA}\n\
+             materials-directory = \".ahcl\"\n\
+             languages = []\n\
+             \n\
+             [project]\n\
+             name = \"\"\n\
+             canonical-repository = \"\"\n\
+             canonical-branch = \"master\"\n\
+             right-holders = []\n\
+             contact = \"\"\n\
+             adoption-date = \"\"\n\
+             \n\
+             [license]\n\
+             version = \"1.2\"\n\
+             special-authorization-channel = \"\"\n\
+             \n\
+             [generation]\n\
+             strict-license-files = true\n",
+        );
+        for contributor in contributors {
+            rendered.push_str(contributor.skeleton_hint());
+        }
+        rendered
     }
 
     /// Renders a complete no-language configuration from project-init flags.

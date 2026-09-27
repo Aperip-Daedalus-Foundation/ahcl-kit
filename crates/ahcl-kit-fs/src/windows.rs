@@ -1,4 +1,4 @@
-// crates/ahcl-kit-javascript/src/platform_fs/windows.rs - Windows package evidence capability.
+// crates/ahcl-kit-fs/src/windows.rs - Windows package evidence capability.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -25,44 +25,47 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-#![allow(dead_code)]
-
 use super::{PackageFsError, read_file_with_limit};
 use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io;
-use std::mem::size_of;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
-use std::os::windows::io::{FromRawHandle, OwnedHandle};
+use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+use std::os::windows::io::AsRawHandle;
 use std::path::{Component, Path, PathBuf, Prefix};
 use std::ptr;
-use windows_sys::Win32::Foundation::{
-    ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, GENERIC_READ, INVALID_HANDLE_VALUE,
-};
-use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO,
-    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY,
-    FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE,
-    FileAttributeTagInfo, GetFileInformationByHandleEx, GetFinalPathNameByHandleW, OPEN_EXISTING,
-    SYNCHRONIZE, VOLUME_NAME_DOS,
-};
+
+const FILE_SHARE_READ: u32 = 0x0000_0001;
+const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
+const FILE_TRAVERSE: u32 = 0x0000_0020;
+const FILE_LIST_DIRECTORY: u32 = 0x0000_0001;
+const SYNCHRONIZE: u32 = 0x0010_0000;
+const GENERIC_READ: u32 = 0x8000_0000;
+const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0000_0010;
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+const ERROR_FILE_NOT_FOUND: i32 = 2;
+const ERROR_PATH_NOT_FOUND: i32 = 3;
 
 const DIRECTORY_ACCESS: u32 =
     FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE;
 const OPEN_NO_REPARSE: u32 = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT;
+const FILE_ACCESS: u32 = GENERIC_READ | FILE_READ_ATTRIBUTES | SYNCHRONIZE;
 
-pub(crate) struct PackageDirectory {
+pub struct PackageDirectory {
     chain: Vec<DirectoryHandle>,
 }
 
 struct DirectoryHandle {
-    _handle: OwnedHandle,
+    _file: File,
     final_path: PathBuf,
 }
 
 struct OpenedNode {
-    handle: OwnedHandle,
+    file: File,
     attributes: u32,
 }
 
@@ -74,7 +77,7 @@ enum DirectoryOpenError {
 }
 
 impl PackageDirectory {
-    pub(crate) fn open(path: &Path) -> Result<Self, PackageFsError> {
+    pub fn open(path: &Path) -> Result<Self, PackageFsError> {
         let (volume_root, components) = split_absolute_path(path)?;
         let root = open_directory_path(&volume_root).map_err(map_directory_error)?;
         let mut chain = vec![root];
@@ -87,10 +90,7 @@ impl PackageDirectory {
         Ok(Self { chain })
     }
 
-    pub(crate) fn root_license_candidates(
-        &self,
-        max_files: u64,
-    ) -> Result<Vec<PathBuf>, PackageFsError> {
+    pub fn root_license_candidates(&self, max_files: u64) -> Result<Vec<PathBuf>, PackageFsError> {
         let root = self.chain.last().ok_or(PackageFsError::InvalidPath)?;
         let mut candidates = Vec::new();
         let mut portable = BTreeSet::new();
@@ -122,7 +122,7 @@ impl PackageDirectory {
         Ok(candidates)
     }
 
-    pub(crate) fn read_bounded_file(
+    pub fn read_bounded_file(
         &self,
         relative: &Path,
         limit: u64,
@@ -146,7 +146,7 @@ impl PackageDirectory {
     }
 }
 
-pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> {
+pub fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> {
     let parent = path.parent().ok_or(PackageFsError::InvalidPath)?;
     let name = path.file_name().ok_or(PackageFsError::InvalidPath)?;
     let directory = PackageDirectory::open(parent)?;
@@ -157,7 +157,7 @@ pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> 
     read_file_with_limit(file, advertised_len, u64::MAX)
 }
 
-pub(crate) fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), PackageFsError> {
+pub fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), PackageFsError> {
     let directory = PackageDirectory::open(root)?;
     let components = normal_components(relative)?;
     let (final_name, parents) = components.split_last().ok_or(PackageFsError::InvalidPath)?;
@@ -250,7 +250,7 @@ fn open_contained_file(
     let Some((file, advertised_len)) = open_regular_file_path(&expected)? else {
         return Ok(None);
     };
-    let opened = final_path(file.as_raw_handle()).map_err(PackageFsError::Io)?;
+    let opened = final_path(&file).map_err(PackageFsError::Io)?;
     if !windows_path_eq(&opened, &expected) {
         return Err(PackageFsError::LinkOrReparsePoint);
     }
@@ -270,29 +270,28 @@ fn windows_path_eq(opened: &Path, expected: &Path) -> bool {
 }
 
 fn open_directory_path(path: &Path) -> Result<DirectoryHandle, DirectoryOpenError> {
-    let handle = open_handle(path, DIRECTORY_ACCESS).map_err(classify_directory_error)?;
-    let attributes = query_attributes(&handle).map_err(DirectoryOpenError::Io)?;
+    let file = open_handle(path, DIRECTORY_ACCESS).map_err(classify_directory_error)?;
+    let attributes = query_attributes(&file).map_err(DirectoryOpenError::Io)?;
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(DirectoryOpenError::Reparse);
     }
     if attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
         return Err(DirectoryOpenError::NotDirectory);
     }
-    let final_path = final_path(handle.as_raw_handle()).map_err(DirectoryOpenError::Io)?;
+    let final_path = final_path(&file).map_err(DirectoryOpenError::Io)?;
     Ok(DirectoryHandle {
-        _handle: handle,
+        _file: file,
         final_path,
     })
 }
 
 fn open_node_path(path: &Path) -> Result<OpenedNode, PackageFsError> {
-    let handle = open_handle(path, GENERIC_READ | FILE_READ_ATTRIBUTES | SYNCHRONIZE)
-        .map_err(PackageFsError::Io)?;
-    let attributes = query_attributes(&handle).map_err(PackageFsError::Io)?;
+    let file = open_handle(path, FILE_ACCESS).map_err(PackageFsError::Io)?;
+    let attributes = query_attributes(&file).map_err(PackageFsError::Io)?;
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(PackageFsError::LinkOrReparsePoint);
     }
-    Ok(OpenedNode { handle, attributes })
+    Ok(OpenedNode { file, attributes })
 }
 
 fn open_regular_file_path(path: &Path) -> Result<Option<(File, u64)>, PackageFsError> {
@@ -300,7 +299,7 @@ fn open_regular_file_path(path: &Path) -> Result<Option<(File, u64)>, PackageFsE
     if node.attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
         return Ok(None);
     }
-    let file = File::from(node.handle);
+    let file = node.file;
     let metadata = file.metadata().map_err(PackageFsError::Io)?;
     if !metadata.is_file() {
         return Ok(None);
@@ -308,91 +307,58 @@ fn open_regular_file_path(path: &Path) -> Result<Option<(File, u64)>, PackageFsE
     Ok(Some((file, metadata.len())))
 }
 
-fn open_handle(path: &Path, access: u32) -> io::Result<OwnedHandle> {
-    let wide = wide_null(path.as_os_str())?;
-    // SAFETY: `wide` is NUL-terminated and lives through the call. Null security/template
-    // pointers are permitted. A non-sentinel return is one newly owned kernel handle.
-    let raw = unsafe {
-        CreateFileW(
-            wide.as_ptr(),
-            access,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            ptr::null(),
-            OPEN_EXISTING,
-            OPEN_NO_REPARSE,
-            ptr::null_mut(),
-        )
-    };
-    if raw == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: successful `CreateFileW` returned a unique owned handle and ownership is
-    // transferred exactly once to `OwnedHandle`.
-    Ok(unsafe { OwnedHandle::from_raw_handle(raw) })
+fn open_handle(path: &Path, access: u32) -> io::Result<File> {
+    OpenOptions::new()
+        .access_mode(access)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(OPEN_NO_REPARSE)
+        .open(path)
 }
 
-fn query_attributes(handle: &OwnedHandle) -> io::Result<u32> {
-    let mut information = FILE_ATTRIBUTE_TAG_INFO::default();
-    let size = u32::try_from(size_of::<FILE_ATTRIBUTE_TAG_INFO>())
-        .map_err(|_| io::Error::other("attribute buffer is too large"))?;
-    // SAFETY: `information` is writable for `size` bytes and the handle remains live.
-    let succeeded = unsafe {
-        GetFileInformationByHandleEx(
-            handle.as_raw_handle(),
-            FileAttributeTagInfo,
-            (&raw mut information).cast(),
-            size,
-        )
-    };
-    if succeeded == 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(information.FileAttributes)
-    }
+fn query_attributes(file: &File) -> io::Result<u32> {
+    Ok(file.metadata()?.file_attributes())
 }
 
-fn final_path(handle: windows_sys::Win32::Foundation::HANDLE) -> io::Result<PathBuf> {
-    // SAFETY: a zero-length query with a null buffer requests the required UTF-16 size.
-    let required = unsafe {
-        GetFinalPathNameByHandleW(
-            handle,
-            ptr::null_mut(),
-            0,
-            FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
-        )
-    };
-    if required == 0 {
-        return Err(io::Error::last_os_error());
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetFinalPathNameByHandleW(
+        file: *mut core::ffi::c_void,
+        buffer: *mut u16,
+        length: u32,
+        flags: u32,
+    ) -> u32;
+}
+
+fn final_path(file: &File) -> io::Result<PathBuf> {
+    let handle = file.as_raw_handle();
+    // SAFETY: `file` owns the handle for both calls. A null buffer with a zero length
+    // queries the required UTF-16 size; the second call writes only into `buffer`.
+    // `FILE_NAME_NORMALIZED | VOLUME_NAME_DOS` is zero, so the flags argument is 0.
+    unsafe {
+        let required = GetFinalPathNameByHandleW(handle, ptr::null_mut(), 0, 0);
+        if required == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let capacity = usize::try_from(required)
+            .map_err(|_| io::Error::other("final path is too long"))?
+            .saturating_add(1);
+        let mut buffer = vec![0_u16; capacity];
+        let buffer_len =
+            u32::try_from(buffer.len()).map_err(|_| io::Error::other("final path is too long"))?;
+        let written = GetFinalPathNameByHandleW(handle, buffer.as_mut_ptr(), buffer_len, 0);
+        if written == 0 || usize::try_from(written).map_or(true, |count| count >= buffer.len()) {
+            return Err(io::Error::last_os_error());
+        }
+        let written =
+            usize::try_from(written).map_err(|_| io::Error::other("final path is too long"))?;
+        buffer.truncate(written);
+        Ok(PathBuf::from(OsString::from_wide(&buffer)))
     }
-    let capacity = usize::try_from(required)
-        .map_err(|_| io::Error::other("final path is too long"))?
-        .saturating_add(1);
-    let mut buffer = vec![0_u16; capacity];
-    let buffer_len =
-        u32::try_from(buffer.len()).map_err(|_| io::Error::other("final path is too long"))?;
-    // SAFETY: `buffer` is writable for `buffer_len` UTF-16 units and the handle remains live.
-    let written = unsafe {
-        GetFinalPathNameByHandleW(
-            handle,
-            buffer.as_mut_ptr(),
-            buffer_len,
-            FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
-        )
-    };
-    if written == 0 || usize::try_from(written).map_or(true, |count| count >= buffer.len()) {
-        return Err(io::Error::last_os_error());
-    }
-    let written =
-        usize::try_from(written).map_err(|_| io::Error::other("final path is too long"))?;
-    buffer.truncate(written);
-    Ok(PathBuf::from(OsString::from_wide(&buffer)))
 }
 
 fn classify_directory_error(error: io::Error) -> DirectoryOpenError {
     match error.raw_os_error() {
-        Some(code)
-            if code == ERROR_FILE_NOT_FOUND as i32 || code == ERROR_PATH_NOT_FOUND as i32 =>
-        {
+        Some(code) if code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND => {
             DirectoryOpenError::Missing
         }
         _ => DirectoryOpenError::Io(error),
@@ -409,15 +375,6 @@ fn map_directory_error(error: DirectoryOpenError) -> PackageFsError {
     }
 }
 
-fn wide_null(value: &OsStr) -> io::Result<Vec<u16>> {
-    let mut wide = value.encode_wide().collect::<Vec<_>>();
-    if wide.contains(&0) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "embedded NUL"));
-    }
-    wide.push(0);
-    Ok(wide)
-}
-
 fn append_component(parent: &Path, component: &OsStr) -> PathBuf {
     let mut path = parent.to_path_buf();
     path.push(component);
@@ -432,5 +389,3 @@ fn sort_candidates(candidates: &mut [PathBuf]) {
             .then_with(|| left.cmp(right))
     });
 }
-
-use std::os::windows::io::AsRawHandle;

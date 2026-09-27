@@ -27,7 +27,7 @@
 
 use crate::adapter::{CargoError, CargoResolveRequest};
 use crate::collector::EvidenceBudget;
-use ahcl_kit_config::{CargoEvidence, CargoEvidenceKind};
+use crate::settings::{CargoEvidence, CargoEvidenceKind};
 use ahcl_kit_core::{LicenseArtifact, RepoPath};
 use cargo_metadata::Package;
 use serde_json::Value as JsonValue;

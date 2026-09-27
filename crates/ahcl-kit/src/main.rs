@@ -1,4 +1,4 @@
-// crates/ahcl-kit-cli/src/main.rs - AHCL command-line application entry point.
+// crates/ahcl-kit/src/main.rs - Composition root for the AHCL Kit executable.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -29,10 +29,17 @@ use ahcl_kit_cli::{
     ConcreteRuntime, InvocationError, InvocationRegistry, OutputFormat, render_json, render_text,
     run, system_utc_date,
 };
+use ahcl_kit_config::{LanguageContributor, LanguageHost, LanguageInstallation};
 use ahcl_kit_core::CommandId;
 use std::ffi::OsString;
 use std::io::Write;
 use std::process::ExitCode;
+
+static CONTRIBUTORS: [&dyn LanguageContributor; 2] = [
+    &ahcl_kit_cargo::CONTRIBUTOR,
+    &ahcl_kit_javascript::CONTRIBUTOR,
+];
+static HOSTS: [&dyn LanguageHost; 2] = [&ahcl_kit_cargo::HOST, &ahcl_kit_javascript::HOST];
 
 fn main() -> ExitCode {
     let initial_cwd = match std::env::current_dir() {
@@ -62,7 +69,11 @@ fn main() -> ExitCode {
     } else {
         None
     };
-    let report = run(&invocation, &mut ConcreteRuntime::new(current_date));
+    let installed = LanguageInstallation::new(&CONTRIBUTORS, &HOSTS);
+    let report = run(
+        &invocation,
+        &mut ConcreteRuntime::new(current_date, installed),
+    );
     let rendered = match invocation.output_format() {
         OutputFormat::Text => render_text(&report),
         OutputFormat::Json => match render_json(&report) {

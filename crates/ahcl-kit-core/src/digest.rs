@@ -1,4 +1,4 @@
-// crates/ahcl-kit-config/src/lib.rs - Public API for configuration parsing and resolution.
+// crates/ahcl-kit-core/src/digest.rs - Shared SHA-256 encoding.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -25,23 +25,21 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-//! Strict parsing and resolution for `.ahclkitconfigs` files.
+use sha2::{Digest, Sha256};
 
-mod ast;
-mod binding;
-mod host;
-mod parser;
-mod schema;
-mod skeleton;
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut result = String::with_capacity(64);
+    for byte in digest {
+        result.push(hex_digit(byte >> 4));
+        result.push(hex_digit(byte & 0x0f));
+    }
+    result
+}
 
-pub use ast::ScalarValue;
-pub use binding::{ConfigValue, LanguageBinding, LanguageContributor, inline_text, is_config_name};
-pub use host::{ComponentResolution, HostFailure, LanguageHost, LanguageInstallation};
-pub use parser::{ConfigDocument, ConfigError};
-pub use schema::{
-    AhclVersion, ComponentIdentity, ConfigLimits, EffectiveConfig, GenerationSettings,
-    LATEST_SCHEMA, LicenseSettings, PackageRule, PackageRuleClassification, ProjectSettings,
-    is_absolute_https_url, is_commit_revision, is_secure_https_url, parse_date_at,
-    parse_materials_directory, parse_repo_path, parse_version, validate_scope,
-};
-pub use skeleton::{ConfigSkeleton, ProjectIdentity};
+fn hex_digit(value: u8) -> char {
+    match value {
+        0..=9 => char::from(b'0' + value),
+        _ => char::from(b'a' + value - 10),
+    }
+}

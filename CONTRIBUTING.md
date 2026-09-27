@@ -35,7 +35,7 @@ cargo fmt --all -- --check
 cargo check --locked --workspace --all-targets
 cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 cargo test --locked --workspace --all-targets
-cargo build --locked --package ahcl-kit-cli --bin ahcl
+cargo build --locked --package ahcl-kit --bin ahcl
 target/debug/ahcl project generate --dry-run
 target/debug/ahcl project check
 ```

@@ -30,10 +30,7 @@ use crate::{
     OutputDiagnostic, OutputSeverity, ParsedInvocation, PlanRequest, PlanScope, ProjectReport,
     ProjectStatus, ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
 };
-use ahcl_kit_config::{
-    CargoEvidenceKind, CargoLockMode, CargoRuleClassification, ComponentLayout, EffectiveConfig,
-    Language, ProjectIdentity,
-};
+use ahcl_kit_config::{ConfigValue, EffectiveConfig, ProjectIdentity};
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
 use ahcl_kit_materials::ManagedRemoval;
@@ -253,11 +250,11 @@ fn resolve_adapters(
         return Ok(Vec::new());
     }
     let config = config.ok_or_else(|| RuntimeError::operation("config.unavailable"))?;
-    let registry = LanguageAdapterRegistry::installed();
+    let registry = LanguageAdapterRegistry::new(runtime.ecosystems().hosts());
     let mut adapter_kinds = BTreeSet::new();
     let mut adapters = Vec::with_capacity(config.languages().len());
     for language in config.languages() {
-        let adapter = registry.adapter_for(*language)?;
+        let adapter = registry.adapter_for(language)?;
         if !adapter_kinds.insert(adapter) {
             return Err(RuntimeError::operation("cli.adapter_duplicate"));
         }
@@ -339,15 +336,11 @@ fn output_diagnostics(diagnostics: &[Diagnostic]) -> Vec<OutputDiagnostic> {
 
 fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
     let project = config.project();
-    let cargo = config.rust().cargo();
     let limits = config.limits();
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "schema": config.schema(),
         "materials_directory": config.materials_directory().as_str(),
-        "languages": config.languages().iter().map(|language| match language {
-            Language::Rust => "rust",
-            Language::JavaScript => "javascript",
-        }).collect::<Vec<_>>(),
+        "languages": config.languages(),
         "project": {
             "name": project.name(),
             "canonical_repository": project.canonical_repository(),
@@ -365,72 +358,42 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
         "generation": {
             "strict_license_files": config.generation().strict_license_files(),
         },
-        "rust": {
-            "cargo": {
-                "manifests": cargo.manifests().iter().map(|path| path.as_str()).collect::<Vec<_>>(),
-                "packages": cargo.packages(),
-                "rules": cargo.rules().iter().map(|rule| serde_json::json!({
-                    "package": rule.package(),
-                    "source": rule.source(),
-                    "classification": match rule.classification() {
-                        CargoRuleClassification::FirstParty => "first-party",
-                        CargoRuleClassification::ThirdParty => "third-party",
-                        CargoRuleClassification::Exclude => "exclude",
-                    },
-                })).collect::<Vec<_>>(),
-                "evidence": cargo.evidence().iter().map(|evidence| serde_json::json!({
-                    "package": evidence.package(),
-                    "version": evidence.version(),
-                    "source": evidence.source(),
-                    "repository": evidence.repository(),
-                    "revision": evidence.revision(),
-                    "path": evidence.path().as_str(),
-                    "url": evidence.url(),
-                    "kind": match evidence.kind() {
-                        CargoEvidenceKind::License => "license",
-                        CargoEvidenceKind::Notice => "notice",
-                        CargoEvidenceKind::Materials => "materials",
-                    },
-                })).collect::<Vec<_>>(),
-                "components": cargo.components().iter().map(|component| serde_json::json!({
-                    "id": component.id(),
-                    "package": component.package(),
-                    "enabled": component.enabled(),
-                    "layout": match component.layout() {
-                        ComponentLayout::Independent => "independent",
-                        ComponentLayout::Centralized => "centralized",
-                    },
-                    "materials_directory": component.materials_directory().map(|path| path.as_str()),
-                    "license_version": component.license_version().map(|version| version.as_str()),
-                    "covered_scope": component.covered_scope(),
-                })).collect::<Vec<_>>(),
-                "lock_mode": match cargo.lock_mode() {
-                    CargoLockMode::Locked => "locked",
-                },
-            },
-        },
-        "javascript": {
-            "manifests": config.javascript().manifests().iter().map(|path| path.as_str()).collect::<Vec<_>>(),
-            "managers": config.javascript().managers().iter().map(|manager| manager.as_str()).collect::<Vec<_>>(),
-            "packages": config.javascript().packages(),
-            "rules": config.javascript().rules().iter().map(|rule| serde_json::json!({
-                "package": rule.package(),
-                "source": rule.source(),
-                "classification": match rule.classification() {
-                    CargoRuleClassification::FirstParty => "first-party",
-                    CargoRuleClassification::ThirdParty => "third-party",
-                    CargoRuleClassification::Exclude => "exclude",
-                },
-            })).collect::<Vec<_>>(),
-        },
-        "limits": {
+    });
+    let Some(object) = value.as_object_mut() else {
+        return value;
+    };
+    for (key, section) in config.resolved_sections() {
+        object.insert(key, config_value_to_json(&section));
+    }
+    object.insert(
+        "limits".to_owned(),
+        serde_json::json!({
             "evidence_file_bytes": limits.evidence_file_bytes(),
             "files_per_package": limits.files_per_package(),
             "aggregate_evidence_bytes": limits.aggregate_evidence_bytes(),
-        },
-    })
+        }),
+    );
+    value
 }
 
+fn config_value_to_json(value: &ConfigValue) -> serde_json::Value {
+    match value {
+        ConfigValue::Null => serde_json::Value::Null,
+        ConfigValue::Bool(value) => serde_json::Value::Bool(*value),
+        ConfigValue::Integer(value) => serde_json::Value::from(*value),
+        ConfigValue::String(value) => serde_json::Value::String(value.clone()),
+        ConfigValue::Array(values) => {
+            serde_json::Value::Array(values.iter().map(config_value_to_json).collect())
+        }
+        ConfigValue::Object(entries) => {
+            let mut object = serde_json::Map::new();
+            for (key, entry) in entries {
+                object.insert(key.clone(), config_value_to_json(entry));
+            }
+            serde_json::Value::Object(object)
+        }
+    }
+}
 fn runtime_error_report(path: std::path::PathBuf, error: &RuntimeError) -> ProjectReport {
     ProjectReport::new(
         path,

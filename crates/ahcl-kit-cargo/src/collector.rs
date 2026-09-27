@@ -25,9 +25,9 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-use crate::platform_fs::{PackageDirectory, PackageFsError};
 use crate::{CargoError, EvidenceLimits};
 use ahcl_kit_core::{LicenseArtifact, RepoPath};
+use ahcl_kit_fs::{PackageDirectory, PackageFsError};
 use cargo_metadata::Package;
 use std::collections::BTreeSet;
 use std::path::{Component, Path};

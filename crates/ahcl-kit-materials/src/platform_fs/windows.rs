@@ -40,30 +40,25 @@ use crate::{
 };
 use ahcl_kit_core::ProjectEntry;
 use std::ffi::{OsStr, OsString};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::mem::{offset_of, size_of};
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
-use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+use std::os::windows::io::{AsRawHandle, RawHandle};
 use std::path::{Component, Path, PathBuf, Prefix};
 use std::ptr;
 use windows_sys::Win32::Foundation::{
     ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS, ERROR_FILE_NOT_FOUND, ERROR_INVALID_PARAMETER,
     ERROR_NOT_SUPPORTED, ERROR_PATH_NOT_FOUND, GENERIC_READ, GENERIC_WRITE, HANDLE,
-    INVALID_HANDLE_VALUE,
-};
-use windows_sys::Win32::Security::Cryptography::{
-    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CREATE_NEW, CreateDirectoryW, CreateFileW, DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY,
-    FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO,
-    FILE_DISPOSITION_INFO, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-    FILE_INFO_BY_HANDLE_CLASS, FILE_LIST_DIRECTORY, FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES,
-    FILE_RENAME_INFO_0, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FileAttributeTagInfo,
-    FileDispositionInfo, FileRenameInfo, FileRenameInfoEx, FlushFileBuffers,
-    GetFileInformationByHandleEx, GetFinalPathNameByHandleW, OPEN_EXISTING, SYNCHRONIZE,
-    SetFileInformationByHandle, VOLUME_NAME_DOS,
+    DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_DISPOSITION_INFO, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_INFO_BY_HANDLE_CLASS, FILE_LIST_DIRECTORY,
+    FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES, FILE_RENAME_INFO_0, FILE_SHARE_READ,
+    FILE_SHARE_WRITE, FILE_TRAVERSE, FileDispositionInfo, FileRenameInfo, FileRenameInfoEx,
+    GetFinalPathNameByHandleW, SYNCHRONIZE, SetFileInformationByHandle, VOLUME_NAME_DOS,
 };
 
 const DIRECTORY_READ_ACCESS: u32 =
@@ -75,21 +70,7 @@ const RENAME_FLAG_POSIX_SEMANTICS: u32 = 0x2;
 const MAX_RENAME_UNITS: usize = 32_767;
 
 pub(crate) fn fill_random(output: &mut [u8]) -> Result<(), ()> {
-    if output.is_empty() {
-        return Ok(());
-    }
-    let length = u32::try_from(output.len()).map_err(|_| ())?;
-    // SAFETY: `output` is writable for `length` bytes and remains live through the call.
-    // A null algorithm handle is required with `BCRYPT_USE_SYSTEM_PREFERRED_RNG`.
-    let status = unsafe {
-        BCryptGenRandom(
-            ptr::null_mut(),
-            output.as_mut_ptr(),
-            length,
-            BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-        )
-    };
-    if status >= 0 { Ok(()) } else { Err(()) }
+    getrandom::getrandom(output).map_err(|_| ())
 }
 
 pub(crate) struct PlatformRoot {
@@ -101,12 +82,12 @@ pub(crate) struct ManagedDirectory {
 }
 
 struct DirectoryHandle {
-    handle: OwnedHandle,
+    file: File,
     final_path: PathBuf,
 }
 
 struct OpenedNode {
-    handle: OwnedHandle,
+    file: File,
     attributes: u32,
     final_path: Option<PathBuf>,
 }
@@ -180,7 +161,7 @@ impl PlatformRoot {
         }
 
         let mut bytes = Vec::new();
-        let mut file = File::from(node.handle);
+        let mut file = node.file;
         file.read_to_end(&mut bytes)
             .map_err(|_| path_io_error(path))?;
         Ok(ProjectEntry::File(bytes))
@@ -226,7 +207,7 @@ impl PlatformRoot {
         }
 
         let _ = temp_name;
-        flush_directory(parent.handle.as_raw_handle());
+        flush_directory(&parent.file);
         Ok(())
     }
 
@@ -344,7 +325,7 @@ impl ManagedDirectory {
         if node.attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
             return Err(managed_tree_error());
         }
-        let mut target = File::from(node.handle);
+        let mut target = node.file;
         if !reader_matches_sha256(&mut target, expected_sha256)
             .map_err(|_| managed_remove_error(path))?
         {
@@ -377,7 +358,7 @@ impl ManagedDirectory {
         if !directory_is_empty(directory_path).map_err(|_| managed_remove_error(path))? {
             return Err(managed_tree_error());
         }
-        delete_open_handle(node.handle.as_raw_handle()).map_err(|_| managed_remove_error(path))
+        delete_open_handle(node.file.as_raw_handle()).map_err(|_| managed_remove_error(path))
     }
 }
 
@@ -476,24 +457,19 @@ fn inspect_managed_entry(
     name: &OsStr,
 ) -> Result<(ManagedEntryKind, Option<DirectoryHandle>), MaterialsError> {
     let path = append_component(&parent.final_path, name);
-    let handle = open_handle(
-        &path,
-        FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-        OPEN_EXISTING,
-        OPEN_NO_REPARSE,
-    )
-    .map_err(|_| inventory_error())?;
-    let attributes = query_attributes(&handle).map_err(|_| inventory_error())?;
+    let file = open_handle(&path, FILE_READ_ATTRIBUTES | SYNCHRONIZE, OPEN_NO_REPARSE)
+        .map_err(|_| inventory_error())?;
+    let attributes = query_attributes(&file).map_err(|_| inventory_error())?;
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Ok((ManagedEntryKind::LinkOrReparsePoint, None));
     }
     if attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
         return Ok((ManagedEntryKind::File, None));
     }
-    let final_path = final_path(&handle).map_err(|_| inventory_error())?;
+    let final_path = final_path(&file).map_err(|_| inventory_error())?;
     Ok((
         ManagedEntryKind::Directory,
-        Some(DirectoryHandle { handle, final_path }),
+        Some(DirectoryHandle { file, final_path }),
     ))
 }
 
@@ -554,17 +530,16 @@ fn volume_root_for_prefix(prefix: Prefix<'_>) -> Result<PathBuf, MaterialsError>
 }
 
 fn open_directory_path(path: &Path, access: u32) -> Result<DirectoryHandle, DirectoryOpenError> {
-    let handle = open_handle(path, access, OPEN_EXISTING, OPEN_NO_REPARSE)
-        .map_err(classify_directory_open_error)?;
-    let attributes = query_attributes(&handle).map_err(|_| DirectoryOpenError::Io)?;
+    let file = open_handle(path, access, OPEN_NO_REPARSE).map_err(classify_directory_open_error)?;
+    let attributes = query_attributes(&file).map_err(|_| DirectoryOpenError::Io)?;
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(DirectoryOpenError::Reparse);
     }
     if attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
         return Err(DirectoryOpenError::NotDirectory);
     }
-    let final_path = final_path(&handle).map_err(|_| DirectoryOpenError::Io)?;
-    Ok(DirectoryHandle { handle, final_path })
+    let final_path = final_path(&file).map_err(|_| DirectoryOpenError::Io)?;
+    Ok(DirectoryHandle { file, final_path })
 }
 
 fn open_node_path(path: &Path, access: u32) -> Result<OpenedNode, NodeOpenError> {
@@ -576,90 +551,58 @@ fn open_node_path_with_share(
     access: u32,
     share_mode: u32,
 ) -> Result<OpenedNode, NodeOpenError> {
-    let handle = open_handle_with_share(path, access, share_mode, OPEN_EXISTING, OPEN_NO_REPARSE)
+    let file = open_existing(path, access, share_mode, OPEN_NO_REPARSE)
         .map_err(classify_node_open_error)?;
-    let attributes = query_attributes(&handle).map_err(|_| NodeOpenError::Io)?;
+    let attributes = query_attributes(&file).map_err(|_| NodeOpenError::Io)?;
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
         return Err(NodeOpenError::Reparse);
     }
     let final_path = if attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
-        Some(final_path(&handle).map_err(|_| NodeOpenError::Io)?)
+        Some(final_path(&file).map_err(|_| NodeOpenError::Io)?)
     } else {
         None
     };
     Ok(OpenedNode {
-        handle,
+        file,
         attributes,
         final_path,
     })
 }
 
-fn open_handle(path: &Path, access: u32, disposition: u32, flags: u32) -> io::Result<OwnedHandle> {
-    open_handle_with_share(
-        path,
-        access,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        disposition,
-        flags,
-    )
+fn open_handle(path: &Path, access: u32, flags: u32) -> io::Result<File> {
+    open_existing(path, access, FILE_SHARE_READ | FILE_SHARE_WRITE, flags)
 }
 
-fn open_handle_with_share(
-    path: &Path,
-    access: u32,
-    share_mode: u32,
-    disposition: u32,
-    flags: u32,
-) -> io::Result<OwnedHandle> {
-    let wide = wide_null(path.as_os_str())?;
-    // SAFETY: `wide` is NUL-terminated and lives through the call. Null security/template
-    // pointers are permitted. A non-sentinel return is one newly owned kernel handle.
-    let raw = unsafe {
-        CreateFileW(
-            wide.as_ptr(),
-            access,
-            share_mode,
-            ptr::null(),
-            disposition,
-            flags,
-            ptr::null_mut(),
-        )
-    };
-    if raw == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: successful `CreateFileW` returned a unique owned handle and ownership is
-    // transferred exactly once to `OwnedHandle`.
-    Ok(unsafe { OwnedHandle::from_raw_handle(raw) })
+fn open_existing(path: &Path, access: u32, share_mode: u32, flags: u32) -> io::Result<File> {
+    OpenOptions::new()
+        .access_mode(access)
+        .share_mode(share_mode)
+        .custom_flags(flags)
+        .open(path)
 }
 
-fn query_attributes(handle: &OwnedHandle) -> io::Result<u32> {
-    let mut information = FILE_ATTRIBUTE_TAG_INFO::default();
-    let size = u32::try_from(size_of::<FILE_ATTRIBUTE_TAG_INFO>())
-        .map_err(|_| io::Error::other("attribute buffer is too large"))?;
-    // SAFETY: `information` is a writable buffer of the exact advertised size and the
-    // borrowed handle remains valid for the duration of the call.
-    let succeeded = unsafe {
-        GetFileInformationByHandleEx(
-            handle.as_raw_handle(),
-            FileAttributeTagInfo,
-            (&raw mut information).cast(),
-            size,
-        )
-    };
-    if succeeded == 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(information.FileAttributes)
-    }
+fn create_exclusive(path: &Path, access: u32, share_mode: u32, flags: u32) -> io::Result<File> {
+    // std rejects `create_new` unless write or append is selected, then `access_mode`
+    // replaces that derived mask. `create_new` also sets `FILE_FLAG_OPEN_REPARSE_POINT`.
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .access_mode(access)
+        .share_mode(share_mode)
+        .custom_flags(flags)
+        .open(path)
 }
 
-fn final_path(handle: &OwnedHandle) -> io::Result<PathBuf> {
+fn query_attributes(file: &File) -> io::Result<u32> {
+    Ok(file.metadata()?.file_attributes())
+}
+
+fn final_path(file: &File) -> io::Result<PathBuf> {
     // SAFETY: a zero-length query with a null output pointer requests the required UTF-16
     // buffer size and does not dereference the pointer.
     let required = unsafe {
         GetFinalPathNameByHandleW(
-            handle.as_raw_handle(),
+            file.as_raw_handle(),
             ptr::null_mut(),
             0,
             FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
@@ -678,7 +621,7 @@ fn final_path(handle: &OwnedHandle) -> io::Result<PathBuf> {
     // remains valid. The API reports the initialized unit count.
     let written = unsafe {
         GetFinalPathNameByHandleW(
-            handle.as_raw_handle(),
+            file.as_raw_handle(),
             buffer.as_mut_ptr(),
             buffer_len,
             FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
@@ -694,17 +637,12 @@ fn final_path(handle: &OwnedHandle) -> io::Result<PathBuf> {
 }
 
 fn create_directory(path: &Path) -> io::Result<()> {
-    let wide = wide_null(path.as_os_str())?;
-    // SAFETY: `wide` is NUL-terminated and the null security pointer requests defaults.
-    let succeeded = unsafe { CreateDirectoryW(wide.as_ptr(), ptr::null()) };
-    if succeeded != 0 {
-        return Ok(());
-    }
-    let error = io::Error::last_os_error();
-    if matches!(error.raw_os_error(), Some(code) if code == ERROR_ALREADY_EXISTS as i32) {
-        Ok(())
-    } else {
-        Err(error)
+    match std::fs::create_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error) if matches!(error.raw_os_error(), Some(code) if code == ERROR_ALREADY_EXISTS as i32) => {
+            Ok(())
+        }
+        Err(error) => Err(error),
     }
 }
 
@@ -716,14 +654,13 @@ fn create_temp_file(
         let name = temp_component()?;
         let temp_path = append_component(&parent.final_path, &name);
         let access = GENERIC_READ | GENERIC_WRITE | DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE;
-        match open_handle_with_share(
+        match create_exclusive(
             &temp_path,
             access,
             FILE_SHARE_READ,
-            CREATE_NEW,
             FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
         ) {
-            Ok(handle) => return Ok((name, File::from(handle))),
+            Ok(file) => return Ok((name, file)),
             Err(error)
                 if matches!(
                     error.raw_os_error(),
@@ -851,10 +788,9 @@ fn delete_open_handle(handle: RawHandle) -> io::Result<()> {
     }
 }
 
-fn flush_directory(handle: RawHandle) {
-    // SAFETY: the borrowed directory handle remains live. Directory flushing is best effort
-    // because some Windows filesystems reject `FlushFileBuffers` for directory handles.
-    let _ = unsafe { FlushFileBuffers(handle) };
+fn flush_directory(directory: &File) {
+    // Directory durability is best effort. Some filesystems reject flushing a directory handle.
+    let _ = directory.sync_all();
 }
 
 fn directory_is_empty(path: &Path) -> io::Result<bool> {
@@ -862,15 +798,6 @@ fn directory_is_empty(path: &Path) -> io::Result<bool> {
         .next()
         .transpose()
         .map(|entry| entry.is_none())
-}
-
-fn wide_null(value: &OsStr) -> io::Result<Vec<u16>> {
-    let mut wide = value.encode_wide().collect::<Vec<_>>();
-    if wide.contains(&0) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "embedded NUL"));
-    }
-    wide.push(0);
-    Ok(wide)
 }
 
 fn append_component(parent: &Path, component: &OsStr) -> PathBuf {

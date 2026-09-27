@@ -31,13 +31,17 @@ mod adapter;
 mod collector;
 mod components;
 mod graph;
+mod host;
 mod limits;
-mod platform_fs;
+mod settings;
 mod upstream;
 
 pub use adapter::{CargoAdapter, CargoError, CargoResolveRequest};
+pub use ahcl_kit_core::{PackageDirectoryInput, assign_package_directories};
 pub use components::{CargoComponentError, CargoComponentResolution};
-pub use limits::{EvidenceLimits, PackageDirectoryInput, assign_package_directories};
+pub use host::HOST;
+pub use limits::EvidenceLimits;
+pub use settings::CONTRIBUTOR;
 pub use upstream::{
     CargoEvidenceRequest, CargoEvidenceResponse, CargoEvidenceTransport, CargoTransportError,
 };

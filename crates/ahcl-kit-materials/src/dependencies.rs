@@ -26,12 +26,12 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::{LayoutPolicy, MaterialsError, MaterialsErrorCode};
-use ahcl_kit_cargo::{PackageDirectoryInput, assign_package_directories};
-use ahcl_kit_config::{CargoLockMode, EffectiveConfig, Language};
+use ahcl_kit_config::EffectiveConfig;
+pub(crate) use ahcl_kit_core::sha256_hex;
 use ahcl_kit_core::{
     ChangePlan, DependencyKind, LockfileEvidence, ProjectView, ResolvedGraph, ResolvedPackage,
 };
-use sha2::{Digest, Sha256};
+use ahcl_kit_core::{PackageDirectoryInput, assign_package_directories};
 use std::collections::{BTreeMap, BTreeSet};
 use url::Url;
 
@@ -69,95 +69,16 @@ pub(crate) fn render_document(
     rendered.push_str("\n- Materials directory: `");
     rendered.push_str(layout.materials_directory().as_str());
     rendered.push_str("`\n- Ecosystem adapters: ");
-    if config.languages().is_empty() {
+    let adapters = config.adapter_names();
+    if adapters.is_empty() {
         rendered.push_str("None.\n");
     } else {
-        rendered.push_str(
-            &config
-                .languages()
-                .iter()
-                .map(|language| match language {
-                    Language::Rust => "Rust",
-                    Language::JavaScript => "JavaScript",
-                })
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
+        rendered.push_str(&adapters.join(", "));
         rendered.push('\n');
     }
-    rendered.push_str("- Cargo manifests: ");
-    rendered.push_str(
-        &config
-            .rust()
-            .cargo()
-            .manifests()
-            .iter()
-            .map(|path| format!("`{}`", path.as_str()))
-            .collect::<Vec<_>>()
-            .join(", "),
-    );
-    rendered.push_str("\n- Cargo package selection: ");
-    if config.rust().cargo().packages().is_empty() {
-        rendered.push_str("All configured workspace roots.\n");
-    } else {
-        rendered.push_str(
-            &config
-                .rust()
-                .cargo()
-                .packages()
-                .iter()
-                .map(|package| format!("`{}`", inline(package)))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
+    for line in config.adapter_summary_lines() {
+        rendered.push_str(&line);
         rendered.push('\n');
-    }
-    rendered.push_str("- Cargo lock mode: ");
-    rendered.push_str(match config.rust().cargo().lock_mode() {
-        CargoLockMode::Locked => "locked",
-    });
-    rendered.push('\n');
-    if config.languages().contains(&Language::JavaScript) {
-        rendered.push_str("- JavaScript manifests: ");
-        rendered.push_str(
-            &config
-                .javascript()
-                .manifests()
-                .iter()
-                .map(|path| format!("`{}`", path.as_str()))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-        rendered.push_str("\n- JavaScript package managers: ");
-        if config.javascript().managers().is_empty() {
-            rendered.push_str("Detect the single lockfile beside each manifest.\n");
-        } else {
-            rendered.push_str(
-                &config
-                    .javascript()
-                    .managers()
-                    .iter()
-                    .map(|manager| manager.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
-            rendered.push('\n');
-        }
-        rendered.push_str("- JavaScript package selection: ");
-        if config.javascript().packages().is_empty() {
-            rendered.push_str("All workspace roots.\n");
-        } else {
-            rendered.push_str(
-                &config
-                    .javascript()
-                    .packages()
-                    .iter()
-                    .map(|package| format!("`{}`", inline(package)))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
-            rendered.push('\n');
-        }
     }
     rendered.push_str("- Strict license files: ");
     rendered.push_str(if config.generation().strict_license_files() {
@@ -237,12 +158,6 @@ fn render_lockfiles(rendered: &mut String, graph: &ResolvedGraph) -> Result<(), 
     Ok(())
 }
 
-fn javascript_package(package: &ResolvedPackage) -> bool {
-    ["npm:", "pnpm:", "yarn:", "bun:"]
-        .iter()
-        .any(|prefix| package.id.starts_with(prefix))
-}
-
 fn render_package(
     rendered: &mut String,
     config: &EffectiveConfig,
@@ -254,11 +169,10 @@ fn render_package(
     rendered.push_str(&inline(&package.name));
     rendered.push_str("` ");
     rendered.push_str(&inline(&package.version));
-    rendered.push_str(if javascript_package(package) {
-        "\n\n- Package ID: `"
-    } else {
-        "\n\n- Cargo package ID: `"
-    });
+    let (id_label, source_label) = config.package_field_labels(package);
+    rendered.push_str("\n\n- ");
+    rendered.push_str(id_label);
+    rendered.push_str(": `");
     rendered.push_str(&inline(&package.id));
     rendered.push_str("`\n- Role: ");
     let relevant_edges = graph
@@ -304,15 +218,7 @@ fn render_package(
                 .join(", "),
         );
     }
-    render_optional(
-        rendered,
-        if javascript_package(package) {
-            "Source"
-        } else {
-            "Cargo source"
-        },
-        package.source.as_deref(),
-    );
+    render_optional(rendered, source_label, package.source.as_deref());
     render_optional(rendered, "Checksum", package.checksum.as_deref());
     render_optional(
         rendered,
@@ -477,16 +383,6 @@ pub(crate) fn canonical_https_repository(value: &str) -> Option<String> {
         normalized.pop();
     }
     Some(normalized)
-}
-
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut result = String::with_capacity(64);
-    for byte in digest {
-        use std::fmt::Write;
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
 }
 
 fn inline(value: &str) -> String {

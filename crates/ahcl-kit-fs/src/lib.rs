@@ -1,4 +1,4 @@
-// crates/ahcl-kit-cargo/src/platform_fs.rs - Handle-scoped package evidence reads.
+// crates/ahcl-kit-fs/src/lib.rs - Shared no-follow package evidence reads.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -34,12 +34,12 @@ mod unix;
 mod windows;
 
 #[cfg(unix)]
-pub(crate) use unix::{PackageDirectory, read_regular_file, validate_regular_file};
+pub use unix::{PackageDirectory, read_regular_file, validate_regular_file};
 #[cfg(windows)]
-pub(crate) use windows::{PackageDirectory, read_regular_file, validate_regular_file};
+pub use windows::{PackageDirectory, read_regular_file, validate_regular_file};
 
 #[derive(Debug)]
-pub(crate) enum PackageFsError {
+pub enum PackageFsError {
     Io(io::Error),
     InvalidPath,
     LinkOrReparsePoint,
@@ -49,7 +49,7 @@ pub(crate) enum PackageFsError {
 }
 
 impl PackageFsError {
-    pub(crate) fn into_io_error(self) -> io::Error {
+    pub fn into_io_error(self) -> io::Error {
         match self {
             Self::Io(source) => source,
             Self::InvalidPath => io::Error::new(io::ErrorKind::InvalidInput, "invalid file path"),
@@ -61,7 +61,7 @@ impl PackageFsError {
     }
 }
 
-pub(super) fn read_file_with_limit(
+pub(crate) fn read_file_with_limit(
     file: File,
     advertised_len: u64,
     limit: u64,

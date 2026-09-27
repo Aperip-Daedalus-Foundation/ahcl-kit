@@ -25,12 +25,12 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-use ahcl_kit_cargo::{CargoComponentError, CargoError};
-use ahcl_kit_config::{AhclVersion, EffectiveConfig, Language, ProjectIdentity};
+use ahcl_kit_config::{
+    AhclVersion, EffectiveConfig, HostFailure, LanguageHost, LanguageInstallation, ProjectIdentity,
+};
 use ahcl_kit_core::{
     ChangePlan, DependencyKind, Diagnostic, ProjectRoot, RepoPath, ResolvedGraph, UtcDate,
 };
-use ahcl_kit_javascript::JavascriptError;
 use ahcl_kit_license::VerifiedLicense;
 use ahcl_kit_materials::ManagedRemoval;
 use std::collections::BTreeSet;
@@ -41,15 +41,6 @@ use std::fmt;
 pub struct AdapterKind(&'static str);
 
 impl AdapterKind {
-    pub const CARGO: Self = Self::new("cargo");
-    pub const JAVASCRIPT: Self = Self::new("javascript");
-
-    #[allow(non_upper_case_globals)]
-    pub const Cargo: Self = Self::CARGO;
-
-    #[allow(non_upper_case_globals)]
-    pub const Javascript: Self = Self::JAVASCRIPT;
-
     pub const fn new(name: &'static str) -> Self {
         Self(name)
     }
@@ -59,30 +50,26 @@ impl AdapterKind {
     }
 }
 
-const INSTALLED_LANGUAGE_ADAPTERS: &[(Language, AdapterKind)] = &[
-    (Language::Rust, AdapterKind::CARGO),
-    (Language::JavaScript, AdapterKind::JAVASCRIPT),
-];
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct LanguageAdapterRegistry {
-    registrations: &'static [(Language, AdapterKind)],
+    hosts: &'static [&'static dyn LanguageHost],
 }
 
 impl LanguageAdapterRegistry {
-    pub const fn installed() -> Self {
-        Self {
-            registrations: INSTALLED_LANGUAGE_ADAPTERS,
-        }
+    pub const fn new(hosts: &'static [&'static dyn LanguageHost]) -> Self {
+        Self { hosts }
     }
 
-    pub fn adapter_for(&self, language: Language) -> Result<AdapterKind, RuntimeError> {
+    pub fn adapter_for(&self, language: &str) -> Result<AdapterKind, RuntimeError> {
         let mut resolved = None;
-        for (registered_language, adapter) in self.registrations {
-            if *registered_language != language {
+        for host in self.hosts {
+            if host.language_id() != language {
                 continue;
             }
-            if resolved.replace(*adapter).is_some() {
+            if resolved
+                .replace(AdapterKind::new(host.language_id()))
+                .is_some()
+            {
                 return Err(RuntimeError::operation("cli.language_adapter_duplicate"));
             }
         }
@@ -281,6 +268,8 @@ impl RuntimePlan {
 }
 
 pub trait CommandRuntime {
+    fn ecosystems(&self) -> LanguageInstallation;
+
     fn load_config(&mut self, project: &ProjectRoot) -> Result<EffectiveConfig, RuntimeError>;
 
     fn prepare_project_init(
@@ -386,14 +375,8 @@ impl RuntimeError {
 
     fn safe_source_message(&self) -> Option<String> {
         let source = self.source.as_deref()?;
-        if let Some(error) = source.downcast_ref::<CargoError>() {
-            return Some(error.to_string());
-        }
-        if let Some(error) = source.downcast_ref::<CargoComponentError>() {
-            return Some(error.to_string());
-        }
-        if let Some(error) = source.downcast_ref::<JavascriptError>() {
-            return Some(error.to_string());
+        if let Some(error) = source.downcast_ref::<HostFailure>() {
+            return Some(error.message().to_owned());
         }
         None
     }
@@ -421,6 +404,10 @@ impl Error for RuntimeError {
 pub struct UnavailableRuntime;
 
 impl CommandRuntime for UnavailableRuntime {
+    fn ecosystems(&self) -> LanguageInstallation {
+        LanguageInstallation::new(&[], &[])
+    }
+
     fn load_config(&mut self, _: &ProjectRoot) -> Result<EffectiveConfig, RuntimeError> {
         Err(unavailable())
     }

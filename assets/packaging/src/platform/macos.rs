@@ -27,7 +27,7 @@ pub fn build(root: &Path, product: &ProductMetadata, output: &Path) -> Result<()
             Command::new("cargo")
                 .current_dir(root)
                 .args(["build", "--locked", "--release", "--target", target])
-                .args(["--package", "ahcl-kit-cli", "--bin"])
+                .args(["--package", "ahcl-kit", "--bin"])
                 .arg(&product.binary_name),
             "build macOS executable",
         )?;

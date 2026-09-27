@@ -25,13 +25,14 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
+use crate::settings::{CargoBinding, CargoComponent};
 use crate::{CargoAdapter, CargoError, CargoResolveRequest, EvidenceLimits};
-use ahcl_kit_config::{CargoComponent, EffectiveConfig};
+use ahcl_kit_config::{ConfigError, EffectiveConfig};
 use ahcl_kit_core::{ProjectRoot, RepoPath, ResolvedGraph};
 use std::fmt;
 
 /// A Cargo component resolved from one explicitly configured workspace package.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct CargoComponentResolution {
     component: CargoComponent,
     config: EffectiveConfig,
@@ -76,6 +77,18 @@ impl CargoComponentResolution {
     pub fn graph(&self) -> &ResolvedGraph {
         &self.graph
     }
+}
+
+fn component_config(
+    config: &EffectiveConfig,
+    component: &CargoComponent,
+) -> Result<EffectiveConfig, ConfigError> {
+    CargoBinding::from_config(config)
+        .ok_or_else(|| ConfigError::InvalidValue {
+            path: format!("rust.cargo.component.{}", component.id()),
+            message: "Cargo configuration is not loaded".to_owned(),
+        })?
+        .component_config(config, component)
 }
 
 #[derive(Debug)]
@@ -189,7 +202,7 @@ impl CargoAdapter {
                 },
             });
         }
-        let component_config = config.for_cargo_component(component).map_err(|source| {
+        let component_config = component_config(config, component).map_err(|source| {
             CargoComponentError::InvalidConfig {
                 component: component.id().to_owned(),
                 source,

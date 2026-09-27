@@ -28,8 +28,8 @@
 use crate::LayoutPolicy;
 use crate::render;
 use ahcl_kit_config::{
-    AhclVersion, ConfigDocument, ConfigError, ConfigSkeleton, EffectiveConfig, ProjectIdentity,
-    ScalarValue,
+    AhclVersion, ConfigDocument, ConfigError, ConfigSkeleton, EffectiveConfig, LanguageContributor,
+    ProjectIdentity, ScalarValue,
 };
 use ahcl_kit_core::{ChangePlan, PlanError, ProjectEntry, ProjectView, RepoPath, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
@@ -191,6 +191,7 @@ impl ProjectMaterialGenerator {
         license: &VerifiedLicense,
         current_date: UtcDate,
         force: bool,
+        contributors: &[&'static dyn LanguageContributor],
     ) -> Result<ChangePlan, MaterialsError> {
         let config_path = repo_path(".ahclkitconfigs")?;
         let entry = view
@@ -220,7 +221,8 @@ impl ProjectMaterialGenerator {
                 )
             }
             ProjectEntry::File(bytes) => {
-                let mut document = ConfigDocument::parse_bytes(&bytes).map_err(map_config_error)?;
+                let mut document = ConfigDocument::parse_bytes_with(&bytes, contributors)
+                    .map_err(map_config_error)?;
                 let config = EffectiveConfig::resolve(&document).map_err(map_config_error)?;
                 if !complete_config_identity(&config) {
                     return Err(MaterialsError::new(MaterialsErrorCode::IdentityRequired));

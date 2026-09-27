@@ -27,16 +27,16 @@
 
 use crate::adapter::{CargoError, CargoResolveRequest};
 use crate::collector::{self, EvidenceBudget};
-use crate::platform_fs;
 use crate::upstream::{self, CargoEvidenceTransport};
-use ahcl_kit_config::CargoRuleClassification;
+use ahcl_kit_config::PackageRuleClassification;
 use ahcl_kit_core::{
     DependencyEdge, DependencyKind, LockfileEvidence, RepoPath, ResolvedGraph, ResolvedPackage,
+    sha256_hex,
 };
+use ahcl_kit_fs as platform_fs;
 use cargo_metadata::{
     DependencyKind as MetadataDependencyKind, Metadata, MetadataCommand, Package,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 pub(crate) fn resolve(
@@ -199,7 +199,7 @@ fn merge_metadata(
                 package_id: package_id.clone(),
             })?;
         let classification = if workspace_ids.contains(package_id) {
-            CargoRuleClassification::FirstParty
+            PackageRuleClassification::FirstParty
         } else {
             let source = package
                 .source
@@ -208,7 +208,7 @@ fn merge_metadata(
             request.classify(&format!("{}@{}", package.name, package.version), &source)
         };
         classifications.insert(package_id.clone(), classification);
-        if classification == CargoRuleClassification::Exclude {
+        if classification == PackageRuleClassification::Exclude {
             continue;
         }
 
@@ -222,7 +222,7 @@ fn merge_metadata(
             }
             continue;
         }
-        let first_party = classification == CargoRuleClassification::FirstParty;
+        let first_party = classification == PackageRuleClassification::FirstParty;
         let license_artifacts = if first_party {
             Vec::new()
         } else {
@@ -255,8 +255,8 @@ fn merge_metadata(
     }
 
     edges.retain(|key, _| {
-        classifications.get(&key.to) != Some(&CargoRuleClassification::Exclude)
-            && classifications.get(&key.from) != Some(&CargoRuleClassification::Exclude)
+        classifications.get(&key.to) != Some(&PackageRuleClassification::Exclude)
+            && classifications.get(&key.from) != Some(&PackageRuleClassification::Exclude)
     });
     Ok(())
 }
@@ -387,23 +387,6 @@ fn resolved_package(
         first_party,
         contributing_lockfiles: vec![lockfile],
         license_artifacts,
-    }
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut result = String::with_capacity(64);
-    for byte in digest {
-        result.push(hex_digit(byte >> 4));
-        result.push(hex_digit(byte & 0x0f));
-    }
-    result
-}
-
-fn hex_digit(value: u8) -> char {
-    match value {
-        0..=9 => char::from(b'0' + value),
-        _ => char::from(b'a' + value - 10),
     }
 }
 

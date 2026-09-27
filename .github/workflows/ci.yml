@@ -42,7 +42,7 @@ jobs:
       - name: Verify self-hosted material state
         shell: bash
         run: |
-          cargo build --locked --package ahcl-kit-cli --bin ahcl
+          cargo build --locked --package ahcl-kit --bin ahcl
           executable="target/debug/ahcl"
           if [[ "$RUNNER_OS" == "Windows" ]]; then executable="target/debug/ahcl.exe"; fi
           "$executable" project generate --dry-run --format json

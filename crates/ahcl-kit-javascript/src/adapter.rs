@@ -29,15 +29,14 @@ use crate::bun::parse_bun;
 use crate::error::JavascriptError;
 use crate::model::{self, MAX_LOCKFILE_BYTES, ParsedGraph};
 use crate::npm::parse_npm;
-use crate::platform_fs;
 use crate::pnpm::parse_pnpm;
+use crate::settings::{JavascriptBinding, JavascriptSettings, JsPackageManager};
 use crate::yarn::parse_yarn;
-use ahcl_kit_config::{
-    CargoRuleClassification, EffectiveConfig, JavascriptSettings, JsPackageManager,
-};
+use ahcl_kit_config::{EffectiveConfig, PackageRuleClassification};
 use ahcl_kit_core::{
     AdapterRequest, EcosystemAdapter, LockfileEvidence, ProjectRoot, RepoPath, ResolvedGraph,
 };
+use ahcl_kit_fs as platform_fs;
 
 pub struct JavascriptResolveRequest {
     project_root: ProjectRoot,
@@ -48,7 +47,9 @@ impl JavascriptResolveRequest {
     pub fn from_config(project_root: ProjectRoot, config: &EffectiveConfig) -> Self {
         Self {
             project_root,
-            settings: config.javascript().clone(),
+            settings: JavascriptBinding::from_config(config)
+                .map(|binding| binding.settings().clone())
+                .expect("the JavaScript contributor is loaded before JavaScript resolution"),
         }
     }
 
@@ -71,7 +72,7 @@ impl JavascriptResolveRequest {
         self.settings.packages()
     }
 
-    pub(crate) fn classify(&self, package: &str, source: &str) -> CargoRuleClassification {
+    pub(crate) fn classify(&self, package: &str, source: &str) -> PackageRuleClassification {
         self.settings.classify(package, source)
     }
 }

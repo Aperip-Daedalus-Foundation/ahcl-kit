@@ -1,4 +1,4 @@
-// crates/ahcl-kit-cargo/src/platform_fs/unix.rs - Unix package evidence capability.
+// crates/ahcl-kit-fs/src/unix.rs - Unix package evidence capability.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -45,7 +45,7 @@ const FILE_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::NONBLOCK)
     .union(OFlags::CLOEXEC);
 
-pub(crate) struct PackageDirectory {
+pub struct PackageDirectory {
     handle: OwnedFd,
 }
 
@@ -57,7 +57,7 @@ enum DirectoryOpenError {
 }
 
 impl PackageDirectory {
-    pub(crate) fn open(path: &Path) -> Result<Self, PackageFsError> {
+    pub fn open(path: &Path) -> Result<Self, PackageFsError> {
         if !path.is_absolute() {
             return Err(PackageFsError::InvalidPath);
         }
@@ -83,10 +83,7 @@ impl PackageDirectory {
         Ok(Self { handle: current })
     }
 
-    pub(crate) fn root_license_candidates(
-        &self,
-        max_files: u64,
-    ) -> Result<Vec<PathBuf>, PackageFsError> {
+    pub fn root_license_candidates(&self, max_files: u64) -> Result<Vec<PathBuf>, PackageFsError> {
         let mut candidates = Vec::new();
         let mut portable = BTreeSet::new();
         let mut entries =
@@ -121,7 +118,7 @@ impl PackageDirectory {
         Ok(candidates)
     }
 
-    pub(crate) fn read_bounded_file(
+    pub fn read_bounded_file(
         &self,
         relative: &Path,
         limit: u64,
@@ -140,7 +137,7 @@ impl PackageDirectory {
     }
 }
 
-pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> {
+pub fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> {
     let parent = path.parent().ok_or(PackageFsError::InvalidPath)?;
     let name = path.file_name().ok_or(PackageFsError::InvalidPath)?;
     let directory = PackageDirectory::open(parent)?;
@@ -150,7 +147,7 @@ pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> 
     read_file_with_limit(File::from(handle), advertised_len, u64::MAX)
 }
 
-pub(crate) fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), PackageFsError> {
+pub fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), PackageFsError> {
     let directory = PackageDirectory::open(root)?;
     let components = normal_components(relative)?;
     let (final_name, parents) = components.split_last().ok_or(PackageFsError::InvalidPath)?;

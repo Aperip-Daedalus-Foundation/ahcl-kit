@@ -205,18 +205,11 @@ pub(crate) fn managed_block(config: &EffectiveConfig, body: &str) -> String {
 }
 
 pub(crate) fn empty_dependencies(config: &EffectiveConfig) -> String {
-    let adapters = if config.languages().is_empty() {
+    let names = config.adapter_names();
+    let adapters = if names.is_empty() {
         "None.".to_owned()
     } else {
-        config
-            .languages()
-            .iter()
-            .map(|language| match language {
-                ahcl_kit_config::Language::Rust => "Rust",
-                ahcl_kit_config::Language::JavaScript => "JavaScript",
-            })
-            .collect::<Vec<_>>()
-            .join(", ")
+        names.join(", ")
     };
     format!(
         "# AHCL Dependencies and Referenced Materials\n\n\

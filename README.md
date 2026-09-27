@@ -184,7 +184,7 @@ without invoking an ecosystem adapter.
 The repository pins its Rust toolchain. Build the executable with:
 
 ```console
-cargo build --locked --release --package ahcl-kit-cli --bin ahcl
+cargo build --locked --release --package ahcl-kit --bin ahcl
 ```
 
 ## License

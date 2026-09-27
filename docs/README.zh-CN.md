@@ -157,7 +157,7 @@ Yarn classic 与 Yarn Berry 均可读取。二进制 `bun.lockb` 会被拒绝。
 ## 从源码构建
 
 ```console
-cargo build --locked --release --package ahcl-kit-cli --bin ahcl
+cargo build --locked --release --package ahcl-kit --bin ahcl
 ```
 
 ## 许可证

@@ -38,3 +38,6 @@ repository.workspace = true
 [lib]
 name = "ahcl_kit_core"
 path = "src/lib.rs"
+
+[dependencies]
+sha2 = "=0.10.9"

@@ -27,11 +27,11 @@
 
 use crate::JavascriptError;
 use crate::adapter::JavascriptResolveRequest;
-use ahcl_kit_config::CargoRuleClassification;
+use ahcl_kit_config::PackageRuleClassification;
+pub(crate) use ahcl_kit_core::sha256_hex;
 use ahcl_kit_core::{
     DependencyEdge, DependencyKind, LockfileEvidence, ResolvedGraph, ResolvedPackage,
 };
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 
@@ -62,23 +62,6 @@ pub(crate) struct ParsedEdge {
 pub(crate) struct ParsedGraph {
     pub(crate) packages: Vec<ParsedPackage>,
     pub(crate) edges: Vec<ParsedEdge>,
-}
-
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut result = String::with_capacity(64);
-    for byte in digest {
-        result.push(hex_digit(byte >> 4));
-        result.push(hex_digit(byte & 0x0f));
-    }
-    result
-}
-
-fn hex_digit(value: u8) -> char {
-    match value {
-        0..=9 => char::from(b'0' + value),
-        _ => char::from(b'a' + value - 10),
-    }
 }
 
 pub(crate) fn split_package_ident(ident: &str) -> Option<(&str, &str)> {
@@ -174,7 +157,7 @@ pub(crate) fn finish(
             continue;
         };
         let classification = if package.workspace_root {
-            CargoRuleClassification::FirstParty
+            PackageRuleClassification::FirstParty
         } else {
             let identity = format!("{}@{}", package.name, package.version);
             let source = package.source.as_deref().unwrap_or("");
@@ -185,7 +168,7 @@ pub(crate) fn finish(
 
     let mut resolved = Vec::new();
     for package_id in &reachable {
-        if classifications.get(package_id) == Some(&CargoRuleClassification::Exclude) {
+        if classifications.get(package_id) == Some(&PackageRuleClassification::Exclude) {
             continue;
         }
         let Some(package) = packages.get(package_id) else {
@@ -203,7 +186,7 @@ pub(crate) fn finish(
             authors: Vec::new(),
             declared_license: package.declared_license.clone(),
             first_party: package.workspace_root
-                || classifications.get(package_id) == Some(&CargoRuleClassification::FirstParty),
+                || classifications.get(package_id) == Some(&PackageRuleClassification::FirstParty),
             contributing_lockfiles: package.lockfiles.clone(),
             license_artifacts: Vec::new(),
         });
@@ -212,8 +195,8 @@ pub(crate) fn finish(
 
     let mut resolved_edges = Vec::new();
     for (key, direct) in edges {
-        if classifications.get(&key.to) == Some(&CargoRuleClassification::Exclude)
-            || classifications.get(&key.from) == Some(&CargoRuleClassification::Exclude)
+        if classifications.get(&key.to) == Some(&PackageRuleClassification::Exclude)
+            || classifications.get(&key.from) == Some(&PackageRuleClassification::Exclude)
             || !reachable.contains(&key.from)
             || !reachable.contains(&key.to)
         {

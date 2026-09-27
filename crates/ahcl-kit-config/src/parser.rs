@@ -26,23 +26,39 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::ast::{Assignment, DocumentAst, ScalarValue, Section, Value};
+use crate::binding::LanguageContributor;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 const MAX_CONFIG_BYTES: usize = 1_048_576;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct ConfigDocument {
     source: String,
     ast: DocumentAst,
+    contributors: Vec<&'static dyn LanguageContributor>,
 }
 
 impl ConfigDocument {
     pub fn parse(source: &str) -> Result<Self, ConfigError> {
-        Self::parse_bytes(source.as_bytes())
+        Self::parse_with(source, &[])
     }
 
     pub fn parse_bytes(bytes: &[u8]) -> Result<Self, ConfigError> {
+        Self::parse_bytes_with(bytes, &[])
+    }
+
+    pub fn parse_with(
+        source: &str,
+        contributors: &[&'static dyn LanguageContributor],
+    ) -> Result<Self, ConfigError> {
+        Self::parse_bytes_with(source.as_bytes(), contributors)
+    }
+
+    pub fn parse_bytes_with(
+        bytes: &[u8],
+        contributors: &[&'static dyn LanguageContributor],
+    ) -> Result<Self, ConfigError> {
         if bytes.len() > MAX_CONFIG_BYTES {
             return Err(ConfigError::FileTooLarge { bytes: bytes.len() });
         }
@@ -53,12 +69,20 @@ impl ConfigDocument {
             return Err(ConfigError::TabCharacter);
         }
         let ast = parse_document(&source)?;
-        validate_known_names(&ast)?;
-        Ok(Self { source, ast })
+        validate_known_names(&ast, contributors)?;
+        Ok(Self {
+            source,
+            ast,
+            contributors: contributors.to_vec(),
+        })
     }
 
     pub fn source(&self) -> &str {
         &self.source
+    }
+
+    pub fn contributors(&self) -> &[&'static dyn LanguageContributor] {
+        &self.contributors
     }
 
     pub fn render(&self) -> String {
@@ -86,7 +110,8 @@ impl ConfigDocument {
                 assignment.value_start..assignment.value_end,
                 &value.render(),
             );
-            *self = Self::parse(&rendered)?;
+            let contributors = self.contributors.clone();
+            *self = Self::parse_with(&rendered, &contributors)?;
             return Ok(());
         }
 
@@ -106,12 +131,70 @@ impl ConfigDocument {
             ""
         };
         rendered.insert_str(offset, &format!("{prefix}{insertion}"));
-        *self = Self::parse(&rendered)?;
+        let contributors = self.contributors.clone();
+        *self = Self::parse_with(&rendered, &contributors)?;
         Ok(())
+    }
+
+    pub fn section_names(&self) -> impl Iterator<Item = &str> {
+        self.ast.section_order.iter().map(String::as_str)
+    }
+
+    pub fn optional_string(
+        &self,
+        section: Option<&str>,
+        key: &str,
+    ) -> Result<Option<String>, ConfigError> {
+        crate::schema::optional_string(&self.ast, section, key)
+    }
+
+    pub fn optional_integer(
+        &self,
+        section: Option<&str>,
+        key: &str,
+    ) -> Result<Option<i64>, ConfigError> {
+        crate::schema::optional_integer(&self.ast, section, key)
+    }
+
+    pub fn optional_boolean(
+        &self,
+        section: Option<&str>,
+        key: &str,
+    ) -> Result<Option<bool>, ConfigError> {
+        crate::schema::optional_boolean(&self.ast, section, key)
+    }
+
+    pub fn optional_string_list(
+        &self,
+        section: Option<&str>,
+        key: &str,
+    ) -> Result<Option<Vec<String>>, ConfigError> {
+        crate::schema::optional_string_list(&self.ast, section, key)
+    }
+
+    pub fn optional_object_list(
+        &self,
+        section: Option<&str>,
+        key: &str,
+    ) -> Result<Option<Vec<BTreeMap<String, ScalarValue>>>, ConfigError> {
+        crate::schema::optional_object_list(&self.ast, section, key)
+    }
+
+    pub fn scalar_fields(&self, section: &str) -> BTreeMap<String, ScalarValue> {
+        crate::schema::fields_for_section(&self.ast, section)
     }
 
     pub(crate) fn ast(&self) -> &DocumentAst {
         &self.ast
+    }
+}
+
+impl fmt::Debug for ConfigDocument {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ConfigDocument")
+            .field("source", &self.source)
+            .finish()
     }
 }
 
@@ -574,19 +657,21 @@ fn push_assignment(
     Ok(())
 }
 
-fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
+fn validate_known_names(
+    ast: &DocumentAst,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<(), ConfigError> {
     for section in &ast.section_order {
-        if !matches!(
-            section.as_str(),
-            "project" | "license" | "generation" | "rust.cargo" | "javascript"
-        ) && !dynamic_section(section, "rust.cargo.evidence.")
-            && !dynamic_section(section, "rust.cargo.component.")
-        {
+        let owned = contributors
+            .iter()
+            .any(|contributor| contributor.owns_section(section));
+        if !core_section(section) && !owned {
             return Err(ConfigError::UnknownSection(section.clone()));
         }
     }
     for assignment in &ast.assignments {
-        let valid = match assignment.section.as_deref() {
+        let section = assignment.section.as_deref();
+        let valid = match section {
             None => matches!(
                 assignment.key.as_str(),
                 "schema" | "materials-directory" | "languages"
@@ -605,40 +690,15 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
                 "version" | "enabled" | "covered-scope" | "special-authorization-channel"
             ),
             Some("generation") => assignment.key == "strict-license-files",
-            Some("rust.cargo") => matches!(
-                assignment.key.as_str(),
-                "manifests" | "packages" | "rules" | "lock-mode"
-            ),
-            Some("javascript") => matches!(
-                assignment.key.as_str(),
-                "manifests" | "managers" | "packages" | "rules"
-            ),
-            Some(section) if dynamic_section(section, "rust.cargo.evidence.") => matches!(
-                assignment.key.as_str(),
-                "package"
-                    | "version"
-                    | "source"
-                    | "repository"
-                    | "revision"
-                    | "path"
-                    | "url"
-                    | "kind"
-            ),
-            Some(section) if dynamic_section(section, "rust.cargo.component.") => matches!(
-                assignment.key.as_str(),
-                "package"
-                    | "enabled"
-                    | "layout"
-                    | "materials-directory"
-                    | "license-version"
-                    | "covered-scope"
-                    | "right-holders"
-                    | "canonical-repository"
-                    | "canonical-branch"
-                    | "contact"
-                    | "adoption-date"
-                    | "special-authorization-channel"
-            ),
+            Some(name)
+                if contributors
+                    .iter()
+                    .any(|contributor| contributor.owns_section(name)) =>
+            {
+                contributors.iter().any(|contributor| {
+                    contributor.owns_section(name) && contributor.known_field(name, &assignment.key)
+                })
+            }
             Some(_) => false,
         };
         if !valid {
@@ -651,8 +711,8 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
     Ok(())
 }
 
-fn dynamic_section(section: &str, prefix: &str) -> bool {
-    section.strip_prefix(prefix).is_some_and(is_name)
+fn core_section(section: &str) -> bool {
+    matches!(section, "project" | "license" | "generation")
 }
 
 fn is_name(value: &str) -> bool {

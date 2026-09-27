@@ -1,4 +1,4 @@
-// crates/ahcl-kit-config/src/lib.rs - Public API for configuration parsing and resolution.
+// crates/ahcl-kit-javascript/src/host.rs - JavaScript resolution host.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -25,23 +25,36 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-//! Strict parsing and resolution for `.ahclkitconfigs` files.
+use crate::adapter::{JavascriptAdapter, JavascriptResolveRequest};
+use ahcl_kit_config::{ComponentResolution, EffectiveConfig, HostFailure, LanguageHost};
+use ahcl_kit_core::{ProjectRoot, ResolvedGraph};
 
-mod ast;
-mod binding;
-mod host;
-mod parser;
-mod schema;
-mod skeleton;
+pub static HOST: JavascriptHost = JavascriptHost;
 
-pub use ast::ScalarValue;
-pub use binding::{ConfigValue, LanguageBinding, LanguageContributor, inline_text, is_config_name};
-pub use host::{ComponentResolution, HostFailure, LanguageHost, LanguageInstallation};
-pub use parser::{ConfigDocument, ConfigError};
-pub use schema::{
-    AhclVersion, ComponentIdentity, ConfigLimits, EffectiveConfig, GenerationSettings,
-    LATEST_SCHEMA, LicenseSettings, PackageRule, PackageRuleClassification, ProjectSettings,
-    is_absolute_https_url, is_commit_revision, is_secure_https_url, parse_date_at,
-    parse_materials_directory, parse_repo_path, parse_version, validate_scope,
-};
-pub use skeleton::{ConfigSkeleton, ProjectIdentity};
+#[derive(Clone, Copy, Debug)]
+pub struct JavascriptHost;
+
+impl LanguageHost for JavascriptHost {
+    fn language_id(&self) -> &'static str {
+        "javascript"
+    }
+
+    fn resolve(
+        &self,
+        project: &ProjectRoot,
+        config: &EffectiveConfig,
+    ) -> Result<ResolvedGraph, HostFailure> {
+        let request = JavascriptResolveRequest::from_config(project.clone(), config);
+        JavascriptAdapter::new()
+            .resolve_request(&request)
+            .map_err(|error| HostFailure::new(error.code(), error.to_string()))
+    }
+
+    fn resolve_components(
+        &self,
+        _project: &ProjectRoot,
+        _config: &EffectiveConfig,
+    ) -> Result<Vec<ComponentResolution>, HostFailure> {
+        Ok(Vec::new())
+    }
+}

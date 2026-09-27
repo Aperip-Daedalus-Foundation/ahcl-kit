@@ -26,9 +26,12 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::ast::{DocumentAst, ScalarValue, Value};
+use crate::binding::{ConfigValue, LanguageBinding, is_config_name};
 use crate::{ConfigDocument, ConfigError};
-use ahcl_kit_core::{RepoPath, UtcDate};
+use ahcl_kit_core::{RepoPath, ResolvedPackage, UtcDate};
 use std::collections::BTreeSet;
+use std::fmt;
+use std::sync::Arc;
 use url::Url;
 
 /// Latest supported configuration schema version.
@@ -55,17 +58,6 @@ impl AhclVersion {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum Language {
-    Rust,
-    JavaScript,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CargoLockMode {
-    Locked,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackageRuleClassification {
     FirstParty,
@@ -73,7 +65,15 @@ pub enum PackageRuleClassification {
     Exclude,
 }
 
-pub type CargoRuleClassification = PackageRuleClassification;
+impl PackageRuleClassification {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FirstParty => "first-party",
+            Self::ThirdParty => "third-party",
+            Self::Exclude => "exclude",
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackageRule {
@@ -81,8 +81,6 @@ pub struct PackageRule {
     source: Option<GlobPattern>,
     classification: PackageRuleClassification,
 }
-
-pub type CargoRule = PackageRule;
 
 impl PackageRule {
     pub fn package(&self) -> &str {
@@ -99,6 +97,47 @@ impl PackageRule {
 
     pub fn applies(&self, package: &str, source: &str) -> bool {
         self.matches(package, source)
+    }
+
+    pub fn parse(
+        path: &str,
+        package_name: bool,
+        fields: std::collections::BTreeMap<String, ScalarValue>,
+    ) -> Result<Self, ConfigError> {
+        let mode = if package_name {
+            PackagePatternMode::PackageName
+        } else {
+            PackagePatternMode::Path
+        };
+        resolve_package_rule(path, mode, fields)
+    }
+
+    pub fn classify_list(rules: &[Self], package: &str, source: &str) -> PackageRuleClassification {
+        rules
+            .iter()
+            .rev()
+            .find(|rule| rule.applies(package, source))
+            .map(Self::classification)
+            .unwrap_or(PackageRuleClassification::ThirdParty)
+    }
+
+    pub fn resolved_value(&self) -> ConfigValue {
+        ConfigValue::Object(vec![
+            (
+                "package".to_owned(),
+                ConfigValue::String(self.package().to_owned()),
+            ),
+            (
+                "source".to_owned(),
+                self.source()
+                    .map(|value| ConfigValue::String(value.to_owned()))
+                    .unwrap_or(ConfigValue::Null),
+            ),
+            (
+                "classification".to_owned(),
+                ConfigValue::String(self.classification().as_str().to_owned()),
+            ),
+        ])
     }
 
     fn matches(&self, package: &str, source: &str) -> bool {
@@ -272,174 +311,6 @@ impl ClassMember {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CargoSettings {
-    manifests: Vec<RepoPath>,
-    packages: Vec<String>,
-    rules: Vec<CargoRule>,
-    lock_mode: CargoLockMode,
-    evidence: Vec<CargoEvidence>,
-    components: Vec<CargoComponent>,
-}
-
-impl CargoSettings {
-    pub fn manifests(&self) -> &[RepoPath] {
-        &self.manifests
-    }
-
-    pub fn packages(&self) -> &[String] {
-        &self.packages
-    }
-
-    pub fn rules(&self) -> &[CargoRule] {
-        &self.rules
-    }
-
-    pub fn lock_mode(&self) -> CargoLockMode {
-        self.lock_mode
-    }
-
-    pub fn evidence(&self) -> &[CargoEvidence] {
-        &self.evidence
-    }
-
-    pub fn components(&self) -> &[CargoComponent] {
-        &self.components
-    }
-
-    pub fn classify(&self, package: &str, source: &str) -> CargoRuleClassification {
-        self.rules
-            .iter()
-            .rev()
-            .filter(|rule| rule.matches(package, source))
-            .map(CargoRule::classification)
-            .next()
-            .unwrap_or(CargoRuleClassification::ThirdParty)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CargoEvidenceKind {
-    License,
-    Notice,
-    Materials,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CargoEvidence {
-    package: String,
-    version: String,
-    source: String,
-    repository: String,
-    revision: String,
-    path: RepoPath,
-    url: String,
-    kind: CargoEvidenceKind,
-}
-
-impl CargoEvidence {
-    pub fn package(&self) -> &str {
-        &self.package
-    }
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-    pub fn source(&self) -> &str {
-        &self.source
-    }
-    pub fn repository(&self) -> &str {
-        &self.repository
-    }
-    pub fn revision(&self) -> &str {
-        &self.revision
-    }
-    pub fn path(&self) -> &RepoPath {
-        &self.path
-    }
-    pub fn url(&self) -> &str {
-        &self.url
-    }
-    pub fn kind(&self) -> CargoEvidenceKind {
-        self.kind
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ComponentLayout {
-    Independent,
-    Centralized,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CargoComponent {
-    id: String,
-    package: String,
-    enabled: bool,
-    layout: ComponentLayout,
-    materials_directory: Option<RepoPath>,
-    license_version: Option<AhclVersion>,
-    covered_scope: Option<String>,
-    right_holders: Option<Vec<String>>,
-    canonical_repository: Option<String>,
-    canonical_branch: Option<String>,
-    contact: Option<String>,
-    adoption_date: Option<UtcDate>,
-    special_authorization_channel: Option<String>,
-}
-
-impl CargoComponent {
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-    pub fn package(&self) -> &str {
-        &self.package
-    }
-    pub fn enabled(&self) -> bool {
-        self.enabled
-    }
-    pub fn layout(&self) -> ComponentLayout {
-        self.layout
-    }
-    pub fn materials_directory(&self) -> Option<&RepoPath> {
-        self.materials_directory.as_ref()
-    }
-    pub fn license_version(&self) -> Option<AhclVersion> {
-        self.license_version
-    }
-    pub fn covered_scope(&self) -> Option<&str> {
-        self.covered_scope.as_deref()
-    }
-    pub fn right_holders(&self) -> Option<&[String]> {
-        self.right_holders.as_deref()
-    }
-    pub fn canonical_repository(&self) -> Option<&str> {
-        self.canonical_repository.as_deref()
-    }
-    pub fn canonical_branch(&self) -> Option<&str> {
-        self.canonical_branch.as_deref()
-    }
-    pub fn contact(&self) -> Option<&str> {
-        self.contact.as_deref()
-    }
-    pub fn adoption_date(&self) -> Option<UtcDate> {
-        self.adoption_date
-    }
-    pub fn special_authorization_channel(&self) -> Option<&str> {
-        self.special_authorization_channel.as_deref()
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RustSettings {
-    cargo: CargoSettings,
-}
-
-impl RustSettings {
-    pub fn cargo(&self) -> &CargoSettings {
-        &self.cargo
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectSettings {
     name: String,
     canonical_repository: String,
@@ -533,16 +404,32 @@ impl ConfigLimits {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Identity overrides contributed by one ecosystem component.
+pub struct ComponentIdentity {
+    pub path: String,
+    pub package: String,
+    pub enabled: bool,
+    pub centralized: bool,
+    pub materials_directory: Option<RepoPath>,
+    pub license_version: Option<AhclVersion>,
+    pub covered_scope: Option<String>,
+    pub right_holders: Option<Vec<String>>,
+    pub canonical_repository: Option<String>,
+    pub canonical_branch: Option<String>,
+    pub contact: Option<String>,
+    pub adoption_date: Option<UtcDate>,
+    pub special_authorization_channel: Option<String>,
+}
+
+#[derive(Clone)]
 pub struct EffectiveConfig {
     schema: u32,
     materials_directory: RepoPath,
-    languages: Vec<Language>,
+    languages: Vec<String>,
     project: ProjectSettings,
     license: LicenseSettings,
     generation: GenerationSettings,
-    rust: RustSettings,
-    javascript: JavascriptSettings,
+    bindings: Vec<Arc<dyn LanguageBinding>>,
     limits: ConfigLimits,
 }
 
@@ -575,20 +462,8 @@ impl EffectiveConfig {
             AhclVersion::V1_2 => ".ahcl".to_owned(),
         });
         let materials_directory = parse_materials_directory(version, &directory)?;
-
-        let languages = optional_string_list(ast, None, "languages")?
-            .unwrap_or_default()
-            .into_iter()
-            .map(|value| match value.as_str() {
-                "rust" => Ok(Language::Rust),
-                "javascript" => Ok(Language::JavaScript),
-                _ => invalid("languages", format!("unsupported language: {value}")),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if languages.iter().collect::<BTreeSet<_>>().len() != languages.len() {
-            return invalid("languages", "duplicate language".to_owned());
-        }
-
+        let requested = optional_string_list(ast, None, "languages")?.unwrap_or_default();
+        let (languages, bindings) = load_bindings(document, &requested)?;
         let canonical_repository =
             optional_string(ast, Some("project"), "canonical-repository")?.unwrap_or_default();
         if !canonical_repository.is_empty() && !is_absolute_https_url(&canonical_repository) {
@@ -600,7 +475,7 @@ impl EffectiveConfig {
         let adoption_date = match optional_string(ast, Some("project"), "adoption-date")? {
             None => None,
             Some(value) if value.is_empty() => None,
-            Some(value) => Some(parse_date(&value)?),
+            Some(value) => Some(parse_date_at(&value, "project.adoption-date")?),
         };
         let project = ProjectSettings {
             name: optional_string(ast, Some("project"), "name")?.unwrap_or_default(),
@@ -634,11 +509,6 @@ impl EffectiveConfig {
             )?
             .unwrap_or(true),
         };
-        let rust = RustSettings {
-            cargo: resolve_cargo(ast)?,
-        };
-        let javascript = resolve_javascript(ast)?;
-
         Ok(Self {
             schema: LATEST_SCHEMA,
             materials_directory,
@@ -646,8 +516,7 @@ impl EffectiveConfig {
             project,
             license,
             generation,
-            rust,
-            javascript,
+            bindings,
             limits: ConfigLimits {
                 evidence_file_bytes: EVIDENCE_FILE_BYTES,
                 files_per_package: FILES_PER_PACKAGE,
@@ -664,7 +533,7 @@ impl EffectiveConfig {
         &self.materials_directory
     }
 
-    pub fn languages(&self) -> &[Language] {
+    pub fn languages(&self) -> &[String] {
         &self.languages
     }
 
@@ -680,78 +549,103 @@ impl EffectiveConfig {
         self.generation
     }
 
-    pub fn rust(&self) -> &RustSettings {
-        &self.rust
-    }
-
-    pub fn javascript(&self) -> &JavascriptSettings {
-        &self.javascript
-    }
-
     pub fn limits(&self) -> ConfigLimits {
         self.limits
     }
 
-    pub fn for_cargo_component(&self, component: &CargoComponent) -> Result<Self, ConfigError> {
-        let version = component.license_version.unwrap_or(self.license.version);
-        let materials_directory = component
+    pub fn bindings(&self) -> &[Arc<dyn LanguageBinding>] {
+        &self.bindings
+    }
+
+    pub fn adapter_names(&self) -> Vec<&'static str> {
+        self.languages
+            .iter()
+            .filter_map(|language| {
+                self.bindings
+                    .iter()
+                    .find(|binding| binding.language_id() == language)
+                    .map(|binding| binding.display_name())
+            })
+            .collect()
+    }
+
+    pub fn adapter_summary_lines(&self) -> Vec<String> {
+        self.bindings
+            .iter()
+            .flat_map(|binding| binding.summary_lines())
+            .collect()
+    }
+
+    pub fn package_field_labels(&self, package: &ResolvedPackage) -> (&'static str, &'static str) {
+        if let Some(binding) = self
+            .bindings
+            .iter()
+            .find(|binding| binding.owns_package(package))
+        {
+            return (binding.package_id_label(), binding.package_source_label());
+        }
+        if let Some(binding) = self
+            .bindings
+            .iter()
+            .find(|binding| binding.is_package_fallback())
+        {
+            return (binding.package_id_label(), binding.package_source_label());
+        }
+        ("Package ID", "Source")
+    }
+
+    pub fn resolved_sections(&self) -> Vec<(String, crate::ConfigValue)> {
+        self.bindings
+            .iter()
+            .map(|binding| binding.resolved_entry())
+            .collect()
+    }
+
+    pub fn replace_binding(&mut self, binding: Box<dyn LanguageBinding>) {
+        let language_id = binding.language_id();
+        let replacement = Arc::<dyn LanguageBinding>::from(binding);
+        if let Some(slot) = self
+            .bindings
+            .iter_mut()
+            .find(|item| item.language_id() == language_id)
+        {
+            *slot = replacement;
+            return;
+        }
+        self.bindings.push(replacement);
+    }
+
+    pub fn for_component_identity(&self, identity: ComponentIdentity) -> Result<Self, ConfigError> {
+        let version = identity.license_version.unwrap_or(self.license.version);
+        let materials_directory = identity
             .materials_directory
             .clone()
             .unwrap_or_else(|| self.materials_directory.clone());
-        if component.layout == ComponentLayout::Centralized
+        if identity.centralized
             && (self.license.version != AhclVersion::V1_2
                 || version != AhclVersion::V1_2
                 || materials_directory != self.materials_directory)
         {
             return invalid(
-                format!("rust.cargo.component.{}", component.id),
+                identity.path,
                 "centralized components require AHCL 1.2 and the parent materials directory"
                     .to_owned(),
             );
         }
-        let right_holders = match &component.right_holders {
-            Some(values) if values.is_empty() => {
-                return invalid(
-                    format!("rust.cargo.component.{}.right-holders", component.id),
-                    "must not be explicitly empty".to_owned(),
-                );
-            }
-            Some(values) => values.clone(),
-            None => self.project.right_holders.clone(),
-        };
-        let covered_scope = component
-            .covered_scope
-            .clone()
-            .unwrap_or_else(|| component.package.clone());
-        let project = ProjectSettings {
-            name: component.package.clone(),
-            canonical_repository: component
-                .canonical_repository
-                .clone()
-                .unwrap_or_else(|| self.project.canonical_repository.clone()),
-            canonical_branch: component
-                .canonical_branch
-                .clone()
-                .unwrap_or_else(|| self.project.canonical_branch.clone()),
-            right_holders,
-            contact: component
-                .contact
-                .clone()
-                .unwrap_or_else(|| self.project.contact.clone()),
-            adoption_date: component.adoption_date.or(self.project.adoption_date),
-        };
+        let right_holders = component_right_holders(&identity, &self.project.right_holders)?;
+        let project = narrowed_project(&self.project, &identity, right_holders);
         let license = LicenseSettings {
             version,
-            enabled: component.enabled,
-            covered_scope,
-            special_authorization_channel: component
+            enabled: identity.enabled,
+            covered_scope: identity
+                .covered_scope
+                .clone()
+                .unwrap_or_else(|| identity.package.clone()),
+            special_authorization_channel: identity
                 .special_authorization_channel
                 .clone()
                 .unwrap_or_else(|| self.license.special_authorization_channel.clone()),
         };
-        let mut rust = self.rust.clone();
-        rust.cargo.components.clear();
-        rust.cargo.packages = vec![component.package.clone()];
         Ok(Self {
             schema: self.schema,
             materials_directory,
@@ -759,16 +653,9 @@ impl EffectiveConfig {
             project,
             license,
             generation: self.generation,
-            rust,
-            javascript: self.javascript.clone(),
+            bindings: self.bindings.clone(),
             limits: self.limits,
         })
-    }
-
-    pub fn with_cargo_packages(&self, packages: &[String]) -> Self {
-        let mut cloned = self.clone();
-        cloned.rust.cargo.packages = packages.to_vec();
-        cloned
     }
 
     pub fn with_covered_scope(&self, covered_scope: &str) -> Self {
@@ -784,233 +671,120 @@ impl EffectiveConfig {
     }
 }
 
-fn resolve_cargo(ast: &DocumentAst) -> Result<CargoSettings, ConfigError> {
-    let manifests = optional_string_list(ast, Some("rust.cargo"), "manifests")?
-        .unwrap_or_else(|| vec!["Cargo.toml".to_owned()])
-        .into_iter()
-        .map(|path| parse_repo_path("rust.cargo.manifests", &path))
-        .collect::<Result<Vec<_>, _>>()?;
-    if manifests.is_empty() {
+impl fmt::Debug for EffectiveConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("EffectiveConfig")
+            .field("schema", &self.schema)
+            .field("languages", &self.languages)
+            .field(
+                "bindings",
+                &self
+                    .bindings
+                    .iter()
+                    .map(|binding| binding.language_id())
+                    .collect::<Vec<_>>(),
+            )
+            .finish_non_exhaustive()
+    }
+}
+
+type LoadedLanguages = (Vec<String>, Vec<Arc<dyn LanguageBinding>>);
+
+fn load_bindings(
+    document: &ConfigDocument,
+    requested: &[String],
+) -> Result<LoadedLanguages, ConfigError> {
+    let mut known = BTreeSet::new();
+    for contributor in document.contributors() {
+        let language_id = contributor.language_id();
+        if !is_config_name(language_id) || !known.insert(language_id) {
+            return invalid(
+                "languages",
+                format!("duplicate language contributor: {language_id}"),
+            );
+        }
+    }
+    let mut languages = Vec::new();
+    let mut selected = BTreeSet::new();
+    for language in requested {
+        if !selected.insert(language.as_str()) {
+            return invalid("languages", "duplicate language".to_owned());
+        }
+        if !known.contains(language.as_str()) {
+            return invalid("languages", format!("unsupported language: {language}"));
+        }
+        languages.push(language.clone());
+    }
+    let mut bindings = Vec::new();
+    let mut resolved_keys = BTreeSet::new();
+    let mut fallbacks = 0_usize;
+    for contributor in document.contributors() {
+        let enabled = selected.contains(contributor.language_id());
+        let binding = contributor.load(document, enabled)?;
+        let (key, _) = binding.resolved_entry();
+        if !resolved_keys.insert(key) {
+            return invalid(
+                "languages",
+                format!(
+                    "duplicate resolved configuration from {}",
+                    contributor.language_id()
+                ),
+            );
+        }
+        if binding.is_package_fallback() {
+            fallbacks += 1;
+        }
+        bindings.push(Arc::from(binding));
+    }
+    if fallbacks > 1 {
         return invalid(
-            "rust.cargo.manifests",
-            "must not be empty when configured".to_owned(),
+            "languages",
+            "multiple package identity fallbacks".to_owned(),
         );
     }
-    let mut portable_manifest_keys = BTreeSet::new();
-    for manifest in &manifests {
-        if !portable_manifest_keys.insert(manifest.as_str().to_lowercase()) {
-            return invalid(
-                "rust.cargo.manifests",
-                format!("duplicate manifest path: {manifest}"),
-            );
-        }
-    }
-    let packages = optional_string_list(ast, Some("rust.cargo"), "packages")?.unwrap_or_default();
-    let rules = optional_object_list(ast, Some("rust.cargo"), "rules")?
-        .unwrap_or_default()
-        .into_iter()
-        .map(resolve_rule)
-        .collect::<Result<Vec<_>, _>>()?;
-    let lock_mode = match optional_string(ast, Some("rust.cargo"), "lock-mode")?.as_deref() {
-        None | Some("locked") => CargoLockMode::Locked,
-        Some(value) => {
-            return invalid(
-                "rust.cargo.lock-mode",
-                format!("unsupported lock mode: {value}"),
-            );
-        }
-    };
-    let evidence = resolve_evidence(ast)?;
-    let components = resolve_components(ast)?;
-    Ok(CargoSettings {
-        manifests,
-        packages,
-        rules,
-        lock_mode,
-        evidence,
-        components,
-    })
+    Ok((languages, bindings))
 }
 
-fn resolve_evidence(ast: &DocumentAst) -> Result<Vec<CargoEvidence>, ConfigError> {
-    let mut result = Vec::new();
-    let mut matching =
-        std::collections::BTreeMap::<(String, String, String, u8), CargoEvidence>::new();
-    for section in ast
-        .section_order
-        .iter()
-        .filter(|section| dynamic_section(section, "rust.cargo.evidence."))
-    {
-        let fields = fields_for_section(ast, section);
-        for key in fields.keys() {
-            if !matches!(
-                key.as_str(),
-                "package"
-                    | "version"
-                    | "source"
-                    | "repository"
-                    | "revision"
-                    | "path"
-                    | "url"
-                    | "kind"
-            ) {
-                return invalid(section.clone(), format!("unknown evidence field: {key}"));
-            }
-        }
-        let required = |key: &str| -> Result<String, ConfigError> {
-            string_field(&fields, key)?.ok_or_else(|| ConfigError::InvalidValue {
-                path: format!("{section}.{key}"),
-                message: "is required".to_owned(),
-            })
-        };
-        let package = required("package")?;
-        let version = required("version")?;
-        let source = required("source")?;
-        for (key, value) in [
-            ("package", &package),
-            ("version", &version),
-            ("source", &source),
-        ] {
-            if value.is_empty() || value.chars().any(|c| matches!(c, '*' | '?' | '[' | ']')) {
-                return invalid(
-                    format!("{section}.{key}"),
-                    "must be a non-empty exact value without glob characters".to_owned(),
-                );
-            }
-        }
-        let repository = required("repository")?;
-        let revision = required("revision")?;
-        let path_value = required("path")?;
-        let url = required("url")?;
-        if !is_secure_https_url(&repository) || !is_secure_https_url(&url) {
-            return invalid(
-                section.clone(),
-                "repository and url must be absolute HTTPS URLs".to_owned(),
-            );
-        }
-        if !is_commit_revision(&revision) {
-            return invalid(
-                format!("{section}.revision"),
-                "must be a full 40- or 64-character hexadecimal commit".to_owned(),
-            );
-        }
-        let path = parse_repo_path(&format!("{section}.path"), &path_value)?;
-        let kind = match string_field(&fields, "kind")?.as_deref() {
-            None | Some("license") => CargoEvidenceKind::License,
-            Some("notice") => CargoEvidenceKind::Notice,
-            Some("materials") => CargoEvidenceKind::Materials,
-            Some(value) => {
-                return invalid(
-                    format!("{section}.kind"),
-                    format!("unsupported evidence kind: {value}"),
-                );
-            }
-        };
-        let evidence = CargoEvidence {
-            package: package.clone(),
-            version: version.clone(),
-            source: source.clone(),
-            repository,
-            revision,
-            path,
-            url,
-            kind,
-        };
-        let kind_key = match kind {
-            CargoEvidenceKind::License => 0,
-            CargoEvidenceKind::Notice => 1,
-            CargoEvidenceKind::Materials => 2,
-        };
-        let key = (package, version, source, kind_key);
-        if let Some(previous) = matching.insert(key, evidence.clone()) {
-            if previous != evidence {
-                return invalid(
-                    section.clone(),
-                    "conflicts with another evidence mapping for the same package, version, and source"
-                        .to_owned(),
-                );
-            }
-        } else {
-            result.push(evidence);
-        }
+fn component_right_holders(
+    identity: &ComponentIdentity,
+    parent: &[String],
+) -> Result<Vec<String>, ConfigError> {
+    match &identity.right_holders {
+        Some(values) if values.is_empty() => invalid(
+            format!("{}.right-holders", identity.path),
+            "must not be explicitly empty".to_owned(),
+        ),
+        Some(values) => Ok(values.clone()),
+        None => Ok(parent.to_vec()),
     }
-    Ok(result)
 }
 
-fn resolve_components(ast: &DocumentAst) -> Result<Vec<CargoComponent>, ConfigError> {
-    let mut result = Vec::new();
-    for section in ast
-        .section_order
-        .iter()
-        .filter(|section| dynamic_section(section, "rust.cargo.component."))
-    {
-        let fields = fields_for_section(ast, section);
-        let id = section
-            .strip_prefix("rust.cargo.component.")
-            .expect("filtered dynamic component section")
-            .to_owned();
-        let package =
-            string_field(&fields, "package")?.ok_or_else(|| ConfigError::InvalidValue {
-                path: format!("{section}.package"),
-                message: "is required".to_owned(),
-            })?;
-        if package.is_empty() {
-            return invalid(format!("{section}.package"), "must not be empty".to_owned());
-        }
-        let materials_directory = string_field(&fields, "materials-directory")?
-            .map(|value| parse_materials_directory(AhclVersion::V1_2, &value))
-            .transpose()?;
-        let license_version = string_field(&fields, "license-version")?
-            .map(|value| parse_version(&value, &format!("{section}.license-version")))
-            .transpose()?;
-        let covered_scope = string_field(&fields, "covered-scope")?
-            .map(|value| validate_scope(&format!("{section}.covered-scope"), value))
-            .transpose()?;
-        let right_holders = optional_string_list(ast, Some(section), "right-holders")?;
-        let canonical_repository = string_field(&fields, "canonical-repository")?;
-        if canonical_repository
-            .as_deref()
-            .is_some_and(|value| !value.is_empty() && !is_secure_https_url(value))
-        {
-            return invalid(
-                format!("{section}.canonical-repository"),
-                "must be an absolute HTTPS URL".to_owned(),
-            );
-        }
-        let adoption_date = string_field(&fields, "adoption-date")?
-            .filter(|value| !value.is_empty())
-            .map(|value| parse_date_at(&value, &format!("{section}.adoption-date")))
-            .transpose()?;
-        let layout = match string_field(&fields, "layout")?.as_deref() {
-            None | Some("independent") => ComponentLayout::Independent,
-            Some("centralized") => ComponentLayout::Centralized,
-            Some(value) => {
-                return invalid(
-                    format!("{section}.layout"),
-                    format!("unsupported component layout: {value}"),
-                );
-            }
-        };
-        result.push(CargoComponent {
-            id,
-            package,
-            enabled: boolean_field(&fields, "enabled")?.unwrap_or(true),
-            layout,
-            materials_directory,
-            license_version,
-            covered_scope,
-            right_holders,
-            canonical_repository,
-            canonical_branch: string_field(&fields, "canonical-branch")?,
-            contact: string_field(&fields, "contact")?,
-            adoption_date,
-            special_authorization_channel: string_field(&fields, "special-authorization-channel")?,
-        });
+fn narrowed_project(
+    parent: &ProjectSettings,
+    identity: &ComponentIdentity,
+    right_holders: Vec<String>,
+) -> ProjectSettings {
+    ProjectSettings {
+        name: identity.package.clone(),
+        canonical_repository: identity
+            .canonical_repository
+            .clone()
+            .unwrap_or_else(|| parent.canonical_repository.clone()),
+        canonical_branch: identity
+            .canonical_branch
+            .clone()
+            .unwrap_or_else(|| parent.canonical_branch.clone()),
+        right_holders,
+        contact: identity
+            .contact
+            .clone()
+            .unwrap_or_else(|| parent.contact.clone()),
+        adoption_date: identity.adoption_date.or(parent.adoption_date),
     }
-    Ok(result)
 }
 
-fn fields_for_section(
+pub(crate) fn fields_for_section(
     ast: &DocumentAst,
     section: &str,
 ) -> std::collections::BTreeMap<String, ScalarValue> {
@@ -1024,18 +798,7 @@ fn fields_for_section(
         .collect()
 }
 
-fn boolean_field(
-    fields: &std::collections::BTreeMap<String, ScalarValue>,
-    key: &str,
-) -> Result<Option<bool>, ConfigError> {
-    match fields.get(key) {
-        None => Ok(None),
-        Some(ScalarValue::Boolean(value)) => Ok(Some(*value)),
-        Some(_) => invalid(key.to_owned(), "must be a boolean".to_owned()),
-    }
-}
-
-fn parse_version(value: &str, path: &str) -> Result<AhclVersion, ConfigError> {
+pub fn parse_version(value: &str, path: &str) -> Result<AhclVersion, ConfigError> {
     match value {
         "1.0" => Ok(AhclVersion::V1_0),
         "1.1" => Ok(AhclVersion::V1_1),
@@ -1047,7 +810,7 @@ fn parse_version(value: &str, path: &str) -> Result<AhclVersion, ConfigError> {
     }
 }
 
-fn validate_scope(path: &str, value: String) -> Result<String, ConfigError> {
+pub fn validate_scope(path: &str, value: String) -> Result<String, ConfigError> {
     if value.is_empty() || value.contains(['\n', '\r']) {
         return invalid(
             path.to_owned(),
@@ -1057,7 +820,7 @@ fn validate_scope(path: &str, value: String) -> Result<String, ConfigError> {
     Ok(value)
 }
 
-fn parse_date_at(value: &str, path: &str) -> Result<UtcDate, ConfigError> {
+pub fn parse_date_at(value: &str, path: &str) -> Result<UtcDate, ConfigError> {
     let parts: Vec<_> = value.split('-').collect();
     if parts.len() != 3
         || parts
@@ -1082,7 +845,7 @@ fn parse_date_at(value: &str, path: &str) -> Result<UtcDate, ConfigError> {
     }
 }
 
-fn is_commit_revision(value: &str) -> bool {
+pub fn is_commit_revision(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
@@ -1092,17 +855,11 @@ enum PackagePatternMode {
     PackageName,
 }
 
-fn resolve_rule(
-    fields: std::collections::BTreeMap<String, ScalarValue>,
-) -> Result<CargoRule, ConfigError> {
-    resolve_package_rule("rust.cargo.rules", PackagePatternMode::Path, fields)
-}
-
 fn resolve_package_rule(
     prefix: &str,
     package_mode: PackagePatternMode,
     fields: std::collections::BTreeMap<String, ScalarValue>,
-) -> Result<CargoRule, ConfigError> {
+) -> Result<PackageRule, ConfigError> {
     for key in fields.keys() {
         if !matches!(key.as_str(), "package" | "source" | "classification") {
             return invalid(prefix, format!("unknown rule field: {key}"));
@@ -1129,9 +886,9 @@ fn resolve_package_rule(
             message,
         })?;
     let classification = match rule_string(prefix, &fields, "classification")?.as_deref() {
-        Some("first-party") => CargoRuleClassification::FirstParty,
-        Some("third-party") => CargoRuleClassification::ThirdParty,
-        Some("exclude") => CargoRuleClassification::Exclude,
+        Some("first-party") => PackageRuleClassification::FirstParty,
+        Some("third-party") => PackageRuleClassification::ThirdParty,
+        Some("exclude") => PackageRuleClassification::Exclude,
         Some(value) => {
             return invalid(
                 format!("{prefix}.classification"),
@@ -1159,14 +916,7 @@ fn rule_string(
     }
 }
 
-fn string_field(
-    fields: &std::collections::BTreeMap<String, ScalarValue>,
-    key: &str,
-) -> Result<Option<String>, ConfigError> {
-    rule_string("rust.cargo.rules", fields, key)
-}
-
-fn optional_string(
+pub(crate) fn optional_string(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1181,7 +931,7 @@ fn optional_string(
     }
 }
 
-fn optional_integer(
+pub(crate) fn optional_integer(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1196,7 +946,7 @@ fn optional_integer(
     }
 }
 
-fn optional_boolean(
+pub(crate) fn optional_boolean(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1211,7 +961,7 @@ fn optional_boolean(
     }
 }
 
-fn optional_string_list(
+pub(crate) fn optional_string_list(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1234,7 +984,7 @@ fn optional_string_list(
     }
 }
 
-fn optional_object_list(
+pub(crate) fn optional_object_list(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1249,7 +999,10 @@ fn optional_object_list(
     }
 }
 
-fn parse_materials_directory(version: AhclVersion, value: &str) -> Result<RepoPath, ConfigError> {
+pub fn parse_materials_directory(
+    version: AhclVersion,
+    value: &str,
+) -> Result<RepoPath, ConfigError> {
     let accepted = match version {
         AhclVersion::V1_0 => value == "AHCL",
         AhclVersion::V1_1 | AhclVersion::V1_2 => {
@@ -1265,16 +1018,7 @@ fn parse_materials_directory(version: AhclVersion, value: &str) -> Result<RepoPa
     parse_repo_path("materials-directory", value)
 }
 
-fn dynamic_section(section: &str, prefix: &str) -> bool {
-    section.strip_prefix(prefix).is_some_and(|id| {
-        !id.is_empty()
-            && id
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-    })
-}
-
-fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
+pub fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
     if value.contains('\\') {
         return invalid(
             path,
@@ -1287,38 +1031,14 @@ fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
     })
 }
 
-fn parse_date(value: &str) -> Result<UtcDate, ConfigError> {
-    let parts: Vec<_> = value.split('-').collect();
-    if parts.len() != 3
-        || parts
-            .iter()
-            .zip([4, 2, 2])
-            .any(|(part, length)| part.len() != length)
-    {
-        return invalid("project.adoption-date", "must use YYYY-MM-DD".to_owned());
-    }
-    let year = parts[0].parse::<u16>().ok();
-    let month = parts[1].parse::<u8>().ok();
-    let day = parts[2].parse::<u8>().ok();
-    match (year, month, day) {
-        (Some(year), Some(month), Some(day)) => {
-            UtcDate::new(year, month, day).map_err(|error| ConfigError::InvalidValue {
-                path: "project.adoption-date".to_owned(),
-                message: error.to_string(),
-            })
-        }
-        _ => invalid("project.adoption-date", "must use YYYY-MM-DD".to_owned()),
-    }
-}
-
-fn is_absolute_https_url(value: &str) -> bool {
+pub fn is_absolute_https_url(value: &str) -> bool {
     !value
         .chars()
         .any(|character| character.is_control() || character.is_whitespace())
         && Url::parse(value).is_ok_and(|url| url.scheme() == "https" && url.host().is_some())
 }
 
-fn is_secure_https_url(value: &str) -> bool {
+pub fn is_secure_https_url(value: &str) -> bool {
     !value
         .chars()
         .any(|character| character.is_control() || character.is_whitespace())
@@ -1346,141 +1066,4 @@ fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, ConfigError
 
 fn is_separator(character: char) -> bool {
     matches!(character, '/' | '\\')
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum JsPackageManager {
-    Npm,
-    Pnpm,
-    Yarn,
-    Bun,
-}
-
-impl JsPackageManager {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Npm => "npm",
-            Self::Pnpm => "pnpm",
-            Self::Yarn => "yarn",
-            Self::Bun => "bun",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct JavascriptSettings {
-    manifests: Vec<RepoPath>,
-    managers: Vec<JsPackageManager>,
-    packages: Vec<String>,
-    rules: Vec<PackageRule>,
-}
-
-impl JavascriptSettings {
-    pub fn from_manifests(manifests: &[RepoPath]) -> Self {
-        let manifests = if manifests.is_empty() {
-            vec![RepoPath::parse("package.json").expect("package.json is a repository path")]
-        } else {
-            manifests.to_vec()
-        };
-        Self {
-            manifests,
-            managers: Vec::new(),
-            packages: Vec::new(),
-            rules: Vec::new(),
-        }
-    }
-
-    pub fn manifests(&self) -> &[RepoPath] {
-        &self.manifests
-    }
-
-    pub fn managers(&self) -> &[JsPackageManager] {
-        &self.managers
-    }
-
-    pub fn packages(&self) -> &[String] {
-        &self.packages
-    }
-
-    pub fn rules(&self) -> &[PackageRule] {
-        &self.rules
-    }
-
-    pub fn classify(&self, package: &str, source: &str) -> PackageRuleClassification {
-        self.rules
-            .iter()
-            .rev()
-            .find(|rule| rule.applies(package, source))
-            .map(PackageRule::classification)
-            .unwrap_or(PackageRuleClassification::ThirdParty)
-    }
-}
-
-fn resolve_javascript(ast: &DocumentAst) -> Result<JavascriptSettings, ConfigError> {
-    let manifests = optional_string_list(ast, Some("javascript"), "manifests")?
-        .unwrap_or_else(|| vec!["package.json".to_owned()])
-        .into_iter()
-        .map(|path| parse_repo_path("javascript.manifests", &path))
-        .collect::<Result<Vec<_>, _>>()?;
-    if manifests.is_empty() {
-        return invalid(
-            "javascript.manifests",
-            "must not be empty when configured".to_owned(),
-        );
-    }
-    let mut portable_manifest_keys = BTreeSet::new();
-    for manifest in &manifests {
-        if !portable_manifest_keys.insert(manifest.as_str().to_lowercase()) {
-            return invalid(
-                "javascript.manifests",
-                format!("duplicate manifest path: {manifest}"),
-            );
-        }
-    }
-    let managers = match optional_string_list(ast, Some("javascript"), "managers")? {
-        None => Vec::new(),
-        Some(values) if values.is_empty() => {
-            return invalid(
-                "javascript.managers",
-                "must not be empty when configured".to_owned(),
-            );
-        }
-        Some(values) => values
-            .into_iter()
-            .map(|value| parse_manager(&value))
-            .collect::<Result<Vec<_>, _>>()?,
-    };
-    if managers.iter().collect::<BTreeSet<_>>().len() != managers.len() {
-        return invalid(
-            "javascript.managers",
-            "duplicate package manager".to_owned(),
-        );
-    }
-    let packages = optional_string_list(ast, Some("javascript"), "packages")?.unwrap_or_default();
-    let rules = optional_object_list(ast, Some("javascript"), "rules")?
-        .unwrap_or_default()
-        .into_iter()
-        .map(|fields| {
-            resolve_package_rule("javascript.rules", PackagePatternMode::PackageName, fields)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(JavascriptSettings {
-        manifests,
-        managers,
-        packages,
-        rules,
-    })
-}
-
-fn parse_manager(value: &str) -> Result<JsPackageManager, ConfigError> {
-    match value {
-        "npm" => Ok(JsPackageManager::Npm),
-        "pnpm" => Ok(JsPackageManager::Pnpm),
-        "yarn" => Ok(JsPackageManager::Yarn),
-        "bun" => Ok(JsPackageManager::Bun),
-        _ => invalid(
-            "javascript.managers",
-            format!("unsupported package manager: {value}"),
-        ),
-    }
 }

@@ -27,8 +27,9 @@
 
 use crate::graph;
 use crate::limits::EvidenceLimits;
+use crate::settings::{CargoBinding, CargoSettings};
 use crate::upstream::{CargoEvidenceTransport, UreqCargoEvidenceTransport};
-use ahcl_kit_config::{CargoRuleClassification, CargoSettings, EffectiveConfig};
+use ahcl_kit_config::{EffectiveConfig, PackageRuleClassification};
 use ahcl_kit_core::{AdapterRequest, EcosystemAdapter, ProjectRoot, RepoPath, ResolvedGraph};
 use std::error::Error;
 use std::fmt;
@@ -50,7 +51,9 @@ impl CargoResolveRequest {
         config: &EffectiveConfig,
         strict_license_files: bool,
     ) -> Self {
-        let settings = config.rust().cargo().clone();
+        let settings = CargoBinding::from_config(config)
+            .map(|binding| binding.settings().clone())
+            .expect("the Cargo contributor is loaded before Cargo resolution");
         Self {
             project_root,
             manifests: settings.manifests().to_vec(),
@@ -101,10 +104,10 @@ impl CargoResolveRequest {
         self.manifests.push(manifest);
     }
 
-    pub(crate) fn classify(&self, package: &str, source: &str) -> CargoRuleClassification {
+    pub(crate) fn classify(&self, package: &str, source: &str) -> PackageRuleClassification {
         self.settings
             .as_ref()
-            .map_or(CargoRuleClassification::ThirdParty, |settings| {
+            .map_or(PackageRuleClassification::ThirdParty, |settings| {
                 settings.classify(package, source)
             })
     }

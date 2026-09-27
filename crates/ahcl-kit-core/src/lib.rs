@@ -29,16 +29,20 @@
 
 mod adapter;
 mod diagnostic;
+mod digest;
 mod model;
+mod package_dir;
 mod plan;
 
 pub use adapter::{AdapterRequest, EcosystemAdapter};
 pub use diagnostic::{Diagnostic, DiagnosticCode, DiagnosticSeverity};
+pub use digest::sha256_hex;
 pub use model::{
     CommandId, DependencyEdge, DependencyKind, InvocationContext, LicenseArtifact,
     LockfileEvidence, ProjectRoot, ProjectRootError, RepoPath, RepoPathError, ResolvedGraph,
     ResolvedPackage, UtcDate, UtcDateError,
 };
+pub use package_dir::{PackageDirectoryInput, assign_package_directories};
 pub use plan::{
     Change, ChangeKind, ChangePlan, PlanError, ProjectEntry, ProjectView, ProjectViewError,
 };

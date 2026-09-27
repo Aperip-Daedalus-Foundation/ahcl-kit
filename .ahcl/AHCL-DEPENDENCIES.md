@@ -17,27 +17,6 @@ Configuration summary:
 | --- |
 | `Cargo.lock` |
 
-## Upstream: `https://github.com/BenjaminRi/winresource`
-
-### `winresource` 0.1.31
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#winresource@0.1.31`
-- Role: Direct
-- Dependency kinds: Build
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT`
-- Authors: Max Resch <resch.max@gmail.com>
-- Repository: `https://github.com/BenjaminRi/winresource`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/winresource-0.1.31/LICENSE`](THIRD-PARTY-LICENSES/winresource-0.1.31/LICENSE)
-  - SHA-256: `3564da09711c475669c15346bb25a1530a7de683c13f4a51489c15a6d74438fa`
-  - Bytes: 1049
-
 ## Upstream: `https://github.com/BurntSushi/memchr`
 
 ### `memchr` 2.8.3
@@ -206,7 +185,7 @@ Retained evidence:
 
 - Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#version_check@0.9.5`
 - Role: Transitive
-- Dependency kinds: Normal, Build
+- Dependency kinds: Build
 - Target conditions: All targets.
 - Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
 - Checksum: None.
@@ -2093,9 +2072,9 @@ Retained evidence:
 ### `getrandom` 0.2.17
 
 - Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#getrandom@0.2.17`
-- Role: Transitive
+- Role: Direct
 - Dependency kinds: Normal
-- Target conditions: All targets.
+- Target conditions: `cfg(windows)`
 - Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
 - Checksum: None.
 - Declared license: `MIT OR Apache-2.0`
@@ -2580,33 +2559,11 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `serde_spanned` 1.1.1
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#serde_spanned@1.1.1`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT OR Apache-2.0`
-- Authors: None.
-- Repository: `https://github.com/toml-rs/toml`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-APACHE)
-  - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
-  - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_spanned-1.1.1/LICENSE-MIT)
-  - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
-  - Bytes: 1062
-
 ### `toml` 0.8.23
 
 - Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml@0.8.23`
 - Role: Direct
-- Dependency kinds: Normal, Build
+- Dependency kinds: Normal
 - Target conditions: All targets.
 - Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
 - Checksum: None.
@@ -2621,28 +2578,6 @@ Retained evidence:
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
 - [`.ahcl/THIRD-PARTY-LICENSES/toml-0.8.23/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-0.8.23/LICENSE-MIT)
-  - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
-  - Bytes: 1062
-
-### `toml` 1.1.6+spec-1.1.0
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml@1.1.6+spec-1.1.0`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT OR Apache-2.0`
-- Authors: None.
-- Repository: `https://github.com/toml-rs/toml`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-APACHE)
-  - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
-  - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-1.1.6_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
@@ -2668,28 +2603,6 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `toml_datetime` 1.1.1+spec-1.1.0
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_datetime@1.1.1+spec-1.1.0`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT OR Apache-2.0`
-- Authors: None.
-- Repository: `https://github.com/toml-rs/toml`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-APACHE)
-  - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
-  - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_datetime-1.1.1_2Bspec-1.1.0/LICENSE-MIT)
-  - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
-  - Bytes: 1062
-
 ### `toml_edit` 0.22.27
 
 - Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_edit@0.22.27`
@@ -2712,28 +2625,6 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `toml_parser` 1.1.3+spec-1.1.0
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_parser@1.1.3+spec-1.1.0`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT OR Apache-2.0`
-- Authors: None.
-- Repository: `https://github.com/toml-rs/toml`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-APACHE)
-  - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
-  - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_parser-1.1.3_2Bspec-1.1.0/LICENSE-MIT)
-  - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
-  - Bytes: 1062
-
 ### `toml_write` 0.1.2
 
 - Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_write@0.1.2`
@@ -2753,28 +2644,6 @@ Retained evidence:
   - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
   - Bytes: 11358
 - [`.ahcl/THIRD-PARTY-LICENSES/toml_write-0.1.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_write-0.1.2/LICENSE-MIT)
-  - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
-  - Bytes: 1062
-
-### `toml_writer` 1.1.2+spec-1.1.0
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_writer@1.1.2+spec-1.1.0`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT OR Apache-2.0`
-- Authors: None.
-- Repository: `https://github.com/toml-rs/toml`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-APACHE)
-  - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
-  - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_writer-1.1.2_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
@@ -3167,25 +3036,6 @@ Retained evidence:
 
 Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/winnow-0.7.15/LICENSE-MIT`](THIRD-PARTY-LICENSES/winnow-0.7.15/LICENSE-MIT)
-  - SHA-256: `cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d`
-  - Bytes: 1023
-
-### `winnow` 1.0.4
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#winnow@1.0.4`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT`
-- Authors: None.
-- Repository: `https://github.com/winnow-rs/winnow`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/winnow-1.0.4/LICENSE-MIT`](THIRD-PARTY-LICENSES/winnow-1.0.4/LICENSE-MIT)
   - SHA-256: `cb5aedb296c5246d1f22e9099f925a65146f9f0d6b4eebba97fd27a6cdbbab2d`
   - Bytes: 1023
 
