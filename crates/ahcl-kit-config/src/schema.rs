@@ -1086,14 +1086,21 @@ fn is_commit_revision(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PackagePatternMode {
+    Path,
+    PackageName,
+}
+
 fn resolve_rule(
     fields: std::collections::BTreeMap<String, ScalarValue>,
 ) -> Result<CargoRule, ConfigError> {
-    resolve_package_rule("rust.cargo.rules", fields)
+    resolve_package_rule("rust.cargo.rules", PackagePatternMode::Path, fields)
 }
 
 fn resolve_package_rule(
     prefix: &str,
+    package_mode: PackagePatternMode,
     fields: std::collections::BTreeMap<String, ScalarValue>,
 ) -> Result<CargoRule, ConfigError> {
     for key in fields.keys() {
@@ -1106,10 +1113,9 @@ fn resolve_package_rule(
             path: format!("{prefix}.package"),
             message: "is required".to_owned(),
         })?;
-    let package = if prefix == "javascript.rules" {
-        GlobPattern::compile_package_name(package)
-    } else {
-        GlobPattern::compile(package)
+    let package = match package_mode {
+        PackagePatternMode::Path => GlobPattern::compile(package),
+        PackagePatternMode::PackageName => GlobPattern::compile_package_name(package),
     }
     .map_err(|message| ConfigError::InvalidValue {
         path: format!("{prefix}.package"),
@@ -1454,7 +1460,9 @@ fn resolve_javascript(ast: &DocumentAst) -> Result<JavascriptSettings, ConfigErr
     let rules = optional_object_list(ast, Some("javascript"), "rules")?
         .unwrap_or_default()
         .into_iter()
-        .map(|fields| resolve_package_rule("javascript.rules", fields))
+        .map(|fields| {
+            resolve_package_rule("javascript.rules", PackagePatternMode::PackageName, fields)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(JavascriptSettings {
         manifests,

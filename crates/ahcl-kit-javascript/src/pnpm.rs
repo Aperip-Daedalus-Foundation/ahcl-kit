@@ -191,7 +191,9 @@ fn add_importer_edges(
             let version = dependency_version(value)
                 .ok_or_else(|| parse_error(format!("pnpm dependency {name} has no version")))?;
             let Some(to) = resolve_pnpm_target(packages, importers, name, version) else {
-                if version.starts_with("link:") {
+                if version.starts_with("link:")
+                    || matches!(key, "optionalDependencies" | "peerDependencies")
+                {
                     continue;
                 }
                 return Err(parse_error(format!(
@@ -224,10 +226,20 @@ fn add_dependency_edges(
         };
         for (name, value) in dependencies {
             let Some(version) = dependency_version(value) else {
-                continue;
+                if key == "optionalDependencies" {
+                    continue;
+                }
+                return Err(parse_error(format!(
+                    "pnpm dependency {name} has no version"
+                )));
             };
             let Some(to) = resolve_pnpm_target(packages, importers, name, version) else {
-                continue;
+                if key == "optionalDependencies" || version.starts_with("link:") {
+                    continue;
+                }
+                return Err(parse_error(format!(
+                    "pnpm dependency {name}@{version} was not found"
+                )));
             };
             let mut targets = Vec::new();
             if key == "optionalDependencies" {

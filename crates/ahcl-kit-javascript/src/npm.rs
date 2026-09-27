@@ -140,8 +140,8 @@ fn npm_package(
             .or_else(|| json_string(manifest, "name"))
             .ok_or_else(|| parse_error("npm root package has no name".to_owned()))?
     } else {
-        name_from_key(key)
-            .or_else(|| json_string(value, "name"))
+        json_string(value, "name")
+            .or_else(|| name_from_key(key))
             .ok_or_else(|| parse_error(format!("npm package path is invalid: {key}")))?
     };
     let version = json_string(value, "version")
@@ -281,28 +281,47 @@ fn declared_workspace(key: &str, patterns: &[String]) -> bool {
 }
 
 fn workspace_pattern_matches(pattern: &str, key: &str) -> bool {
-    let pattern = pattern
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>();
-    let key = key
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>();
-    match_workspace_segments(&pattern, &key)
+    let pattern = workspace_segments(pattern);
+    let key = workspace_segments(key);
+    let mut memo = vec![None; (pattern.len() + 1) * (key.len() + 1)];
+    match_workspace_segments(&pattern, &key, 0, 0, &mut memo)
 }
 
-fn match_workspace_segments(pattern: &[&str], value: &[&str]) -> bool {
-    if pattern.is_empty() {
-        return value.is_empty();
+fn workspace_segments(value: &str) -> Vec<&str> {
+    let mut segments = value
+        .split(['/', '\\'])
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    while segments.first() == Some(&".") {
+        segments.remove(0);
     }
-    if pattern[0] == "**" {
-        return match_workspace_segments(&pattern[1..], value)
-            || (!value.is_empty() && match_workspace_segments(pattern, &value[1..]));
+    segments
+}
+
+fn match_workspace_segments(
+    pattern: &[&str],
+    value: &[&str],
+    pattern_index: usize,
+    value_index: usize,
+    memo: &mut [Option<bool>],
+) -> bool {
+    let cache_index = pattern_index * (value.len() + 1) + value_index;
+    if let Some(matched) = memo[cache_index] {
+        return matched;
     }
-    !value.is_empty()
-        && segment_matches(pattern[0], value[0])
-        && match_workspace_segments(&pattern[1..], &value[1..])
+    let matched = if pattern_index == pattern.len() {
+        value_index == value.len()
+    } else if pattern[pattern_index] == "**" {
+        match_workspace_segments(pattern, value, pattern_index + 1, value_index, memo)
+            || (value_index < value.len()
+                && match_workspace_segments(pattern, value, pattern_index, value_index + 1, memo))
+    } else {
+        value_index < value.len()
+            && segment_matches(pattern[pattern_index], value[value_index])
+            && match_workspace_segments(pattern, value, pattern_index + 1, value_index + 1, memo)
+    };
+    memo[cache_index] = Some(matched);
+    matched
 }
 
 fn segment_matches(pattern: &str, value: &str) -> bool {
