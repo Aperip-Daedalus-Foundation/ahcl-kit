@@ -99,6 +99,9 @@ pub(crate) fn parse_bun(
             ] {
                 for (name, _) in string_map(workspace, key) {
                     let Some(package) = nodes.get(&name) else {
+                        if key == "optionalDependencies" {
+                            continue;
+                        }
                         return Err(parse_error(format!(
                             "bun workspace {path} depends on unresolved {name}"
                         )));
@@ -134,7 +137,10 @@ pub(crate) fn parse_bun(
     for package in nodes.values() {
         for name in package.dependencies.keys() {
             let Some(target) = nodes.get(name) else {
-                continue;
+                return Err(parse_error(format!(
+                    "bun package {} depends on unresolved {name}",
+                    package.name
+                )));
             };
             edges.push(ParsedEdge {
                 from: package.id.clone(),
@@ -145,7 +151,10 @@ pub(crate) fn parse_bun(
         }
         for name in package.dev_dependencies.keys() {
             let Some(target) = nodes.get(name) else {
-                continue;
+                return Err(parse_error(format!(
+                    "bun package {} depends on unresolved {name}",
+                    package.name
+                )));
             };
             edges.push(ParsedEdge {
                 from: package.id.clone(),
