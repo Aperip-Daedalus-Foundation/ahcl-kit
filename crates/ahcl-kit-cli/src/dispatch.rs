@@ -32,7 +32,7 @@ use crate::{
 };
 use ahcl_kit_config::{
     CargoEvidenceKind, CargoLockMode, CargoRuleClassification, ComponentLayout, EffectiveConfig,
-    JsPackageManager, Language, ProjectIdentity,
+    Language, ProjectIdentity,
 };
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
@@ -411,12 +411,7 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
         },
         "javascript": {
             "manifests": config.javascript().manifests().iter().map(|path| path.as_str()).collect::<Vec<_>>(),
-            "managers": config.javascript().managers().iter().map(|manager| match manager {
-                JsPackageManager::Npm => "npm",
-                JsPackageManager::Pnpm => "pnpm",
-                JsPackageManager::Yarn => "yarn",
-                JsPackageManager::Bun => "bun",
-            }).collect::<Vec<_>>(),
+            "managers": config.javascript().managers().iter().map(|manager| manager.as_str()).collect::<Vec<_>>(),
             "packages": config.javascript().packages(),
             "rules": config.javascript().rules().iter().map(|rule| serde_json::json!({
                 "package": rule.package(),

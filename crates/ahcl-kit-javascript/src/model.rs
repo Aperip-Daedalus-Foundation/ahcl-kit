@@ -47,7 +47,7 @@ pub(crate) struct ParsedPackage {
     pub(crate) declared_license: Option<String>,
     pub(crate) workspace_root: bool,
     pub(crate) manifest_path: PathBuf,
-    pub(crate) lockfile: LockfileEvidence,
+    pub(crate) lockfiles: Vec<LockfileEvidence>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,15 +117,18 @@ pub(crate) fn finish(
                         package_id: package.id,
                     });
                 }
-                if !existing
-                    .lockfile
-                    .path
-                    .as_str()
-                    .eq(package.lockfile.path.as_str())
-                {
-                    return Err(JavascriptError::DuplicatePackage {
-                        package_id: package.id,
-                    });
+                for lockfile in package.lockfiles {
+                    if !existing
+                        .lockfiles
+                        .iter()
+                        .any(|current| current.path == lockfile.path)
+                    {
+                        existing.lockfiles.push(lockfile);
+                    }
+                }
+                if package.workspace_root {
+                    existing.workspace_root = true;
+                    roots.insert(package.id);
                 }
                 continue;
             }
@@ -201,7 +204,7 @@ pub(crate) fn finish(
             declared_license: package.declared_license.clone(),
             first_party: package.workspace_root
                 || classifications.get(package_id) == Some(&CargoRuleClassification::FirstParty),
-            contributing_lockfiles: vec![package.lockfile.clone()],
+            contributing_lockfiles: package.lockfiles.clone(),
             license_artifacts: Vec::new(),
         });
     }

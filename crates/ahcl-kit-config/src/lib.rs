@@ -28,17 +28,16 @@
 //! Strict parsing and resolution for `.ahclkitconfigs` files.
 
 mod ast;
-mod javascript;
 mod parser;
 mod schema;
 mod skeleton;
 
 pub use ast::ScalarValue;
-pub use javascript::{JavascriptSettings, JsPackageManager};
 pub use parser::{ConfigDocument, ConfigError};
 pub use schema::{
     AhclVersion, CargoComponent, CargoEvidence, CargoEvidenceKind, CargoLockMode, CargoRule,
     CargoRuleClassification, CargoSettings, ComponentLayout, ConfigLimits, EffectiveConfig,
-    GenerationSettings, LATEST_SCHEMA, Language, LicenseSettings, ProjectSettings, RustSettings,
+    GenerationSettings, JavascriptSettings, JsPackageManager, LATEST_SCHEMA, Language,
+    LicenseSettings, PackageRule, PackageRuleClassification, ProjectSettings, RustSettings,
 };
 pub use skeleton::{ConfigSkeleton, ProjectIdentity};

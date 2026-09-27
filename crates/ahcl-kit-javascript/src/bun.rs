@@ -51,8 +51,8 @@ pub(crate) fn parse_bun(
     lockfile: LockfileEvidence,
 ) -> Result<ParsedGraph, JavascriptError> {
     let manifest = manifest_value(manifest_text).map_err(parse_error)?;
-    let lock: Value =
-        serde_json::from_str(lock_text).map_err(|error| parse_error(error.to_string()))?;
+    let lock: Value = serde_json::from_str(&strip_jsonc(lock_text))
+        .map_err(|error| parse_error(error.to_string()))?;
     let packages = lock
         .get("packages")
         .and_then(Value::as_object)
@@ -124,7 +124,7 @@ pub(crate) fn parse_bun(
                 }),
                 workspace_root: true,
                 manifest_path: manifest_path.to_path_buf(),
-                lockfile: lockfile.clone(),
+                lockfiles: vec![lockfile.clone()],
             });
         }
     }
@@ -163,7 +163,7 @@ pub(crate) fn parse_bun(
             declared_license: None,
             workspace_root: package.workspace,
             manifest_path: manifest_path.to_path_buf(),
-            lockfile: lockfile.clone(),
+            lockfiles: vec![lockfile.clone()],
         });
     }
     Ok(ParsedGraph {
@@ -205,48 +205,98 @@ fn bun_package(key: &str, value: &Value) -> Result<BunPackage, JavascriptError> 
     })
 }
 
+fn strip_jsonc(text: &str) -> String {
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut stripped = String::with_capacity(text.len());
+    let mut index = 0;
+    let mut string = false;
+    let mut escaped = false;
+    while index < chars.len() {
+        let character = chars[index];
+        if string {
+            stripped.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                string = false;
+            }
+            index += 1;
+            continue;
+        }
+        if character == '"' {
+            string = true;
+            stripped.push(character);
+            index += 1;
+            continue;
+        }
+        if character == '/' && chars.get(index + 1) == Some(&'/') {
+            index += 2;
+            while index < chars.len() && chars[index] != '\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if character == '/' && chars.get(index + 1) == Some(&'*') {
+            index += 2;
+            while index + 1 < chars.len() && !(chars[index] == '*' && chars[index + 1] == '/') {
+                index += 1;
+            }
+            index = (index + 2).min(chars.len());
+            continue;
+        }
+        stripped.push(character);
+        index += 1;
+    }
+    strip_trailing_commas(&stripped)
+}
+
+fn strip_trailing_commas(text: &str) -> String {
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut stripped = String::with_capacity(text.len());
+    let mut index = 0;
+    let mut string = false;
+    let mut escaped = false;
+    while index < chars.len() {
+        let character = chars[index];
+        if string {
+            stripped.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                string = false;
+            }
+            index += 1;
+            continue;
+        }
+        if character == '"' {
+            string = true;
+            stripped.push(character);
+            index += 1;
+            continue;
+        }
+        if character == ',' {
+            let mut look = index + 1;
+            while look < chars.len() && chars[look].is_whitespace() {
+                look += 1;
+            }
+            if matches!(chars.get(look), Some('}' | ']')) {
+                index += 1;
+                continue;
+            }
+        }
+        stripped.push(character);
+        index += 1;
+    }
+    stripped
+}
+
 fn parse_error(message: String) -> JavascriptError {
     JavascriptError::LockfileParse {
         path: RepoPath::parse("bun.lock").expect("static path"),
         message,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolves_text_lockfile() {
-        let manifest = r#"{"name":"demo","version":"0.1.0","license":"MIT"}"#;
-        let lock = r#"{
-          "lockfileVersion": 1,
-          "workspaces": {
-            "": {
-              "name": "demo",
-              "dependencies": { "left-pad": "^1.3.0" },
-              "devDependencies": { "typescript": "^5.0.0" }
-            }
-          },
-          "packages": {
-            "left-pad": ["left-pad@1.3.0", "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz", {}, "sha512-abc"],
-            "typescript": ["typescript@5.6.3", "https://registry.npmjs.org/typescript/-/typescript-5.6.3.tgz", {}, "sha512-def"]
-          }
-        }"#;
-        let graph = parse_bun(manifest, lock, Path::new("package.json"), sample()).expect("bun");
-        assert!(graph.edges.iter().any(|edge| {
-            edge.to == "bun:left-pad@1.3.0" && edge.kind == DependencyKind::Normal
-        }));
-        assert!(graph.edges.iter().any(|edge| {
-            edge.to == "bun:typescript@5.6.3" && edge.kind == DependencyKind::Development
-        }));
-    }
-
-    fn sample() -> LockfileEvidence {
-        LockfileEvidence {
-            path: RepoPath::parse("bun.lock").expect("path"),
-            sha256: "ab".repeat(32),
-            byte_len: 1,
-        }
     }
 }

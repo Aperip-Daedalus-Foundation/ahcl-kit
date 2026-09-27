@@ -60,6 +60,7 @@ enum DirectoryOpenError {
 
 impl PackageDirectory {
     pub(crate) fn open(path: &Path) -> Result<Self, PackageFsError> {
+        let path = path.canonicalize().map_err(PackageFsError::Io)?;
         if !path.is_absolute() {
             return Err(PackageFsError::InvalidPath);
         }

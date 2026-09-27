@@ -36,9 +36,9 @@ mod unix;
 mod windows;
 
 #[cfg(unix)]
-pub(crate) use unix::{read_regular_file, validate_regular_file};
+pub(crate) use unix::{PackageDirectory, validate_regular_file};
 #[cfg(windows)]
-pub(crate) use windows::{read_regular_file, validate_regular_file};
+pub(crate) use windows::{PackageDirectory, validate_regular_file};
 
 #[derive(Debug)]
 pub(crate) enum PackageFsError {
