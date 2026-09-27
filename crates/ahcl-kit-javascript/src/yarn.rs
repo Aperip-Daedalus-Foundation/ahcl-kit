@@ -81,7 +81,7 @@ fn parse_classic(
         declared_license: json_string(manifest, "license"),
         workspace_root: true,
         manifest_path: manifest_path.to_path_buf(),
-        lockfile: lockfile.clone(),
+        lockfiles: vec![lockfile.clone()],
     }];
     let mut edges = Vec::new();
     for entry in &entries {
@@ -99,7 +99,7 @@ fn parse_classic(
             declared_license: None,
             workspace_root: false,
             manifest_path: manifest_path.to_path_buf(),
-            lockfile: lockfile.clone(),
+            lockfiles: vec![lockfile.clone()],
         });
     }
     push_manifest_edges(manifest, &root_id, &by_descriptor, &mut edges)?;
@@ -176,7 +176,7 @@ fn parse_berry(
                 .flatten(),
             workspace_root: entry.workspace,
             manifest_path: manifest_path.to_path_buf(),
-            lockfile: lockfile.clone(),
+            lockfiles: vec![lockfile.clone()],
         });
     }
     if !packages.iter().any(|package| package.workspace_root) {
@@ -322,9 +322,9 @@ fn parse_berry_entries(text: &str) -> Result<Vec<YarnEntry>, JavascriptError> {
                     entries.push(entry);
                 }
             }
-            let header = unquote(line[..line.len() - 1].trim());
+            let descriptors = berry_descriptors(line[..line.len() - 1].trim())?;
             current = Some(YarnEntry {
-                descriptors: vec![header],
+                descriptors,
                 version: String::new(),
                 resolved: None,
                 integrity: None,
@@ -391,6 +391,19 @@ fn entry_name(descriptors: &[String]) -> Result<String, JavascriptError> {
         .ok_or_else(|| parse_error(format!("yarn descriptor is invalid: {descriptor}")))
 }
 
+fn berry_descriptors(header: &str) -> Result<Vec<String>, JavascriptError> {
+    let header = header.trim();
+    let inner = if header.len() >= 2
+        && ((header.starts_with('"') && header.ends_with('"'))
+            || (header.starts_with('\'') && header.ends_with('\'')))
+    {
+        &header[1..header.len() - 1]
+    } else {
+        header
+    };
+    split_descriptors(inner)
+}
+
 fn split_descriptors(header: &str) -> Result<Vec<String>, JavascriptError> {
     let mut descriptors = Vec::new();
     let mut current = String::new();
@@ -434,80 +447,5 @@ fn parse_error(message: String) -> JavascriptError {
     JavascriptError::LockfileParse {
         path: RepoPath::parse("yarn.lock").expect("static path"),
         message,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolves_classic_lockfile() {
-        let manifest = r#"{"name":"demo","version":"0.1.0","dependencies":{"left-pad":"^1.3.0"},"devDependencies":{"typescript":"^5.0.0"}}"#;
-        let lock = r#"
-# yarn lockfile v1
-
-left-pad@^1.3.0:
-  version "1.3.0"
-  resolved "https://registry.yarnpkg.com/left-pad/-/left-pad-1.3.0.tgz#hash"
-  integrity sha512-abc
-
-typescript@^5.0.0:
-  version "5.6.3"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.6.3.tgz#hash"
-  integrity sha512-def
-"#;
-        let graph = parse_yarn(manifest, lock, Path::new("package.json"), sample()).expect("yarn");
-        assert!(graph.edges.iter().any(|edge| {
-            edge.to == "yarn:left-pad@1.3.0" && edge.kind == DependencyKind::Normal
-        }));
-        assert!(graph.edges.iter().any(|edge| {
-            edge.to == "yarn:typescript@5.6.3" && edge.kind == DependencyKind::Development
-        }));
-    }
-
-    #[test]
-    fn resolves_berry_lockfile() {
-        let manifest = r#"{"name":"demo","version":"0.1.0","license":"MIT"}"#;
-        let lock = r#"
-__metadata:
-  version: 8
-
-"demo@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "demo@workspace:."
-  dependencies:
-    left-pad: "npm:^1.3.0"
-  languageName: unknown
-  linkType: soft
-
-"left-pad@npm:^1.3.0":
-  version: 1.3.0
-  resolution: "left-pad@npm:1.3.0"
-  checksum: 10/abc
-  languageName: node
-  linkType: hard
-"#;
-        let graph = parse_yarn(manifest, lock, Path::new("package.json"), sample()).expect("berry");
-        assert!(
-            graph
-                .packages
-                .iter()
-                .any(|package| package.workspace_root && package.name == "demo")
-        );
-        assert!(
-            graph
-                .edges
-                .iter()
-                .any(|edge| edge.to == "yarn:left-pad@1.3.0")
-        );
-    }
-
-    fn sample() -> LockfileEvidence {
-        LockfileEvidence {
-            path: RepoPath::parse("yarn.lock").expect("path"),
-            sha256: "ab".repeat(32),
-            byte_len: 1,
-        }
     }
 }

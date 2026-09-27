@@ -80,7 +80,7 @@ impl PackageDirectory {
         let mut chain = vec![root];
         for component in components {
             let parent = chain.last().ok_or(PackageFsError::InvalidPath)?;
-            let child = open_directory_path(&append_component(&parent.final_path, &component))
+            let child = open_child_directory(&parent.final_path, &component)
                 .map_err(map_directory_error)?;
             chain.push(child);
         }
@@ -133,13 +133,12 @@ impl PackageDirectory {
         let mut directories = Vec::new();
         for component in parents {
             let parent = directories.last().unwrap_or(base);
-            let directory = open_directory_path(&append_component(&parent.final_path, component))
-                .map_err(map_directory_error)?;
+            let directory =
+                open_child_directory(&parent.final_path, component).map_err(map_directory_error)?;
             directories.push(directory);
         }
         let parent = directories.last().unwrap_or(base);
-        let Some((file, advertised_len)) =
-            open_regular_file_path(&append_component(&parent.final_path, final_name))?
+        let Some((file, advertised_len)) = open_contained_file(&parent.final_path, final_name)?
         else {
             return Ok(None);
         };
@@ -152,9 +151,7 @@ pub(crate) fn read_regular_file(path: &Path) -> Result<Vec<u8>, PackageFsError> 
     let name = path.file_name().ok_or(PackageFsError::InvalidPath)?;
     let directory = PackageDirectory::open(parent)?;
     let base = directory.chain.last().ok_or(PackageFsError::InvalidPath)?;
-    let Some((file, advertised_len)) =
-        open_regular_file_path(&append_component(&base.final_path, name))?
-    else {
+    let Some((file, advertised_len)) = open_contained_file(&base.final_path, name)? else {
         return Err(PackageFsError::InvalidPath);
     };
     read_file_with_limit(file, advertised_len, u64::MAX)
@@ -168,12 +165,12 @@ pub(crate) fn validate_regular_file(root: &Path, relative: &Path) -> Result<(), 
     let mut directories = Vec::new();
     for component in parents {
         let parent = directories.last().unwrap_or(base);
-        let directory = open_directory_path(&append_component(&parent.final_path, component))
-            .map_err(map_directory_error)?;
+        let directory =
+            open_child_directory(&parent.final_path, component).map_err(map_directory_error)?;
         directories.push(directory);
     }
     let parent = directories.last().unwrap_or(base);
-    open_regular_file_path(&append_component(&parent.final_path, final_name))?
+    open_contained_file(&parent.final_path, final_name)?
         .map(|_| ())
         .ok_or(PackageFsError::InvalidPath)
 }
@@ -233,6 +230,45 @@ fn volume_root_for_prefix(prefix: Prefix<'_>) -> Result<PathBuf, PackageFsError>
     Ok(PathBuf::from(OsString::from_wide(&wide)))
 }
 
+fn open_child_directory(
+    parent_final: &Path,
+    component: &OsStr,
+) -> Result<DirectoryHandle, DirectoryOpenError> {
+    let expected = append_component(parent_final, component);
+    let directory = open_directory_path(&expected)?;
+    if !windows_path_eq(&directory.final_path, &expected) {
+        return Err(DirectoryOpenError::Reparse);
+    }
+    Ok(directory)
+}
+
+fn open_contained_file(
+    parent_final: &Path,
+    name: &OsStr,
+) -> Result<Option<(File, u64)>, PackageFsError> {
+    let expected = append_component(parent_final, name);
+    let Some((file, advertised_len)) = open_regular_file_path(&expected)? else {
+        return Ok(None);
+    };
+    let opened = final_path(file.as_raw_handle()).map_err(PackageFsError::Io)?;
+    if !windows_path_eq(&opened, &expected) {
+        return Err(PackageFsError::LinkOrReparsePoint);
+    }
+    Ok(Some((file, advertised_len)))
+}
+
+fn windows_path_eq(opened: &Path, expected: &Path) -> bool {
+    fn normalize(path: &Path) -> String {
+        let text = path.to_string_lossy().replace('/', "\\");
+        let text = text
+            .strip_prefix("\\\\?\\")
+            .unwrap_or(&text)
+            .trim_end_matches('\\');
+        text.to_ascii_lowercase()
+    }
+    normalize(opened) == normalize(expected)
+}
+
 fn open_directory_path(path: &Path) -> Result<DirectoryHandle, DirectoryOpenError> {
     let handle = open_handle(path, DIRECTORY_ACCESS).map_err(classify_directory_error)?;
     let attributes = query_attributes(&handle).map_err(DirectoryOpenError::Io)?;
@@ -242,7 +278,7 @@ fn open_directory_path(path: &Path) -> Result<DirectoryHandle, DirectoryOpenErro
     if attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
         return Err(DirectoryOpenError::NotDirectory);
     }
-    let final_path = final_path(&handle).map_err(DirectoryOpenError::Io)?;
+    let final_path = final_path(handle.as_raw_handle()).map_err(DirectoryOpenError::Io)?;
     Ok(DirectoryHandle {
         _handle: handle,
         final_path,
@@ -315,11 +351,11 @@ fn query_attributes(handle: &OwnedHandle) -> io::Result<u32> {
     }
 }
 
-fn final_path(handle: &OwnedHandle) -> io::Result<PathBuf> {
+fn final_path(handle: windows_sys::Win32::Foundation::HANDLE) -> io::Result<PathBuf> {
     // SAFETY: a zero-length query with a null buffer requests the required UTF-16 size.
     let required = unsafe {
         GetFinalPathNameByHandleW(
-            handle.as_raw_handle(),
+            handle,
             ptr::null_mut(),
             0,
             FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,
@@ -337,7 +373,7 @@ fn final_path(handle: &OwnedHandle) -> io::Result<PathBuf> {
     // SAFETY: `buffer` is writable for `buffer_len` UTF-16 units and the handle remains live.
     let written = unsafe {
         GetFinalPathNameByHandleW(
-            handle.as_raw_handle(),
+            handle,
             buffer.as_mut_ptr(),
             buffer_len,
             FILE_NAME_NORMALIZED | VOLUME_NAME_DOS,

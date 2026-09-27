@@ -38,7 +38,6 @@ use ahcl_kit_config::{
 use ahcl_kit_core::{
     AdapterRequest, EcosystemAdapter, LockfileEvidence, ProjectRoot, RepoPath, ResolvedGraph,
 };
-use std::path::PathBuf;
 
 pub struct JavascriptResolveRequest {
     project_root: ProjectRoot,
@@ -124,20 +123,14 @@ fn read_manifest(
     request: &JavascriptResolveRequest,
     manifest: &RepoPath,
 ) -> Result<String, JavascriptError> {
-    platform_fs::validate_regular_file(request.project_root().as_path(), manifest.as_path())
-        .map_err(|_| JavascriptError::ManifestInvalid {
-            manifest: manifest.clone(),
-        })?;
-    let path = request.project_root().resolve(manifest);
-    let bytes =
-        platform_fs::read_regular_file(&path).map_err(|_| JavascriptError::ManifestInvalid {
-            manifest: manifest.clone(),
-        })?;
-    if bytes.len() as u64 > MAX_LOCKFILE_BYTES {
-        return Err(JavascriptError::LockfileTooLarge {
+    let bytes = read_bounded(request, manifest).map_err(|error| match error {
+        platform_fs::PackageFsError::FileTooLarge(_) => JavascriptError::LockfileTooLarge {
             path: manifest.clone(),
-        });
-    }
+        },
+        _ => JavascriptError::ManifestInvalid {
+            manifest: manifest.clone(),
+        },
+    })?;
     String::from_utf8(bytes).map_err(|_| JavascriptError::LockfileParse {
         path: manifest.clone(),
         message: "manifest is not UTF-8".to_owned(),
@@ -163,7 +156,7 @@ fn parse_one(
         }
     }
     let lock_path = sibling(manifest, file_name)?;
-    let bytes = read_lockfile(request, &lock_path)?.1;
+    let bytes = read_lockfile(request, &lock_path)?;
     let text = String::from_utf8(bytes.clone()).map_err(|_| JavascriptError::LockfileParse {
         path: lock_path.clone(),
         message: "lockfile is not UTF-8".to_owned(),
@@ -269,22 +262,25 @@ fn lockfile_exists(
 fn read_lockfile(
     request: &JavascriptResolveRequest,
     lock_path: &RepoPath,
-) -> Result<(PathBuf, Vec<u8>), JavascriptError> {
-    platform_fs::validate_regular_file(request.project_root().as_path(), lock_path.as_path())
-        .map_err(|_| JavascriptError::LockfileRead {
-            path: request.project_root().resolve(lock_path),
-        })?;
-    let absolute = request.project_root().resolve(lock_path);
-    let bytes =
-        platform_fs::read_regular_file(&absolute).map_err(|_| JavascriptError::LockfileRead {
-            path: absolute.clone(),
-        })?;
-    if bytes.len() as u64 > MAX_LOCKFILE_BYTES {
-        return Err(JavascriptError::LockfileTooLarge {
+) -> Result<Vec<u8>, JavascriptError> {
+    read_bounded(request, lock_path).map_err(|error| match error {
+        platform_fs::PackageFsError::FileTooLarge(_) => JavascriptError::LockfileTooLarge {
             path: lock_path.clone(),
-        });
-    }
-    Ok((absolute, bytes))
+        },
+        _ => JavascriptError::LockfileRead {
+            path: request.project_root().resolve(lock_path),
+        },
+    })
+}
+
+fn read_bounded(
+    request: &JavascriptResolveRequest,
+    relative: &RepoPath,
+) -> Result<Vec<u8>, platform_fs::PackageFsError> {
+    let directory = platform_fs::PackageDirectory::open(request.project_root().as_path())?;
+    directory
+        .read_bounded_file(relative.as_path(), MAX_LOCKFILE_BYTES)?
+        .ok_or(platform_fs::PackageFsError::InvalidPath)
 }
 
 pub(crate) fn sibling(manifest: &RepoPath, file_name: &str) -> Result<RepoPath, JavascriptError> {

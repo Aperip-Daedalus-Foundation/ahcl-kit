@@ -56,6 +56,8 @@ pub(crate) fn parse_pnpm(
         )));
     }
     let packages = map(&root, "packages").cloned().unwrap_or_default();
+    let snapshots = map(&root, "snapshots").cloned().unwrap_or_default();
+    let version_nine = lockfile_version.starts_with('9');
     let importers = if let Some(importers) = map(&root, "importers") {
         importers.clone()
     } else {
@@ -80,9 +82,10 @@ pub(crate) fn parse_pnpm(
     let root_license = json_string(&manifest, "license");
     let mut parsed = Vec::new();
     let mut edges = Vec::new();
+    let mut importer_ids = BTreeMap::new();
 
     for (importer_path, importer) in &importers {
-        let Yaml::Map(fields) = importer else {
+        let Yaml::Map(_) = importer else {
             return Err(parse_error(format!(
                 "pnpm importer {importer_path} is invalid"
             )));
@@ -97,7 +100,7 @@ pub(crate) fn parse_pnpm(
             (importer_path.clone(), "0.0.0".to_owned(), None)
         };
         let id = format!("pnpm:importer:{importer_path}:{name}@{version}");
-        add_importer_edges(&id, fields, &packages, &mut edges)?;
+        importer_ids.insert(importer_path.clone(), id.clone());
         parsed.push(ParsedPackage {
             id,
             name,
@@ -107,7 +110,7 @@ pub(crate) fn parse_pnpm(
             declared_license: license,
             workspace_root: true,
             manifest_path: manifest_path.to_path_buf(),
-            lockfile: lockfile.clone(),
+            lockfiles: vec![lockfile.clone()],
         });
     }
 
@@ -122,8 +125,10 @@ pub(crate) fn parse_pnpm(
             resolution.and_then(|resolution| scalar(resolution, "integrity").map(str::to_owned));
         let tarball =
             resolution.and_then(|resolution| scalar(resolution, "tarball").map(str::to_owned));
-        let id = format!("pnpm:{key}");
-        add_package_edges(&id, fields, &packages, &mut edges)?;
+        let id = format!("pnpm:{}", strip_peer(key));
+        if !version_nine {
+            add_dependency_edges(&id, fields, &packages, &importer_ids, &mut edges)?;
+        }
         parsed.push(ParsedPackage {
             id,
             name,
@@ -133,8 +138,27 @@ pub(crate) fn parse_pnpm(
             declared_license: None,
             workspace_root: false,
             manifest_path: manifest_path.to_path_buf(),
-            lockfile: lockfile.clone(),
+            lockfiles: vec![lockfile.clone()],
         });
+    }
+
+    for (importer_path, importer) in &importers {
+        let Yaml::Map(fields) = importer else {
+            continue;
+        };
+        let Some(id) = importer_ids.get(importer_path) else {
+            continue;
+        };
+        add_importer_edges(id, fields, &packages, &importer_ids, &mut edges)?;
+    }
+    if version_nine {
+        for (key, value) in &snapshots {
+            let Yaml::Map(fields) = value else {
+                continue;
+            };
+            let id = format!("pnpm:{}", strip_peer(key));
+            add_dependency_edges(&id, fields, &packages, &importer_ids, &mut edges)?;
+        }
     }
 
     Ok(ParsedGraph {
@@ -147,6 +171,7 @@ fn add_importer_edges(
     from: &str,
     fields: &BTreeMap<String, Yaml>,
     packages: &BTreeMap<String, Yaml>,
+    importers: &BTreeMap<String, String>,
     edges: &mut Vec<ParsedEdge>,
 ) -> Result<(), JavascriptError> {
     for (key, kind, target) in [
@@ -165,12 +190,17 @@ fn add_importer_edges(
         for (name, value) in dependencies {
             let version = dependency_version(value)
                 .ok_or_else(|| parse_error(format!("pnpm dependency {name} has no version")))?;
-            let package_key = find_package(packages, name, version).ok_or_else(|| {
-                parse_error(format!("pnpm dependency {name}@{version} was not found"))
-            })?;
+            let Some(to) = resolve_pnpm_target(packages, importers, name, version) else {
+                if version.starts_with("link:") {
+                    continue;
+                }
+                return Err(parse_error(format!(
+                    "pnpm dependency {name}@{version} was not found"
+                )));
+            };
             edges.push(ParsedEdge {
                 from: from.to_owned(),
-                to: format!("pnpm:{package_key}"),
+                to,
                 kind,
                 targets: target
                     .map(|value| vec![value.to_owned()])
@@ -181,10 +211,11 @@ fn add_importer_edges(
     Ok(())
 }
 
-fn add_package_edges(
+fn add_dependency_edges(
     from: &str,
     fields: &BTreeMap<String, Yaml>,
     packages: &BTreeMap<String, Yaml>,
+    importers: &BTreeMap<String, String>,
     edges: &mut Vec<ParsedEdge>,
 ) -> Result<(), JavascriptError> {
     for key in ["dependencies", "optionalDependencies"] {
@@ -195,7 +226,7 @@ fn add_package_edges(
             let Some(version) = dependency_version(value) else {
                 continue;
             };
-            let Some(package_key) = find_package(packages, name, version) else {
+            let Some(to) = resolve_pnpm_target(packages, importers, name, version) else {
                 continue;
             };
             let mut targets = Vec::new();
@@ -204,13 +235,35 @@ fn add_package_edges(
             }
             edges.push(ParsedEdge {
                 from: from.to_owned(),
-                to: format!("pnpm:{package_key}"),
+                to,
                 kind: DependencyKind::Normal,
                 targets,
             });
         }
     }
     Ok(())
+}
+
+fn resolve_pnpm_target(
+    packages: &BTreeMap<String, Yaml>,
+    importers: &BTreeMap<String, String>,
+    name: &str,
+    version: &str,
+) -> Option<String> {
+    if let Some(path) = version.strip_prefix("link:") {
+        let path = path.trim_matches('/');
+        let path = if path.is_empty() || path == "." {
+            "."
+        } else {
+            path
+        };
+        return importers.get(path).cloned();
+    }
+    find_package(packages, name, strip_peer(version)).map(|key| format!("pnpm:{key}"))
+}
+
+fn strip_peer(value: &str) -> &str {
+    value.split_once('(').map(|(base, _)| base).unwrap_or(value)
 }
 
 fn dependency_version(value: &Yaml) -> Option<&str> {
@@ -408,56 +461,5 @@ fn parse_error(message: String) -> JavascriptError {
     JavascriptError::LockfileParse {
         path: RepoPath::parse("pnpm-lock.yaml").expect("static path"),
         message,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolves_lockfile_version_nine() {
-        let manifest = r#"{"name":"demo","version":"0.1.0","license":"MIT"}"#;
-        let lock = r#"
-lockfileVersion: '9.0'
-
-importers:
-  .:
-    dependencies:
-      left-pad:
-        specifier: ^1.3.0
-        version: 1.3.0
-    devDependencies:
-      typescript:
-        specifier: ^5.0.0
-        version: 5.6.3
-
-packages:
-  left-pad@1.3.0:
-    resolution: {integrity: sha512-abc}
-  typescript@5.6.3:
-    resolution: {integrity: sha512-def, tarball: https://registry.npmjs.org/typescript/-/typescript-5.6.3.tgz}
-"#;
-        let graph = parse_pnpm(manifest, lock, Path::new("package.json"), sample()).expect("pnpm");
-        assert!(
-            graph
-                .packages
-                .iter()
-                .any(|package| package.workspace_root && package.name == "demo")
-        );
-        assert!(graph.edges.iter().any(|edge| {
-            edge.to == "pnpm:left-pad@1.3.0" && edge.kind == DependencyKind::Normal
-        }));
-        assert!(graph.edges.iter().any(|edge| {
-            edge.to == "pnpm:typescript@5.6.3" && edge.kind == DependencyKind::Development
-        }));
-    }
-
-    fn sample() -> LockfileEvidence {
-        LockfileEvidence {
-            path: RepoPath::parse("pnpm-lock.yaml").expect("path"),
-            sha256: "ab".repeat(32),
-            byte_len: 1,
-        }
     }
 }

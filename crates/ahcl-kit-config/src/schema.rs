@@ -67,20 +67,24 @@ pub enum CargoLockMode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CargoRuleClassification {
+pub enum PackageRuleClassification {
     FirstParty,
     ThirdParty,
     Exclude,
 }
 
+pub type CargoRuleClassification = PackageRuleClassification;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CargoRule {
+pub struct PackageRule {
     package: GlobPattern,
     source: Option<GlobPattern>,
-    classification: CargoRuleClassification,
+    classification: PackageRuleClassification,
 }
 
-impl CargoRule {
+pub type CargoRule = PackageRule;
+
+impl PackageRule {
     pub fn package(&self) -> &str {
         self.package.as_str()
     }
@@ -89,7 +93,7 @@ impl CargoRule {
         self.source.as_ref().map(GlobPattern::as_str)
     }
 
-    pub fn classification(&self) -> CargoRuleClassification {
+    pub fn classification(&self) -> PackageRuleClassification {
         self.classification
     }
 
@@ -514,7 +518,7 @@ pub struct EffectiveConfig {
     license: LicenseSettings,
     generation: GenerationSettings,
     rust: RustSettings,
-    javascript: crate::javascript::JavascriptSettings,
+    javascript: JavascriptSettings,
     limits: ConfigLimits,
 }
 
@@ -609,7 +613,7 @@ impl EffectiveConfig {
         let rust = RustSettings {
             cargo: resolve_cargo(ast)?,
         };
-        let javascript = crate::javascript::resolve_javascript(ast)?;
+        let javascript = resolve_javascript(ast)?;
 
         Ok(Self {
             schema: LATEST_SCHEMA,
@@ -656,7 +660,7 @@ impl EffectiveConfig {
         &self.rust
     }
 
-    pub fn javascript(&self) -> &crate::javascript::JavascriptSettings {
+    pub fn javascript(&self) -> &JavascriptSettings {
         &self.javascript
     }
 
@@ -1064,7 +1068,7 @@ fn resolve_rule(
     resolve_package_rule("rust.cargo.rules", fields)
 }
 
-pub(crate) fn resolve_package_rule(
+fn resolve_package_rule(
     prefix: &str,
     fields: std::collections::BTreeMap<String, ScalarValue>,
 ) -> Result<CargoRule, ConfigError> {
@@ -1101,7 +1105,7 @@ pub(crate) fn resolve_package_rule(
         }
         None => return invalid(format!("{prefix}.classification"), "is required".to_owned()),
     };
-    Ok(CargoRule {
+    Ok(PackageRule {
         package,
         source,
         classification,
@@ -1172,7 +1176,7 @@ fn optional_boolean(
     }
 }
 
-pub(crate) fn optional_string_list(
+fn optional_string_list(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1195,7 +1199,7 @@ pub(crate) fn optional_string_list(
     }
 }
 
-pub(crate) fn optional_object_list(
+fn optional_object_list(
     ast: &DocumentAst,
     section: Option<&str>,
     key: &str,
@@ -1235,7 +1239,7 @@ fn dynamic_section(section: &str, prefix: &str) -> bool {
     })
 }
 
-pub(crate) fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
+fn parse_repo_path(path: &str, value: &str) -> Result<RepoPath, ConfigError> {
     if value.contains('\\') {
         return invalid(
             path,
@@ -1298,7 +1302,7 @@ fn path(section: Option<&str>, key: &str) -> String {
     section.map_or_else(|| key.to_owned(), |section| format!("{section}.{key}"))
 }
 
-pub(crate) fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, ConfigError> {
+fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, ConfigError> {
     Err(ConfigError::InvalidValue {
         path: path.into(),
         message,
@@ -1307,4 +1311,139 @@ pub(crate) fn invalid<T>(path: impl Into<String>, message: String) -> Result<T, 
 
 fn is_separator(character: char) -> bool {
     matches!(character, '/' | '\\')
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum JsPackageManager {
+    Npm,
+    Pnpm,
+    Yarn,
+    Bun,
+}
+
+impl JsPackageManager {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Npm => "npm",
+            Self::Pnpm => "pnpm",
+            Self::Yarn => "yarn",
+            Self::Bun => "bun",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JavascriptSettings {
+    manifests: Vec<RepoPath>,
+    managers: Vec<JsPackageManager>,
+    packages: Vec<String>,
+    rules: Vec<PackageRule>,
+}
+
+impl JavascriptSettings {
+    pub fn from_manifests(manifests: &[RepoPath]) -> Self {
+        let manifests = if manifests.is_empty() {
+            vec![RepoPath::parse("package.json").expect("package.json is a repository path")]
+        } else {
+            manifests.to_vec()
+        };
+        Self {
+            manifests,
+            managers: Vec::new(),
+            packages: Vec::new(),
+            rules: Vec::new(),
+        }
+    }
+
+    pub fn manifests(&self) -> &[RepoPath] {
+        &self.manifests
+    }
+
+    pub fn managers(&self) -> &[JsPackageManager] {
+        &self.managers
+    }
+
+    pub fn packages(&self) -> &[String] {
+        &self.packages
+    }
+
+    pub fn rules(&self) -> &[PackageRule] {
+        &self.rules
+    }
+
+    pub fn classify(&self, package: &str, source: &str) -> PackageRuleClassification {
+        self.rules
+            .iter()
+            .rev()
+            .find(|rule| rule.applies(package, source))
+            .map(PackageRule::classification)
+            .unwrap_or(PackageRuleClassification::ThirdParty)
+    }
+}
+
+fn resolve_javascript(ast: &DocumentAst) -> Result<JavascriptSettings, ConfigError> {
+    let manifests = optional_string_list(ast, Some("javascript"), "manifests")?
+        .unwrap_or_else(|| vec!["package.json".to_owned()])
+        .into_iter()
+        .map(|path| parse_repo_path("javascript.manifests", &path))
+        .collect::<Result<Vec<_>, _>>()?;
+    if manifests.is_empty() {
+        return invalid(
+            "javascript.manifests",
+            "must not be empty when configured".to_owned(),
+        );
+    }
+    let mut portable_manifest_keys = BTreeSet::new();
+    for manifest in &manifests {
+        if !portable_manifest_keys.insert(manifest.as_str().to_lowercase()) {
+            return invalid(
+                "javascript.manifests",
+                format!("duplicate manifest path: {manifest}"),
+            );
+        }
+    }
+    let managers = match optional_string_list(ast, Some("javascript"), "managers")? {
+        None => Vec::new(),
+        Some(values) if values.is_empty() => {
+            return invalid(
+                "javascript.managers",
+                "must not be empty when configured".to_owned(),
+            );
+        }
+        Some(values) => values
+            .into_iter()
+            .map(|value| parse_manager(&value))
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    if managers.iter().collect::<BTreeSet<_>>().len() != managers.len() {
+        return invalid(
+            "javascript.managers",
+            "duplicate package manager".to_owned(),
+        );
+    }
+    let packages = optional_string_list(ast, Some("javascript"), "packages")?.unwrap_or_default();
+    let rules = optional_object_list(ast, Some("javascript"), "rules")?
+        .unwrap_or_default()
+        .into_iter()
+        .map(|fields| resolve_package_rule("javascript.rules", fields))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(JavascriptSettings {
+        manifests,
+        managers,
+        packages,
+        rules,
+    })
+}
+
+fn parse_manager(value: &str) -> Result<JsPackageManager, ConfigError> {
+    match value {
+        "npm" => Ok(JsPackageManager::Npm),
+        "pnpm" => Ok(JsPackageManager::Pnpm),
+        "yarn" => Ok(JsPackageManager::Yarn),
+        "bun" => Ok(JsPackageManager::Bun),
+        _ => invalid(
+            "javascript.managers",
+            format!("unsupported package manager: {value}"),
+        ),
+    }
 }

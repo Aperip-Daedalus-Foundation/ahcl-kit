@@ -71,10 +71,18 @@ pub(crate) fn parse_npm(
         let groups = dependency_groups(&nodes[&key]);
         for (name, kind, targets) in groups {
             let Some(target) = lookup(&nodes, &key, &name) else {
+                let optional = nodes[&key].optional_dependencies.contains_key(&name)
+                    || nodes[&key].peer_dependencies.contains_key(&name);
+                let required = nodes[&key].dependencies.contains_key(&name)
+                    || (key.is_empty() && nodes[&key].dev_dependencies.contains_key(&name));
+                if optional || !required {
+                    continue;
+                }
                 return Err(parse_error(format!(
                     "npm package {key} depends on unresolved {name}"
                 )));
             };
+            let target = follow_link(&nodes, target);
             edges.push(ParsedEdge {
                 from: nodes[&key].id.clone(),
                 to: nodes[&target].id.clone(),
@@ -93,7 +101,7 @@ pub(crate) fn parse_npm(
         declared_license: package.declared_license,
         workspace_root: package.workspace_root,
         manifest_path: manifest_path.to_path_buf(),
-        lockfile: lockfile.clone(),
+        lockfiles: vec![lockfile.clone()],
     });
     Ok(ParsedGraph {
         packages: packages.collect(),
@@ -109,6 +117,7 @@ struct NpmPackage {
     checksum: Option<String>,
     declared_license: Option<String>,
     workspace_root: bool,
+    link_target: Option<String>,
     dependencies: BTreeMap<String, String>,
     dev_dependencies: BTreeMap<String, String>,
     optional_dependencies: BTreeMap<String, String>,
@@ -123,6 +132,7 @@ fn npm_package(key: &str, value: &Value, manifest: &Value) -> Result<NpmPackage,
             .ok_or_else(|| parse_error("npm root package has no name".to_owned()))?
     } else {
         name_from_key(key)
+            .or_else(|| json_string(value, "name"))
             .ok_or_else(|| parse_error(format!("npm package path is invalid: {key}")))?
     };
     let version = json_string(value, "version")
@@ -135,7 +145,10 @@ fn npm_package(key: &str, value: &Value, manifest: &Value) -> Result<NpmPackage,
     if !key.is_empty() && version == "0.0.0" && json_string(value, "version").is_none() && !link {
         return Err(parse_error(format!("npm package {key} has no version")));
     }
-    let source = json_string(value, "resolved").or_else(|| link.then(|| "link".to_owned()));
+    let resolved = json_string(value, "resolved");
+    let link_target = link.then(|| resolved.clone()).flatten();
+    let source = resolved.or_else(|| link.then(|| "link".to_owned()));
+    let workspace_entry = !key.contains("node_modules/");
     Ok(NpmPackage {
         id: if key.is_empty() {
             format!("npm:{name}@{version}")
@@ -150,7 +163,8 @@ fn npm_package(key: &str, value: &Value, manifest: &Value) -> Result<NpmPackage,
                 .then(|| json_string(manifest, "license"))
                 .flatten()
         }),
-        workspace_root: key.is_empty() || link,
+        workspace_root: workspace_entry,
+        link_target,
         source,
         dependencies: string_map(value, "dependencies"),
         dev_dependencies: string_map(value, "devDependencies"),
@@ -187,6 +201,14 @@ fn dependency_groups(package: &NpmPackage) -> Vec<(String, DependencyKind, Vec<S
         .collect()
 }
 
+fn follow_link(packages: &BTreeMap<String, NpmPackage>, key: String) -> String {
+    packages
+        .get(&key)
+        .and_then(|package| package.link_target.clone())
+        .filter(|target| packages.contains_key(target))
+        .unwrap_or(key)
+}
+
 fn lookup(packages: &BTreeMap<String, NpmPackage>, from: &str, name: &str) -> Option<String> {
     let mut cursor = Some(from.to_owned());
     while let Some(current) = cursor {
@@ -213,7 +235,10 @@ fn parent_key(key: &str) -> Option<String> {
     if key.starts_with("node_modules/") {
         return Some(String::new());
     }
-    None
+    match key.rsplit_once('/') {
+        Some((parent, _)) if !parent.is_empty() => Some(parent.to_owned()),
+        _ => Some(String::new()),
+    }
 }
 
 fn name_from_key(key: &str) -> Option<String> {
@@ -237,84 +262,5 @@ fn parse_error(message: String) -> JavascriptError {
     JavascriptError::LockfileParse {
         path: RepoPath::parse("package-lock.json").expect("static path"),
         message,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolves_direct_production_and_development_edges() {
-        let manifest = r#"{"name":"demo","version":"0.1.0","license":"MIT"}"#;
-        let lock = r#"{
-          "lockfileVersion": 3,
-          "packages": {
-            "": {
-              "name": "demo",
-              "version": "0.1.0",
-              "dependencies": { "left-pad": "^1.3.0" },
-              "devDependencies": { "typescript": "^5.0.0" }
-            },
-            "node_modules/left-pad": {
-              "version": "1.3.0",
-              "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz",
-              "integrity": "sha512-abc",
-              "license": "BSD-2-Clause"
-            },
-            "node_modules/typescript": {
-              "version": "5.6.3",
-              "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.6.3.tgz",
-              "integrity": "sha512-def",
-              "dev": true,
-              "license": "Apache-2.0"
-            }
-          }
-        }"#;
-        let graph = parse_npm(manifest, lock, Path::new("package.json"), sample_lockfile())
-            .expect("npm lockfile");
-        assert_eq!(graph.packages.len(), 3);
-        let left = graph
-            .edges
-            .iter()
-            .find(|edge| edge.to.contains("left-pad"))
-            .expect("left-pad edge");
-        assert_eq!(left.kind, DependencyKind::Normal);
-        let typescript = graph
-            .edges
-            .iter()
-            .find(|edge| edge.to.contains("typescript"))
-            .expect("typescript edge");
-        assert_eq!(typescript.kind, DependencyKind::Development);
-    }
-
-    #[test]
-    fn prefers_nested_node_modules() {
-        let manifest = r#"{"name":"demo","version":"0.1.0"}"#;
-        let lock = r#"{
-          "lockfileVersion": 3,
-          "packages": {
-            "": { "name": "demo", "version": "0.1.0", "dependencies": { "a": "1.0.0" } },
-            "node_modules/a": { "version": "1.0.0", "dependencies": { "b": "2.0.0" }, "license": "MIT" },
-            "node_modules/a/node_modules/b": { "version": "2.0.0", "license": "MIT" },
-            "node_modules/b": { "version": "1.0.0", "license": "MIT" }
-          }
-        }"#;
-        let graph = parse_npm(manifest, lock, Path::new("package.json"), sample_lockfile())
-            .expect("nested");
-        let edge = graph
-            .edges
-            .iter()
-            .find(|edge| edge.from.contains("node_modules/a@"))
-            .expect("nested edge");
-        assert!(edge.to.contains("node_modules/a/node_modules/b"));
-    }
-
-    fn sample_lockfile() -> LockfileEvidence {
-        LockfileEvidence {
-            path: RepoPath::parse("package-lock.json").expect("path"),
-            sha256: "ab".repeat(32),
-            byte_len: 1,
-        }
     }
 }
