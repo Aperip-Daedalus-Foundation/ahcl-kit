@@ -32,7 +32,7 @@ use crate::{
 };
 use ahcl_kit_config::{
     CargoEvidenceKind, CargoLockMode, CargoRuleClassification, ComponentLayout, EffectiveConfig,
-    Language, ProjectIdentity,
+    JsPackageManager, Language, ProjectIdentity,
 };
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
@@ -346,6 +346,7 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
         "materials_directory": config.materials_directory().as_str(),
         "languages": config.languages().iter().map(|language| match language {
             Language::Rust => "rust",
+            Language::JavaScript => "javascript",
         }).collect::<Vec<_>>(),
         "project": {
             "name": project.name(),
@@ -407,6 +408,25 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
                     CargoLockMode::Locked => "locked",
                 },
             },
+        },
+        "javascript": {
+            "manifests": config.javascript().manifests().iter().map(|path| path.as_str()).collect::<Vec<_>>(),
+            "managers": config.javascript().managers().iter().map(|manager| match manager {
+                JsPackageManager::Npm => "npm",
+                JsPackageManager::Pnpm => "pnpm",
+                JsPackageManager::Yarn => "yarn",
+                JsPackageManager::Bun => "bun",
+            }).collect::<Vec<_>>(),
+            "packages": config.javascript().packages(),
+            "rules": config.javascript().rules().iter().map(|rule| serde_json::json!({
+                "package": rule.package(),
+                "source": rule.source(),
+                "classification": match rule.classification() {
+                    CargoRuleClassification::FirstParty => "first-party",
+                    CargoRuleClassification::ThirdParty => "third-party",
+                    CargoRuleClassification::Exclude => "exclude",
+                },
+            })).collect::<Vec<_>>(),
         },
         "limits": {
             "evidence_file_bytes": limits.evidence_file_bytes(),

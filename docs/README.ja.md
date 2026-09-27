@@ -20,8 +20,8 @@ AHCL Kit は、プロジェクト向けの AHCL マテリアルを初期化、�
 生成します。ライセンスの取得と依存関係のライセンス証拠収集は、明示的なコマンドで
 実行されます。
 
-現在のアダプターは、Cargo で管理される Rust プロジェクトのみをサポートしています。
-ほかのパッケージマネージャーは今後サポートする予定です。
+Rust アダプターは Cargo プロジェクトをサポートします。JavaScript アダプターは
+npm、pnpm、Yarn、Bun をサポートし、それぞれのロックファイルを直接読み取ります。
 
 ## インストール
 
@@ -134,6 +134,25 @@ contact = ""
 adoption-date = "2026-09-20"
 special-authorization-channel = ""
 ```
+
+```text
+[javascript]
+manifests:
+  - "package.json"
+managers:
+  - "npm"
+packages = []
+rules = []
+```
+
+`managers` は `npm`、`pnpm`、`yarn`、`bun` を受け付けます。省略した場合は、各
+マニフェストの隣にある単一のロックファイル（`package-lock.json`、
+`pnpm-lock.yaml`、`yarn.lock`、またはテキスト形式の `bun.lock`）を使います。
+npm のロックファイルはバージョン 2 または 3、pnpm はバージョン 6 または 9 です。
+Yarn classic と Yarn Berry の両方を読み取れます。バイナリの `bun.lockb` は拒否
+されます。JavaScript アダプターは依存関係のインストール、`node_modules` の走査、
+レジストリへの接続を行いません。ロックファイルが複数ある場合は `managers` を
+明示してください。
 
 `enabled`、`covered-scope`、`[rust.cargo.evidence.*]`、`[rust.cargo.component.*]`
 は任意です。証拠の `kind` は `license`、`notice`、`materials` です。コンポーネントの

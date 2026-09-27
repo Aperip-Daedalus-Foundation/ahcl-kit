@@ -578,7 +578,7 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
     for section in &ast.section_order {
         if !matches!(
             section.as_str(),
-            "project" | "license" | "generation" | "rust.cargo"
+            "project" | "license" | "generation" | "rust.cargo" | "javascript"
         ) && !dynamic_section(section, "rust.cargo.evidence.")
             && !dynamic_section(section, "rust.cargo.component.")
         {
@@ -608,6 +608,10 @@ fn validate_known_names(ast: &DocumentAst) -> Result<(), ConfigError> {
             Some("rust.cargo") => matches!(
                 assignment.key.as_str(),
                 "manifests" | "packages" | "rules" | "lock-mode"
+            ),
+            Some("javascript") => matches!(
+                assignment.key.as_str(),
+                "manifests" | "managers" | "packages" | "rules"
             ),
             Some(section) if dynamic_section(section, "rust.cargo.evidence.") => matches!(
                 assignment.key.as_str(),

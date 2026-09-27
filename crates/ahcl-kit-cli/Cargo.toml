@@ -48,6 +48,7 @@ path = "src/main.rs"
 [dependencies]
 ahcl-kit-cargo = { path = "../ahcl-kit-cargo" }
 ahcl-kit-config = { path = "../ahcl-kit-config" }
+ahcl-kit-javascript = { path = "../ahcl-kit-javascript" }
 ahcl-kit-core = { path = "../ahcl-kit-core" }
 ahcl-kit-license = { path = "../ahcl-kit-license" }
 ahcl-kit-materials = { path = "../ahcl-kit-materials" }

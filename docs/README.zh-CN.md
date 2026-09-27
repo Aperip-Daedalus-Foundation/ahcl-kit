@@ -19,7 +19,8 @@ AHCL Kit 用于为项目初始化、生成和维护 AHCL 材料。它使用项�
 `.ahclkitconfigs` 配置文件，生成确定性输出，并通过明确的命令下载许可证和收集
 依赖许可证证据。
 
-当前适配器仅支持由 Cargo 管理的 Rust 项目，其他包管理器待支持。
+Rust 适配器支持 Cargo 项目。JavaScript 适配器支持 npm、pnpm、Yarn 和 Bun，
+并直接读取对应的锁文件。
 
 ## 安装
 
@@ -128,6 +129,23 @@ contact = ""
 adoption-date = "2026-09-20"
 special-authorization-channel = ""
 ```
+
+```text
+[javascript]
+manifests:
+  - "package.json"
+managers:
+  - "npm"
+packages = []
+rules = []
+```
+
+`managers` 可取 `npm`、`pnpm`、`yarn` 和 `bun`。省略 `managers` 时，使用每个
+清单旁边唯一的锁文件：`package-lock.json`、`pnpm-lock.yaml`、`yarn.lock` 或
+文本形式的 `bun.lock`。npm 锁文件须为版本 2 或 3，pnpm 锁文件须为版本 6 或 9。
+Yarn classic 与 Yarn Berry 均可读取。二进制 `bun.lockb` 会被拒绝。JavaScript
+适配器不会安装依赖、遍历 `node_modules` 或访问注册表。存在多个锁文件时，必须
+显式设置 `managers`。
 
 `enabled`、`covered-scope`、`[rust.cargo.evidence.*]` 和
 `[rust.cargo.component.*]` 是可选项。证据 `kind` 为 `license`、`notice` 或

@@ -213,6 +213,7 @@ pub(crate) fn empty_dependencies(config: &EffectiveConfig) -> String {
             .iter()
             .map(|language| match language {
                 ahcl_kit_config::Language::Rust => "Rust",
+                ahcl_kit_config::Language::JavaScript => "JavaScript",
             })
             .collect::<Vec<_>>()
             .join(", ")

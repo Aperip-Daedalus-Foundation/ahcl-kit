@@ -1,4 +1,4 @@
-# Cargo.toml - Workspace manifest for AHCL Kit crates.
+# crates/ahcl-kit-javascript/Cargo.toml - Package manifest for the JavaScript adapter library.
 #
 # Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 #
@@ -25,33 +25,32 @@
 #
 # SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-[workspace]
-members = [
-    "crates/ahcl-kit-core",
-    "crates/ahcl-kit-config",
-    "crates/ahcl-kit-license",
-    "crates/ahcl-kit-cargo",
-    "crates/ahcl-kit-javascript",
-    "crates/ahcl-kit-materials",
-    "crates/ahcl-kit-cli",
-    "assets/packaging",
-]
-resolver = "3"
+[package]
+name = "ahcl-kit-javascript"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
 
-[workspace.package]
-version = "0.2.0"
-edition = "2024"
-rust-version = "1.85"
-authors = ["Aperip Daedalus Foundation"]
-description = "Initialize, generate, and maintain AHCL materials for projects"
-homepage = "https://ahcl.aperip.com"
-license = "AHCL-1.1"
-repository = "https://github.com/Aperip-Daedalus-Foundation/ahcl-kit"
+[lib]
+name = "ahcl_kit_javascript"
+path = "src/lib.rs"
 
-[workspace.metadata.ahcl-kit]
-product-name = "AHCL Kit"
-binary-name = "ahcl"
-publisher = "Aperip Daedalus Foundation"
-copyright = "Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved."
-identifier = "com.aperip.ahcl-kit"
-language = "neutral"
+[dependencies]
+ahcl-kit-config = { path = "../ahcl-kit-config" }
+ahcl-kit-core = { path = "../ahcl-kit-core" }
+serde_json = "=1.0.151"
+sha2 = "=0.10.9"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.4", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+] }

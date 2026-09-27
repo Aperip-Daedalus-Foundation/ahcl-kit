@@ -37,6 +37,7 @@ use ahcl_kit_core::{
     ChangePlan, Diagnostic, ProjectEntry, ProjectRoot, ProjectView, RepoPath, ResolvedGraph,
     UtcDate,
 };
+use ahcl_kit_javascript::{JavascriptAdapter, JavascriptResolveRequest};
 use ahcl_kit_license::{OfficialLicenseClient, VerifiedLicense};
 use ahcl_kit_materials::{
     DependencyMaterialGenerator, ManagedThirdPartyInventory, MaterialGenerationPlan, PlanApplier,
@@ -314,6 +315,12 @@ impl CommandRuntime for ConcreteRuntime {
         project: &ProjectRoot,
         config: &EffectiveConfig,
     ) -> Result<ResolvedGraph, RuntimeError> {
+        if adapter == AdapterKind::JAVASCRIPT {
+            let request = JavascriptResolveRequest::from_config(project.clone(), config);
+            return JavascriptAdapter::new()
+                .resolve_request(&request)
+                .map_err(|error| RuntimeError::with_source(error.code(), error));
+        }
         if adapter != AdapterKind::CARGO {
             return Err(RuntimeError::operation("cli.adapter_unsupported"));
         }
