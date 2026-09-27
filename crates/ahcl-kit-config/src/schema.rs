@@ -114,15 +114,31 @@ impl PackageRule {
 struct GlobPattern {
     raw: String,
     tokens: Vec<GlobToken>,
+    /// Package names are matched as a single string, so `/` is not a separator.
+    package_name: bool,
 }
 
 impl GlobPattern {
     fn compile(raw: String) -> Result<Self, String> {
+        Self::compile_with(raw, false)
+    }
+
+    fn compile_package_name(raw: String) -> Result<Self, String> {
+        Self::compile_with(raw, true)
+    }
+
+    fn compile_with(raw: String, package_name: bool) -> Result<Self, String> {
         let characters: Vec<_> = raw.chars().collect();
         let mut tokens = Vec::new();
         let mut index = 0;
         while index < characters.len() {
             match characters[index] {
+                '*' if package_name && characters.get(index + 1) == Some(&'*') => {
+                    if !matches!(tokens.last(), Some(GlobToken::Globstar)) {
+                        tokens.push(GlobToken::Globstar);
+                    }
+                    index += 2;
+                }
                 '*' => {
                     if !matches!(tokens.last(), Some(GlobToken::Star)) {
                         tokens.push(GlobToken::Star);
@@ -171,7 +187,11 @@ impl GlobPattern {
                 }
             }
         }
-        Ok(Self { raw, tokens })
+        Ok(Self {
+            raw,
+            tokens,
+            package_name,
+        })
     }
 
     fn as_str(&self) -> &str {
@@ -183,21 +203,24 @@ impl GlobPattern {
         let mut previous = vec![false; characters.len() + 1];
         let mut current = vec![false; characters.len() + 1];
         previous[0] = true;
+        let separators = !self.package_name;
 
         for token in &self.tokens {
             current.fill(false);
             match token {
-                GlobToken::Star => {
+                GlobToken::Star | GlobToken::Globstar => {
+                    let crosses_separators =
+                        self.package_name || matches!(token, GlobToken::Globstar);
                     current[0] = previous[0];
                     for index in 1..=characters.len() {
-                        current[index] = previous[index]
-                            || (!is_separator(characters[index - 1]) && current[index - 1]);
+                        let allowed = crosses_separators || !is_separator(characters[index - 1]);
+                        current[index] = previous[index] || (allowed && current[index - 1]);
                     }
                 }
                 token => {
                     for index in 1..=characters.len() {
-                        current[index] =
-                            previous[index - 1] && token.matches_character(characters[index - 1]);
+                        current[index] = previous[index - 1]
+                            && token.matches_character(characters[index - 1], separators);
                     }
                 }
             }
@@ -210,6 +233,7 @@ impl GlobPattern {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum GlobToken {
     Star,
+    Globstar,
     Any,
     Class {
         negative: bool,
@@ -219,15 +243,15 @@ enum GlobToken {
 }
 
 impl GlobToken {
-    fn matches_character(&self, value: char) -> bool {
+    fn matches_character(&self, value: char, separators: bool) -> bool {
+        let separator = separators && is_separator(value);
         match self {
-            Self::Any => !is_separator(value),
+            Self::Any => !separator,
             Self::Class { negative, members } => {
-                !is_separator(value)
-                    && members.iter().any(|member| member.matches(value)) != *negative
+                !separator && members.iter().any(|member| member.matches(value)) != *negative
             }
             Self::Literal(expected) => value == *expected,
-            Self::Star => false,
+            Self::Star | Self::Globstar => false,
         }
     }
 }
@@ -1082,7 +1106,12 @@ fn resolve_package_rule(
             path: format!("{prefix}.package"),
             message: "is required".to_owned(),
         })?;
-    let package = GlobPattern::compile(package).map_err(|message| ConfigError::InvalidValue {
+    let package = if prefix == "javascript.rules" {
+        GlobPattern::compile_package_name(package)
+    } else {
+        GlobPattern::compile(package)
+    }
+    .map_err(|message| ConfigError::InvalidValue {
         path: format!("{prefix}.package"),
         message,
     })?;
