@@ -55,9 +55,13 @@ pub(crate) fn parse_npm(
         .get("packages")
         .and_then(Value::as_object)
         .ok_or_else(|| parse_error("npm lockfile is missing packages".to_owned()))?;
+    let workspaces = workspace_patterns(&manifest);
     let mut nodes = BTreeMap::new();
     for (key, value) in packages {
-        nodes.insert(key.clone(), npm_package(key, value, &manifest)?);
+        nodes.insert(
+            key.clone(),
+            npm_package(key, value, &manifest, &workspaces)?,
+        );
     }
     if !nodes.contains_key("") {
         return Err(parse_error(
@@ -124,7 +128,12 @@ struct NpmPackage {
     peer_dependencies: BTreeMap<String, String>,
 }
 
-fn npm_package(key: &str, value: &Value, manifest: &Value) -> Result<NpmPackage, JavascriptError> {
+fn npm_package(
+    key: &str,
+    value: &Value,
+    manifest: &Value,
+    workspaces: &[String],
+) -> Result<NpmPackage, JavascriptError> {
     let link = value.get("link").and_then(Value::as_bool).unwrap_or(false);
     let name = if key.is_empty() {
         json_string(value, "name")
@@ -148,7 +157,7 @@ fn npm_package(key: &str, value: &Value, manifest: &Value) -> Result<NpmPackage,
     let resolved = json_string(value, "resolved");
     let link_target = link.then(|| resolved.clone()).flatten();
     let source = resolved.or_else(|| link.then(|| "link".to_owned()));
-    let workspace_entry = !key.contains("node_modules/");
+    let workspace_entry = key.is_empty() || declared_workspace(key, workspaces);
     Ok(NpmPackage {
         id: if key.is_empty() {
             format!("npm:{name}@{version}")
@@ -239,6 +248,92 @@ fn parent_key(key: &str) -> Option<String> {
         Some((parent, _)) if !parent.is_empty() => Some(parent.to_owned()),
         _ => Some(String::new()),
     }
+}
+
+fn workspace_patterns(manifest: &Value) -> Vec<String> {
+    match manifest.get("workspaces") {
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        Some(Value::Object(fields)) => fields
+            .get("packages")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+fn declared_workspace(key: &str, patterns: &[String]) -> bool {
+    !key.is_empty()
+        && !key.contains("node_modules/")
+        && patterns
+            .iter()
+            .any(|pattern| workspace_pattern_matches(pattern, key))
+}
+
+fn workspace_pattern_matches(pattern: &str, key: &str) -> bool {
+    let pattern = pattern
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    let key = key
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    match_workspace_segments(&pattern, &key)
+}
+
+fn match_workspace_segments(pattern: &[&str], value: &[&str]) -> bool {
+    if pattern.is_empty() {
+        return value.is_empty();
+    }
+    if pattern[0] == "**" {
+        return match_workspace_segments(&pattern[1..], value)
+            || (!value.is_empty() && match_workspace_segments(pattern, &value[1..]));
+    }
+    !value.is_empty()
+        && segment_matches(pattern[0], value[0])
+        && match_workspace_segments(&pattern[1..], &value[1..])
+}
+
+fn segment_matches(pattern: &str, value: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let value: Vec<char> = value.chars().collect();
+    let mut pattern_index = 0;
+    let mut value_index = 0;
+    let mut star = None;
+    let mut star_value = 0;
+    while value_index < value.len() {
+        if pattern_index < pattern.len()
+            && (pattern[pattern_index] == '?' || pattern[pattern_index] == value[value_index])
+        {
+            pattern_index += 1;
+            value_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == '*' {
+            star = Some(pattern_index);
+            star_value = value_index;
+            pattern_index += 1;
+        } else if let Some(saved) = star {
+            pattern_index = saved + 1;
+            star_value += 1;
+            value_index = star_value;
+        } else {
+            return false;
+        }
+    }
+    while pattern_index < pattern.len() && pattern[pattern_index] == '*' {
+        pattern_index += 1;
+    }
+    pattern_index == pattern.len()
 }
 
 fn name_from_key(key: &str) -> Option<String> {
