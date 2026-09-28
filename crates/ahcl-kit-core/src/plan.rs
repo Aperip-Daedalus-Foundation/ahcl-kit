@@ -151,41 +151,41 @@ impl ChangePlan {
     pub fn compare(&self, view: &dyn ProjectView) -> Result<Self, PlanError> {
         let mut compared = Self::new();
         for change in self.changes.values() {
-            let entry = view
-                .entry(change.path())
-                .map_err(|source| PlanError::View {
-                    path: change.path().clone(),
-                    source,
-                })?;
-            match change.kind() {
-                ChangeKind::Create | ChangeKind::Replace => {
-                    let desired = change.bytes().ok_or_else(|| PlanError::MissingBytes {
-                        path: change.path().clone(),
-                    })?;
-                    match entry {
-                        ProjectEntry::Absent => {
-                            compared.insert(change.clone().with_kind(ChangeKind::Create))?
-                        }
-                        ProjectEntry::File(existing) if existing == desired => {}
-                        ProjectEntry::File(_) => {
-                            compared.insert(change.clone().with_kind(ChangeKind::Replace))?
-                        }
-                        ProjectEntry::Other => {
-                            return Err(PlanError::UnsupportedEntry {
-                                path: change.path().clone(),
-                            });
-                        }
-                    }
-                }
-                ChangeKind::Remove => match entry {
-                    ProjectEntry::Absent => {}
-                    ProjectEntry::File(_) | ProjectEntry::Other => {
-                        compared.insert(change.clone())?
-                    }
-                },
-            }
+            compared.classify_change(change, view)?;
         }
         Ok(compared)
+    }
+
+    fn classify_change(
+        &mut self,
+        change: &Change,
+        view: &dyn ProjectView,
+    ) -> Result<(), PlanError> {
+        let entry = observed_entry(view, change.path())?;
+        // Writes and removals stay on separate paths: equal bytes suppress a
+        // write, while any present entry still requires an explicit remove.
+        match change.kind() {
+            ChangeKind::Create | ChangeKind::Replace => self.compare_write(change, entry),
+            ChangeKind::Remove => self.compare_remove(change, entry),
+        }
+    }
+
+    fn compare_write(&mut self, change: &Change, entry: ProjectEntry) -> Result<(), PlanError> {
+        let desired = change.bytes().ok_or_else(|| PlanError::MissingBytes {
+            path: change.path().clone(),
+        })?;
+        let Some(kind) = write_kind(entry, desired, change.path())? else {
+            return Ok(());
+        };
+        self.insert(change.clone().with_kind(kind))
+    }
+
+    fn compare_remove(&mut self, change: &Change, entry: ProjectEntry) -> Result<(), PlanError> {
+        if remove_still_required(entry) {
+            self.insert(change.clone())
+        } else {
+            Ok(())
+        }
     }
 
     fn insert(&mut self, change: Change) -> Result<(), PlanError> {
@@ -197,6 +197,33 @@ impl ChangePlan {
         self.portable_paths.insert(portable_key, path.clone());
         self.changes.insert(path, change);
         Ok(())
+    }
+}
+
+fn observed_entry(view: &dyn ProjectView, path: &RepoPath) -> Result<ProjectEntry, PlanError> {
+    view.entry(path).map_err(|source| PlanError::View {
+        path: path.clone(),
+        source,
+    })
+}
+
+fn write_kind(
+    entry: ProjectEntry,
+    desired: &[u8],
+    path: &RepoPath,
+) -> Result<Option<ChangeKind>, PlanError> {
+    match entry {
+        ProjectEntry::Absent => Ok(Some(ChangeKind::Create)),
+        ProjectEntry::File(existing) if existing == desired => Ok(None),
+        ProjectEntry::File(_) => Ok(Some(ChangeKind::Replace)),
+        ProjectEntry::Other => Err(PlanError::UnsupportedEntry { path: path.clone() }),
+    }
+}
+
+fn remove_still_required(entry: ProjectEntry) -> bool {
+    match entry {
+        ProjectEntry::Absent => false,
+        ProjectEntry::File(_) | ProjectEntry::Other => true,
     }
 }
 

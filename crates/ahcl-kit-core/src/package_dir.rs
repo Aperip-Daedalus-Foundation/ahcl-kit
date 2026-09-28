@@ -95,25 +95,56 @@ pub fn assign_package_directories(packages: &[PackageDirectoryInput]) -> BTreeMa
 
 fn encode_segment(value: &str) -> String {
     let invalid_tail = value.ends_with(['.', ' ']);
-    let reserved = is_windows_reserved(value);
-    let mut encoded = String::new();
-    for (index, byte) in value.as_bytes().iter().copied().enumerate() {
-        let encode_trailing =
-            invalid_tail && index + 1 == value.len() && matches!(byte, b'.' | b' ');
-        if !encode_trailing && (byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-        {
-            encoded.push(char::from(byte));
-        } else {
-            encoded.push('_');
-            encoded.push(upper_hex_digit(byte >> 4));
-            encoded.push(upper_hex_digit(byte & 0x0f));
-        }
-    }
-    if value.is_empty() || invalid_tail || reserved {
+    let encoded = encode_bytes(value, invalid_tail);
+    // Reserved, empty, and trailing-dot names are prefixed after encoding so
+    // the Windows device-name check stays outside the byte loop.
+    if value.is_empty() || invalid_tail || is_windows_reserved(value) {
         format!("_pkg_{encoded}")
     } else {
         encoded
     }
+}
+
+fn encode_bytes(value: &str, invalid_tail: bool) -> String {
+    let mut encoded = String::new();
+    for (index, byte) in value.as_bytes().iter().copied().enumerate() {
+        push_encoded_byte(
+            &mut encoded,
+            byte,
+            encode_trailing_byte(invalid_tail, index, value.len(), byte),
+        );
+    }
+    encoded
+}
+
+fn encode_trailing_byte(invalid_tail: bool, index: usize, len: usize, byte: u8) -> bool {
+    invalid_tail && index + 1 == len && is_dot_or_space(byte)
+}
+
+fn is_dot_or_space(byte: u8) -> bool {
+    matches!(byte, b'.' | b' ')
+}
+
+fn push_encoded_byte(encoded: &mut String, byte: u8, encode_trailing: bool) {
+    if encode_trailing || !is_plain_segment_byte(byte) {
+        push_hex_escape(encoded, byte);
+        return;
+    }
+    encoded.push(char::from(byte));
+}
+
+fn is_plain_segment_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || is_plain_punctuation(byte)
+}
+
+fn is_plain_punctuation(byte: u8) -> bool {
+    matches!(byte, b'.' | b'_' | b'-')
+}
+
+fn push_hex_escape(encoded: &mut String, byte: u8) {
+    encoded.push('_');
+    encoded.push(upper_hex_digit(byte >> 4));
+    encoded.push(upper_hex_digit(byte & 0x0f));
 }
 
 fn is_windows_reserved(value: &str) -> bool {

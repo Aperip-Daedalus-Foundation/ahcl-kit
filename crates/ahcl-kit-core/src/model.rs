@@ -77,27 +77,10 @@ pub struct RepoPath(String);
 impl RepoPath {
     pub fn parse(value: impl AsRef<str>) -> Result<Self, RepoPathError> {
         let value = value.as_ref();
-        if value.is_empty() {
-            return Err(RepoPathError::Empty);
-        }
-        if value.starts_with('/') || value.starts_with('\\') || has_windows_prefix(value) {
-            return Err(RepoPathError::AbsoluteOrPrefixed);
-        }
-
-        let mut parts = Vec::new();
-        for part in value.split(['/', '\\']) {
-            if part.is_empty() || part == "." {
-                return Err(RepoPathError::EmptyComponent);
-            }
-            if part == ".." {
-                return Err(RepoPathError::ParentTraversal);
-            }
-            if !is_safe_component(part) {
-                return Err(RepoPathError::ReservedComponent(part.to_owned()));
-            }
-            parts.push(part);
-        }
-
+        reject_empty_or_absolute(value)?;
+        // Component checks stay separate so parent traversal and reserved names
+        // remain explicit after the absolute-path rejection.
+        let parts = split_safe_components(value)?;
         Ok(Self(parts.join("/")))
     }
 
@@ -155,31 +138,87 @@ fn has_windows_prefix(value: &str) -> bool {
     bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
 }
 
+fn reject_empty_or_absolute(value: &str) -> Result<(), RepoPathError> {
+    if value.is_empty() {
+        return Err(RepoPathError::Empty);
+    }
+    if is_absolute_or_prefixed(value) {
+        return Err(RepoPathError::AbsoluteOrPrefixed);
+    }
+    Ok(())
+}
+
+fn is_absolute_or_prefixed(value: &str) -> bool {
+    value.starts_with('/') || value.starts_with('\\') || has_windows_prefix(value)
+}
+
+fn split_safe_components(value: &str) -> Result<Vec<&str>, RepoPathError> {
+    let mut parts = Vec::new();
+    for part in value.split(['/', '\\']) {
+        parts.push(checked_component(part)?);
+    }
+    Ok(parts)
+}
+
+fn checked_component(part: &str) -> Result<&str, RepoPathError> {
+    if part.is_empty() || part == "." {
+        return Err(RepoPathError::EmptyComponent);
+    }
+    if part == ".." {
+        return Err(RepoPathError::ParentTraversal);
+    }
+    if !is_safe_component(part) {
+        return Err(RepoPathError::ReservedComponent(part.to_owned()));
+    }
+    Ok(part)
+}
+
 fn is_safe_component(component: &str) -> bool {
-    if component.ends_with([' ', '.'])
-        || component.chars().any(|character| {
-            character.is_control() || matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*')
-        })
-    {
+    if has_unsafe_characters(component) {
         return false;
     }
+    !is_reserved_device_name(component)
+}
 
-    let base_name = component
+fn has_unsafe_characters(component: &str) -> bool {
+    component.ends_with([' ', '.']) || component.chars().any(is_forbidden_character)
+}
+
+fn is_forbidden_character(character: char) -> bool {
+    character.is_control() || is_reserved_punctuation(character)
+}
+
+fn is_reserved_punctuation(character: char) -> bool {
+    matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*')
+}
+
+fn is_reserved_device_name(component: &str) -> bool {
+    let base_name = device_base_name(component);
+    if is_console_device(&base_name) {
+        return true;
+    }
+    numbered_device_suffix(&base_name).is_some_and(is_numbered_device)
+}
+
+fn device_base_name(component: &str) -> String {
+    component
         .split_once('.')
         .map_or(component, |(name, _)| name)
-        .to_ascii_uppercase();
-    if matches!(base_name.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
-        return false;
-    }
+        .to_ascii_uppercase()
+}
 
-    let Some(number) = base_name
+fn is_console_device(base_name: &str) -> bool {
+    matches!(base_name, "CON" | "PRN" | "AUX" | "NUL")
+}
+
+fn numbered_device_suffix(base_name: &str) -> Option<&str> {
+    base_name
         .strip_prefix("COM")
         .or_else(|| base_name.strip_prefix("LPT"))
-    else {
-        return true;
-    };
+}
 
-    !matches!(
+fn is_numbered_device(number: &str) -> bool {
+    matches!(
         number,
         "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
     )
@@ -201,16 +240,46 @@ pub enum CommandId {
 
 impl CommandId {
     pub fn as_str(self) -> &'static str {
+        // Each variant is named in one of the matches below, so adding a
+        // command fails compilation instead of falling through.
         match self {
-            Self::ConfigInit => "config.init",
-            Self::ConfigValidate => "config.validate",
-            Self::ConfigShowResolved => "config.show-resolved",
-            Self::ProjectInit => "project.init",
-            Self::ProjectGenerate => "project.generate",
-            Self::ProjectCheck => "project.check",
-            Self::LicenseSync => "license.sync",
-            Self::DependencyGenerate => "dependency.generate",
-            Self::ThirdPartyGenerate => "third-party.generate",
+            Self::ConfigInit | Self::ConfigValidate | Self::ConfigShowResolved => {
+                config_command_name(self)
+            }
+            Self::ProjectInit
+            | Self::ProjectGenerate
+            | Self::ProjectCheck
+            | Self::LicenseSync
+            | Self::DependencyGenerate
+            | Self::ThirdPartyGenerate => project_or_material_name(self),
+        }
+    }
+}
+
+fn config_command_name(command: CommandId) -> &'static str {
+    match command {
+        CommandId::ConfigInit => "config.init",
+        CommandId::ConfigValidate => "config.validate",
+        CommandId::ConfigShowResolved => "config.show-resolved",
+        CommandId::ProjectInit
+        | CommandId::ProjectGenerate
+        | CommandId::ProjectCheck
+        | CommandId::LicenseSync
+        | CommandId::DependencyGenerate
+        | CommandId::ThirdPartyGenerate => project_or_material_name(command),
+    }
+}
+
+fn project_or_material_name(command: CommandId) -> &'static str {
+    match command {
+        CommandId::ProjectInit => "project.init",
+        CommandId::ProjectGenerate => "project.generate",
+        CommandId::ProjectCheck => "project.check",
+        CommandId::LicenseSync => "license.sync",
+        CommandId::DependencyGenerate => "dependency.generate",
+        CommandId::ThirdPartyGenerate => "third-party.generate",
+        CommandId::ConfigInit | CommandId::ConfigValidate | CommandId::ConfigShowResolved => {
+            config_command_name(command)
         }
     }
 }
@@ -306,11 +375,21 @@ impl fmt::Display for UtcDateError {
 impl std::error::Error for UtcDateError {}
 
 fn days_in_month(year: u16, month: u8) -> u8 {
+    // February is decided before the 31/30 table so the leap-year rule stays visible.
+    if month == 2 {
+        return if is_leap_year(year) { 29 } else { 28 };
+    }
+    days_in_long_month(month)
+}
+
+fn is_leap_year(year: u16) -> bool {
+    year % 400 == 0 || (year % 4 == 0 && year % 100 != 0)
+}
+
+fn days_in_long_month(month: u8) -> u8 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 if year % 400 == 0 || (year % 4 == 0 && year % 100 != 0) => 29,
-        2 => 28,
         _ => 0,
     }
 }
