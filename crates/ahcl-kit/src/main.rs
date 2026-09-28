@@ -26,12 +26,11 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use ahcl_kit_cli::{
-    ConcreteRuntime, InvocationError, InvocationRegistry, OutputFormat, render_json, render_text,
-    run, system_utc_date,
+    CommandReport, ConcreteRuntime, InvocationError, InvocationRegistry, OutputFormat,
+    ParsedInvocation, render_json, render_text, run, system_utc_date,
 };
 use ahcl_kit_config::{LanguageContributor, LanguageHost, LanguageInstallation};
-use ahcl_kit_core::CommandId;
-use std::ffi::OsString;
+use ahcl_kit_core::{CommandId, UtcDate};
 use std::io::Write;
 use std::process::ExitCode;
 
@@ -41,50 +40,78 @@ static CONTRIBUTORS: [&dyn LanguageContributor; 2] = [
 ];
 static HOSTS: [&dyn LanguageHost; 2] = [&ahcl_kit_cargo::HOST, &ahcl_kit_javascript::HOST];
 
+struct Startup {
+    invocation: ParsedInvocation,
+    current_date: Option<UtcDate>,
+}
+
 fn main() -> ExitCode {
-    let initial_cwd = match std::env::current_dir() {
-        Ok(path) => path,
-        Err(_) => {
-            return write_error(
-                "cli.initial_cwd",
-                "initial current directory is unavailable",
-            );
-        }
-    };
-    let argv = std::env::args_os().collect::<Vec<OsString>>();
-    let invocation = match InvocationRegistry::installed().parse_from(argv, initial_cwd) {
-        Ok(invocation) => invocation,
-        Err(InvocationError::Arguments(error)) => {
+    // The composition root only sequences invocation, the installed language
+    // registry, and output. Ecosystem behavior stays in the registered hosts.
+    match startup() {
+        Ok(startup) => render_report(&startup.invocation, startup.current_date),
+        Err(code) => code,
+    }
+}
+
+fn startup() -> Result<Startup, ExitCode> {
+    let initial_cwd = std::env::current_dir().map_err(|_| {
+        write_error(
+            "cli.initial_cwd",
+            "initial current directory is unavailable",
+        )
+    })?;
+    let invocation = InvocationRegistry::installed()
+        .parse_from(std::env::args_os(), initial_cwd)
+        .map_err(exit_for_invocation)?;
+    let current_date = invocation_date(&invocation)?;
+    Ok(Startup {
+        invocation,
+        current_date,
+    })
+}
+
+fn exit_for_invocation(error: InvocationError) -> ExitCode {
+    match error {
+        InvocationError::Arguments(error) => {
             let code = if error.use_stderr() { 1 } else { 0 };
             let _ = error.print();
-            return ExitCode::from(code);
+            ExitCode::from(code)
         }
-        Err(error) => return write_error(error.code(), &error.to_string()),
-    };
-    let current_date = if invocation.command_id() == CommandId::ProjectInit {
-        match system_utc_date() {
-            Ok(date) => Some(date),
-            Err(error) => return write_error(error.code(), &error.to_string()),
-        }
-    } else {
-        None
-    };
+        error => write_error(error.code(), &error.to_string()),
+    }
+}
+
+fn invocation_date(invocation: &ParsedInvocation) -> Result<Option<UtcDate>, ExitCode> {
+    if invocation.command_id() != CommandId::ProjectInit {
+        return Ok(None);
+    }
+    match system_utc_date() {
+        Ok(date) => Ok(Some(date)),
+        Err(error) => Err(write_error(error.code(), &error.to_string())),
+    }
+}
+
+fn render_report(invocation: &ParsedInvocation, current_date: Option<UtcDate>) -> ExitCode {
     let installed = LanguageInstallation::new(&CONTRIBUTORS, &HOSTS);
     let report = run(
-        &invocation,
+        invocation,
         &mut ConcreteRuntime::new(current_date, installed),
     );
-    let rendered = match invocation.output_format() {
-        OutputFormat::Text => render_text(&report),
-        OutputFormat::Json => match render_json(&report) {
-            Ok(rendered) => rendered,
-            Err(_) => return write_error("cli.output", "output serialization failed"),
-        },
+    let Ok(rendered) = render_output(invocation, &report) else {
+        return write_error("cli.output", "output serialization failed");
     };
     if std::io::stdout().write_all(rendered.as_bytes()).is_err() {
         return ExitCode::from(1);
     }
     ExitCode::from(report.exit_code())
+}
+
+fn render_output(invocation: &ParsedInvocation, report: &CommandReport) -> Result<String, ()> {
+    match invocation.output_format() {
+        OutputFormat::Text => Ok(render_text(report)),
+        OutputFormat::Json => render_json(report).map_err(|_| ()),
+    }
 }
 
 fn write_error(code: &str, message: &str) -> ExitCode {
