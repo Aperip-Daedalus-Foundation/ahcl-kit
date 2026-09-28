@@ -28,14 +28,17 @@
 use crate::adapter::{CargoError, CargoResolveRequest};
 use crate::collector::EvidenceBudget;
 use crate::settings::{CargoEvidence, CargoEvidenceKind};
+use crate::upstream_manifest::{
+    UpstreamManifest, exact_revision, fetch_text, immutable_url, is_allowed_repository,
+    manifest_inherits_license, manifest_license_candidate, relative_to_manifest_dir,
+    transport_error, upstream_manifest_path, validate_mapping, verify_manifest,
+};
+use crate::upstream_url::validate_source_url;
 use ahcl_kit_core::{LicenseArtifact, RepoPath};
 use cargo_metadata::Package;
-use serde_json::Value as JsonValue;
-use std::path::Path;
 use std::time::Duration;
-use url::Url;
 
-const MAX_UPSTREAM_RESPONSE_BYTES: u64 = 2_097_152;
+pub(crate) const MAX_UPSTREAM_RESPONSE_BYTES: u64 = 2_097_152;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CargoEvidenceRequest {
@@ -48,7 +51,13 @@ pub struct CargoEvidenceRequest {
 }
 
 impl CargoEvidenceRequest {
-    fn new(url: String, path: String, package: &Package, revision: &str, max_bytes: u64) -> Self {
+    pub(crate) fn new(
+        url: String,
+        path: String,
+        package: &Package,
+        revision: &str,
+        max_bytes: u64,
+    ) -> Self {
         Self {
             url,
             path,
@@ -170,145 +179,304 @@ pub(crate) fn recover(
     budget: &mut EvidenceBudget,
     existing: &[LicenseArtifact],
 ) -> Result<Vec<LicenseArtifact>, CargoError> {
-    let source = package
-        .source
-        .as_ref()
-        .map_or_else(|| "path".to_owned(), ToString::to_string);
-    let mapping = request.settings().and_then(|settings| {
-        find_mapping(
-            settings.evidence(),
-            package,
-            &source,
-            CargoEvidenceKind::License,
-        )
-    });
-    if mapping.is_none()
-        && !package
-            .repository
-            .as_deref()
-            .is_some_and(is_allowed_repository)
-    {
+    let source = package_source(package);
+    let mapping = license_mapping(request, package, &source);
+    if unmapped_repository_rejected(package, mapping.is_some()) {
         return Ok(Vec::new());
     }
     let revision = exact_revision(package, mapping)?;
     if let Some(mapping) = mapping {
         validate_mapping(package, &source, mapping, &revision)?;
     }
-    let repository = package
-        .repository
-        .as_deref()
-        .or_else(|| mapping.map(|m| m.repository()));
-    let Some(repository) = repository else {
+    recover_mapped_license(
+        RecoveryInput {
+            package,
+            request,
+            transport,
+            budget,
+            existing,
+        },
+        mapping,
+        &revision,
+    )
+}
+
+fn package_source(package: &Package) -> String {
+    package
+        .source
+        .as_ref()
+        .map_or_else(|| "path".to_owned(), ToString::to_string)
+}
+
+fn license_mapping<'a>(
+    request: &'a CargoResolveRequest,
+    package: &Package,
+    source: &str,
+) -> Option<&'a CargoEvidence> {
+    request.settings().and_then(|settings| {
+        find_mapping(
+            settings.evidence(),
+            package,
+            source,
+            CargoEvidenceKind::License,
+        )
+    })
+}
+
+fn unmapped_repository_rejected(package: &Package, mapped: bool) -> bool {
+    !mapped
+        && !package
+            .repository
+            .as_deref()
+            .is_some_and(is_allowed_repository)
+}
+
+fn recover_mapped_license(
+    input: RecoveryInput<'_>,
+    mapping: Option<&CargoEvidence>,
+    revision: &str,
+) -> Result<Vec<LicenseArtifact>, CargoError> {
+    let Some(repository) = resolved_repository(input.package, mapping) else {
         return Ok(Vec::new());
     };
+    let manifest = load_upstream_manifest(
+        input.package,
+        mapping,
+        repository,
+        revision,
+        input.transport,
+    )?;
+    let evidence_path = select_evidence_path(
+        input.package,
+        mapping,
+        &manifest,
+        input.transport,
+        repository,
+        revision,
+    )?;
+    LicenseRecovery {
+        package: input.package,
+        request: input.request,
+        transport: input.transport,
+        budget: input.budget,
+        existing: input.existing,
+        mapping,
+        repository,
+        revision,
+    }
+    .finish(&manifest, evidence_path)
+}
+
+struct RecoveryInput<'a> {
+    package: &'a Package,
+    request: &'a CargoResolveRequest,
+    transport: &'a dyn CargoEvidenceTransport,
+    budget: &'a mut EvidenceBudget,
+    existing: &'a [LicenseArtifact],
+}
+
+fn resolved_repository<'a>(
+    package: &'a Package,
+    mapping: Option<&'a CargoEvidence>,
+) -> Option<&'a str> {
+    package
+        .repository
+        .as_deref()
+        .or_else(|| mapping.map(|item| item.repository()))
+}
+
+struct LoadedManifest {
+    path: String,
+    value: toml::Value,
+}
+
+fn load_upstream_manifest(
+    package: &Package,
+    mapping: Option<&CargoEvidence>,
+    repository: &str,
+    revision: &str,
+    transport: &dyn CargoEvidenceTransport,
+) -> Result<LoadedManifest, CargoError> {
     let manifest_hint = mapping.map_or("Cargo.toml", |mapping| mapping.path().as_str());
     let manifest_path = upstream_manifest_path(package, manifest_hint)?;
-    let manifest_url = immutable_url(repository, &revision, &manifest_path)?;
+    let manifest_url = immutable_url(repository, revision, &manifest_path)?;
     let manifest_request = CargoEvidenceRequest::new(
         manifest_url,
         manifest_path.clone(),
         package,
-        &revision,
+        revision,
         MAX_UPSTREAM_RESPONSE_BYTES,
     );
     let manifest = fetch_text(transport, &manifest_request, "manifest")?;
-    let manifest_value: toml::Value = toml::from_str(&manifest).map_err(|error| {
+    let value = toml::from_str(&manifest).map_err(|error| {
         upstream_error(package, "manifest", format!("invalid Cargo.toml: {error}"))
     })?;
-    let evidence_path = if let Some(mapping) = mapping {
+    Ok(LoadedManifest {
+        path: manifest_path,
+        value,
+    })
+}
+
+fn select_evidence_path(
+    package: &Package,
+    mapping: Option<&CargoEvidence>,
+    manifest: &LoadedManifest,
+    transport: &dyn CargoEvidenceTransport,
+    repository: &str,
+    revision: &str,
+) -> Result<Option<String>, CargoError> {
+    if let Some(mapping) = mapping {
+        // A configured evidence path is accepted only after the manifest identity
+        // and license-file checks succeed.
         verify_manifest(
-            package,
-            &manifest_value,
-            &manifest_path,
+            &UpstreamManifest {
+                package,
+                manifest_path: &manifest.path,
+                transport,
+                repository,
+                revision,
+            },
+            &manifest.value,
             mapping.path().as_str(),
-            transport,
-            repository,
-            &revision,
         )?;
-        mapping.path().as_str().to_owned()
-    } else {
-        let candidate = manifest_license_candidate(
-            package,
-            &manifest_value,
-            &manifest_path,
-            transport,
-            repository,
-            &revision,
-        )?;
-        let Some(candidate) = candidate else {
+        return Ok(Some(mapping.path().as_str().to_owned()));
+    }
+    manifest_license_candidate(
+        package,
+        &manifest.value,
+        &manifest.path,
+        transport,
+        repository,
+        revision,
+    )
+}
+
+struct LicenseRecovery<'a> {
+    package: &'a Package,
+    request: &'a CargoResolveRequest,
+    transport: &'a dyn CargoEvidenceTransport,
+    budget: &'a mut EvidenceBudget,
+    existing: &'a [LicenseArtifact],
+    mapping: Option<&'a CargoEvidence>,
+    repository: &'a str,
+    revision: &'a str,
+}
+
+impl LicenseRecovery<'_> {
+    fn finish(
+        &mut self,
+        manifest: &LoadedManifest,
+        evidence_path: Option<String>,
+    ) -> Result<Vec<LicenseArtifact>, CargoError> {
+        let Some(evidence_path) = evidence_path else {
             return Ok(Vec::new());
         };
-        candidate
-    };
-    let evidence_url = mapping.map_or_else(
-        || immutable_url(repository, &revision, &evidence_path),
-        |mapping| Ok(mapping.url().to_owned()),
-    )?;
-    if let Some(mapping) = mapping {
-        validate_source_url(
-            &evidence_url,
-            mapping.repository(),
-            &revision,
-            mapping.path().as_str(),
-        )?;
+        let evidence_url = self.evidence_url(&evidence_path)?;
+        self.validate_evidence_url(&evidence_url)?;
+        let response = self.fetch_evidence(&evidence_url, &evidence_path)?;
+        self.record(manifest, &evidence_path, &evidence_url, response)
     }
-    let evidence_request = CargoEvidenceRequest::new(
-        evidence_url.clone(),
-        evidence_path.clone(),
-        package,
-        &revision,
-        MAX_UPSTREAM_RESPONSE_BYTES,
-    );
-    let response = transport
-        .fetch(&evidence_request)
-        .map_err(|error| upstream_error(package, &evidence_path, transport_error(error)))?;
-    if response.status() != 200 {
-        return Err(upstream_error(
-            package,
-            &evidence_path,
-            format!("upstream returned HTTP {}", response.status()),
-        ));
-    }
-    let package_relative = relative_to_manifest_dir(
-        &manifest_path,
-        &evidence_path,
-        manifest_inherits_license(&manifest_value),
-    )?;
-    let relative = RepoPath::parse(&package_relative).map_err(|_| {
-        upstream_error(
-            package,
-            &evidence_path,
-            "evidence path is not repository-safe".to_owned(),
-        )
-    })?;
-    let mut recovered = Vec::new();
-    push_artifact(
-        &mut recovered,
-        budget,
-        request.limits().max_aggregate_bytes(),
-        relative,
-        response.body().to_vec(),
-        package,
-    )?;
 
-    let source_note = format!(
-        "License files are sourced from the owning repository.\n<{}>\n",
-        evidence_url
-    );
-    if !existing
-        .iter()
-        .any(|artifact| artifact.relative_path.as_str() == "AHCL-EVIDENCE-SOURCE.md")
-    {
+    fn evidence_url(&self, evidence_path: &str) -> Result<String, CargoError> {
+        match self.mapping {
+            Some(mapping) => Ok(mapping.url().to_owned()),
+            None => immutable_url(self.repository, self.revision, evidence_path),
+        }
+    }
+
+    fn validate_evidence_url(&self, evidence_url: &str) -> Result<(), CargoError> {
+        let Some(mapping) = self.mapping else {
+            return Ok(());
+        };
+        validate_source_url(
+            evidence_url,
+            mapping.repository(),
+            self.revision,
+            mapping.path().as_str(),
+        )
+    }
+
+    fn fetch_evidence(
+        &self,
+        evidence_url: &str,
+        evidence_path: &str,
+    ) -> Result<CargoEvidenceResponse, CargoError> {
+        let evidence_request = CargoEvidenceRequest::new(
+            evidence_url.to_owned(),
+            evidence_path.to_owned(),
+            self.package,
+            self.revision,
+            MAX_UPSTREAM_RESPONSE_BYTES,
+        );
+        let response = self
+            .transport
+            .fetch(&evidence_request)
+            .map_err(|error| upstream_error(self.package, evidence_path, transport_error(error)))?;
+        if response.status() != 200 {
+            return Err(upstream_error(
+                self.package,
+                evidence_path,
+                format!("upstream returned HTTP {}", response.status()),
+            ));
+        }
+        Ok(response)
+    }
+
+    fn record(
+        &mut self,
+        manifest: &LoadedManifest,
+        evidence_path: &str,
+        evidence_url: &str,
+        response: CargoEvidenceResponse,
+    ) -> Result<Vec<LicenseArtifact>, CargoError> {
+        let package_relative = relative_to_manifest_dir(
+            &manifest.path,
+            evidence_path,
+            manifest_inherits_license(&manifest.value),
+        )?;
+        let relative = RepoPath::parse(&package_relative).map_err(|_| {
+            upstream_error(
+                self.package,
+                evidence_path,
+                "evidence path is not repository-safe".to_owned(),
+            )
+        })?;
+        let mut recovered = Vec::new();
         push_artifact(
             &mut recovered,
-            budget,
-            request.limits().max_aggregate_bytes(),
+            self.budget,
+            self.request.limits().max_aggregate_bytes(),
+            relative,
+            response.body().to_vec(),
+            self.package,
+        )?;
+        self.append_source_note(&mut recovered, evidence_url)?;
+        Ok(recovered)
+    }
+
+    fn append_source_note(
+        &mut self,
+        recovered: &mut Vec<LicenseArtifact>,
+        evidence_url: &str,
+    ) -> Result<(), CargoError> {
+        if self
+            .existing
+            .iter()
+            .any(|artifact| artifact.relative_path.as_str() == "AHCL-EVIDENCE-SOURCE.md")
+        {
+            return Ok(());
+        }
+        let source_note =
+            format!("License files are sourced from the owning repository.\n<{evidence_url}>\n");
+        push_artifact(
+            recovered,
+            self.budget,
+            self.request.limits().max_aggregate_bytes(),
             RepoPath::parse("AHCL-EVIDENCE-SOURCE.md").expect("static path"),
             source_note.into_bytes(),
-            package,
-        )?;
+            self.package,
+        )
     }
-    Ok(recovered)
 }
 
 pub(crate) fn supplement_materials(
@@ -317,31 +485,54 @@ pub(crate) fn supplement_materials(
     budget: &mut EvidenceBudget,
     existing: &[LicenseArtifact],
 ) -> Result<Vec<LicenseArtifact>, CargoError> {
-    let source = package
-        .source
-        .as_ref()
-        .map_or_else(|| "path".to_owned(), ToString::to_string);
-    let Some(mapping) = request.settings().and_then(|settings| {
+    let Some(mapping) = materials_mapping(package, request) else {
+        return Ok(Vec::new());
+    };
+    accept_materials_mapping(package, mapping)?;
+    if has_materials_shortcut(existing) {
+        return Ok(Vec::new());
+    }
+    materials_shortcut(package, request, budget, mapping)
+}
+
+fn materials_mapping<'a>(
+    package: &Package,
+    request: &'a CargoResolveRequest,
+) -> Option<&'a CargoEvidence> {
+    let source = package_source(package);
+    let mapping = request.settings().and_then(|settings| {
         find_mapping(
             settings.evidence(),
             package,
             &source,
             CargoEvidenceKind::Materials,
         )
-    }) else {
-        return Ok(Vec::new());
-    };
-    if mapping.kind() != CargoEvidenceKind::Materials {
-        return Ok(Vec::new());
+    })?;
+    if mapping.kind() == CargoEvidenceKind::Materials {
+        Some(mapping)
+    } else {
+        None
     }
+}
+
+fn accept_materials_mapping(package: &Package, mapping: &CargoEvidence) -> Result<(), CargoError> {
+    let source = package_source(package);
     let revision = exact_revision(package, Some(mapping))?;
-    validate_mapping(package, &source, mapping, &revision)?;
-    if existing
+    validate_mapping(package, &source, mapping, &revision)
+}
+
+fn has_materials_shortcut(existing: &[LicenseArtifact]) -> bool {
+    existing
         .iter()
         .any(|artifact| artifact.relative_path.as_str() == "AHCL-MATERIALS.url")
-    {
-        return Ok(Vec::new());
-    }
+}
+
+fn materials_shortcut(
+    package: &Package,
+    request: &CargoResolveRequest,
+    budget: &mut EvidenceBudget,
+    mapping: &CargoEvidence,
+) -> Result<Vec<LicenseArtifact>, CargoError> {
     let bytes = format!("[InternetShortcut]\nURL={}\n", mapping.url()).into_bytes();
     let mut result = Vec::new();
     push_artifact(
@@ -376,49 +567,104 @@ pub(crate) fn recover_notice(
     budget: &mut EvidenceBudget,
     existing: &[LicenseArtifact],
 ) -> Result<Vec<LicenseArtifact>, CargoError> {
-    let source = package
-        .source
-        .as_ref()
-        .map_or_else(|| "path".to_owned(), ToString::to_string);
-    let Some(mapping) = request.settings().and_then(|settings| {
+    let Some(mapping) = notice_mapping(package, request) else {
+        return Ok(Vec::new());
+    };
+    let located = locate_notice(package, mapping)?;
+    if notice_already_present(existing) {
+        return Ok(Vec::new());
+    }
+    let response = fetch_notice(package, transport, mapping, &located)?;
+    let mut recovered = Vec::new();
+    let mut write = NoticeWrite {
+        package,
+        request,
+        budget,
+        mapping,
+        located: &located,
+        existing,
+    };
+    record_notice(&mut write, response.body(), &mut recovered)?;
+    Ok(recovered)
+}
+
+fn notice_mapping<'a>(
+    package: &Package,
+    request: &'a CargoResolveRequest,
+) -> Option<&'a CargoEvidence> {
+    let source = package_source(package);
+    request.settings().and_then(|settings| {
         find_mapping(
             settings.evidence(),
             package,
             &source,
             CargoEvidenceKind::Notice,
         )
-    }) else {
-        return Ok(Vec::new());
-    };
+    })
+}
+
+struct LocatedNotice {
+    revision: String,
+    manifest_path: String,
+    evidence_url: String,
+}
+
+fn locate_notice(package: &Package, mapping: &CargoEvidence) -> Result<LocatedNotice, CargoError> {
+    let revision = prepared_notice_revision(package, mapping)?;
+    let manifest_path = notice_manifest(package, mapping, &revision)?;
+    Ok(LocatedNotice {
+        evidence_url: mapping.url().to_owned(),
+        revision,
+        manifest_path,
+    })
+}
+
+fn prepared_notice_revision(
+    package: &Package,
+    mapping: &CargoEvidence,
+) -> Result<String, CargoError> {
+    let source = package_source(package);
     let revision = exact_revision(package, Some(mapping))?;
     validate_mapping(package, &source, mapping, &revision)?;
+    Ok(revision)
+}
+
+fn notice_manifest(
+    package: &Package,
+    mapping: &CargoEvidence,
+    revision: &str,
+) -> Result<String, CargoError> {
     let repository = package
         .repository
         .as_deref()
         .unwrap_or(mapping.repository());
     let manifest_path = upstream_manifest_path(package, mapping.path().as_str())?;
-    let evidence_url = mapping.url().to_owned();
-    validate_source_url(
-        &evidence_url,
-        repository,
-        &revision,
-        mapping.path().as_str(),
-    )?;
-    if existing.iter().any(|artifact| {
+    validate_source_url(mapping.url(), repository, revision, mapping.path().as_str())?;
+    Ok(manifest_path)
+}
+
+fn notice_already_present(existing: &[LicenseArtifact]) -> bool {
+    existing.iter().any(|artifact| {
         artifact
             .relative_path
             .as_path()
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.to_ascii_uppercase().starts_with("NOTICE"))
-    }) {
-        return Ok(Vec::new());
-    }
+    })
+}
+
+fn fetch_notice(
+    package: &Package,
+    transport: &dyn CargoEvidenceTransport,
+    mapping: &CargoEvidence,
+    located: &LocatedNotice,
+) -> Result<CargoEvidenceResponse, CargoError> {
     let evidence_request = CargoEvidenceRequest::new(
-        evidence_url.clone(),
+        located.evidence_url.clone(),
         mapping.path().as_str().to_owned(),
         package,
-        &revision,
+        &located.revision,
         MAX_UPSTREAM_RESPONSE_BYTES,
     );
     let response = transport.fetch(&evidence_request).map_err(|error| {
@@ -431,649 +677,73 @@ pub(crate) fn recover_notice(
             format!("upstream returned HTTP {}", response.status()),
         ));
     }
-    let package_relative = relative_to_manifest_dir(&manifest_path, mapping.path().as_str(), true)?;
-    let relative = RepoPath::parse(&package_relative).map_err(|_| {
+    Ok(response)
+}
+
+struct NoticeWrite<'a> {
+    package: &'a Package,
+    request: &'a CargoResolveRequest,
+    budget: &'a mut EvidenceBudget,
+    mapping: &'a CargoEvidence,
+    located: &'a LocatedNotice,
+    existing: &'a [LicenseArtifact],
+}
+
+fn record_notice(
+    write: &mut NoticeWrite<'_>,
+    body: &[u8],
+    recovered: &mut Vec<LicenseArtifact>,
+) -> Result<(), CargoError> {
+    let relative = notice_repo_path(write.package, write.mapping, &write.located.manifest_path)?;
+    push_artifact(
+        recovered,
+        write.budget,
+        write.request.limits().max_aggregate_bytes(),
+        relative,
+        body.to_vec(),
+        write.package,
+    )?;
+    push_notice_source(write, recovered)
+}
+
+fn notice_repo_path(
+    package: &Package,
+    mapping: &CargoEvidence,
+    manifest_path: &str,
+) -> Result<RepoPath, CargoError> {
+    let package_relative = relative_to_manifest_dir(manifest_path, mapping.path().as_str(), true)?;
+    RepoPath::parse(&package_relative).map_err(|_| {
         upstream_error(
             package,
             mapping.path().as_str(),
             "evidence path is not repository-safe".to_owned(),
         )
-    })?;
-    let mut recovered = Vec::new();
-    push_artifact(
-        &mut recovered,
-        budget,
-        request.limits().max_aggregate_bytes(),
-        relative,
-        response.body().to_vec(),
-        package,
-    )?;
-    if !existing
+    })
+}
+
+fn push_notice_source(
+    write: &mut NoticeWrite<'_>,
+    recovered: &mut Vec<LicenseArtifact>,
+) -> Result<(), CargoError> {
+    if write
+        .existing
         .iter()
         .any(|artifact| artifact.relative_path.as_str() == "AHCL-EVIDENCE-SOURCE.md")
     {
-        let source_note = format!(
-            "License files are sourced from the owning repository.\n<{}>\n",
-            evidence_url
-        );
-        push_artifact(
-            &mut recovered,
-            budget,
-            request.limits().max_aggregate_bytes(),
-            RepoPath::parse("AHCL-EVIDENCE-SOURCE.md").expect("static path"),
-            source_note.into_bytes(),
-            package,
-        )?;
+        return Ok(());
     }
-    Ok(recovered)
-}
-
-fn exact_revision(
-    package: &Package,
-    mapping: Option<&CargoEvidence>,
-) -> Result<String, CargoError> {
-    if let Some(source) = package.source.as_ref() {
-        let source = source.to_string();
-        if let Some(fragment) = source.rsplit_once('#').map(|(_, value)| value) {
-            if is_revision(fragment) {
-                return Ok(fragment.to_owned());
-            }
-            if source.starts_with("git+") {
-                return Err(upstream_error(
-                    package,
-                    "source",
-                    "Cargo git source does not contain a full commit revision".to_owned(),
-                ));
-            }
-        }
-    }
-    let root = Path::new(package.manifest_path.as_std_path())
-        .parent()
-        .ok_or_else(|| {
-            upstream_error(package, "source", "package root is unavailable".to_owned())
-        })?;
-    let vcs = root.join(".cargo_vcs_info.json");
-    let bytes = match std::fs::read(&vcs) {
-        Ok(bytes) => bytes,
-        Err(error)
-            if error.kind() == std::io::ErrorKind::NotFound
-                && mapping.is_some_and(|mapping| is_revision(mapping.revision())) =>
-        {
-            return Ok(mapping.expect("checked").revision().to_owned());
-        }
-        Err(error) => {
-            return Err(upstream_error(
-                package,
-                &vcs.to_string_lossy(),
-                format!("exact revision unavailable: {error}"),
-            ));
-        }
-    };
-    let value: JsonValue = serde_json::from_slice(&bytes).map_err(|error| {
-        upstream_error(
-            package,
-            ".cargo_vcs_info.json",
-            format!("invalid metadata: {error}"),
-        )
-    })?;
-    let revision = value
-        .get("git")
-        .and_then(|git| git.get("sha1"))
-        .and_then(JsonValue::as_str)
-        .filter(|value| is_revision(value))
-        .or_else(|| {
-            mapping
-                .filter(|mapping| is_revision(mapping.revision()))
-                .map(|mapping| mapping.revision())
-        })
-        .ok_or_else(|| {
-            upstream_error(
-                package,
-                ".cargo_vcs_info.json",
-                "metadata has no full commit revision".to_owned(),
-            )
-        })?;
-    Ok(revision.to_owned())
-}
-
-fn upstream_manifest_path(package: &Package, evidence_path: &str) -> Result<String, CargoError> {
-    let root = Path::new(package.manifest_path.as_std_path())
-        .parent()
-        .ok_or_else(|| {
-            upstream_error(
-                package,
-                evidence_path,
-                "package root unavailable".to_owned(),
-            )
-        })?;
-    let vcs = root.join(".cargo_vcs_info.json");
-    match std::fs::read(&vcs) {
-        Ok(bytes) => {
-            let value = serde_json::from_slice::<JsonValue>(&bytes).map_err(|error| {
-                upstream_error(
-                    package,
-                    ".cargo_vcs_info.json",
-                    format!("invalid metadata: {error}"),
-                )
-            })?;
-            if let Some(path) = value.get("path_in_vcs").and_then(JsonValue::as_str) {
-                let path = path.trim_matches('/');
-                if path.is_empty() || path.split('/').any(|part| part == ".." || part.is_empty()) {
-                    return Err(upstream_error(
-                        package,
-                        ".cargo_vcs_info.json",
-                        "metadata path_in_vcs is not repository-safe".to_owned(),
-                    ));
-                }
-                return Ok(format!("{path}/Cargo.toml"));
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(upstream_error(
-                package,
-                &vcs.to_string_lossy(),
-                format!("cannot read metadata: {error}"),
-            ));
-        }
-    }
-    let path = Path::new(evidence_path);
-    let parent = path.parent().and_then(Path::to_str).unwrap_or_default();
-    if parent.is_empty() {
-        Ok("Cargo.toml".to_owned())
-    } else {
-        Ok(format!("{parent}/Cargo.toml"))
-    }
-}
-
-fn manifest_license_candidate(
-    package: &Package,
-    manifest: &toml::Value,
-    manifest_path: &str,
-    transport: &dyn CargoEvidenceTransport,
-    repository: &str,
-    revision: &str,
-) -> Result<Option<String>, CargoError> {
-    let package_table = manifest
-        .get("package")
-        .and_then(toml::Value::as_table)
-        .ok_or_else(|| {
-            upstream_error(
-                package,
-                manifest_path,
-                "manifest has no [package]".to_owned(),
-            )
-        })?;
-    let name = package_table.get("name").and_then(toml::Value::as_str);
-    let version = package_table.get("version").and_then(toml::Value::as_str);
-    if name != Some(package.name.as_str()) || version != Some(package.version.to_string().as_str())
-    {
-        return Err(upstream_error(
-            package,
-            manifest_path,
-            "upstream manifest package identity does not match Cargo metadata".to_owned(),
-        ));
-    }
-    let license = package_table.get("license");
-    let license_file = package_table
-        .get("license-file")
-        .and_then(toml::Value::as_str);
-    let inherited = license
-        .and_then(toml::Value::as_table)
-        .and_then(|table| table.get("workspace"))
-        .and_then(toml::Value::as_bool)
-        .unwrap_or(false);
-    if license.is_none() && license_file.is_none() && !inherited {
-        return Err(upstream_error(
-            package,
-            manifest_path,
-            "manifest does not establish license applicability".to_owned(),
-        ));
-    }
-    if inherited {
-        let root_request = CargoEvidenceRequest::new(
-            immutable_url(repository, revision, "Cargo.toml")?,
-            "Cargo.toml".to_owned(),
-            package,
-            revision,
-            MAX_UPSTREAM_RESPONSE_BYTES,
-        );
-        let root_manifest = fetch_text(transport, &root_request, "workspace manifest")?;
-        let root_manifest: toml::Value = toml::from_str(&root_manifest).map_err(|error| {
-            upstream_error(
-                package,
-                "Cargo.toml",
-                format!("invalid workspace Cargo.toml: {error}"),
-            )
-        })?;
-        let workspace_license = root_manifest
-            .get("workspace")
-            .and_then(toml::Value::as_table)
-            .and_then(|workspace| workspace.get("package"))
-            .and_then(toml::Value::as_table)
-            .and_then(|package| {
-                package
-                    .get("license")
-                    .or_else(|| package.get("license-file"))
-            });
-        if workspace_license.is_none() {
-            return Err(upstream_error(
-                package,
-                "Cargo.toml",
-                "workspace inheritance does not establish license applicability".to_owned(),
-            ));
-        }
-    }
-    if let Some(license_file) = license_file {
-        return Ok(Some(join_repo_path(manifest_path, license_file)?));
-    }
-    let parent = Path::new(manifest_path)
-        .parent()
-        .and_then(Path::to_str)
-        .unwrap_or_default();
-    for name in ["LICENSE", "COPYING", "COPYRIGHT"] {
-        let path = if parent.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{parent}/{name}")
-        };
-        let url = immutable_url(repository, revision, &path)?;
-        let request = CargoEvidenceRequest::new(
-            url,
-            path.clone(),
-            package,
-            revision,
-            MAX_UPSTREAM_RESPONSE_BYTES,
-        );
-        let response = transport
-            .fetch(&request)
-            .map_err(|error| upstream_error(package, &path, transport_error(error)))?;
-        if response.status() == 200 {
-            return Ok(Some(path));
-        }
-    }
-    Ok(None)
-}
-
-fn validate_mapping(
-    package: &Package,
-    source: &str,
-    mapping: &CargoEvidence,
-    revision: &str,
-) -> Result<(), CargoError> {
-    if mapping.source() != source {
-        return Err(upstream_error(
-            package,
-            mapping.path().as_str(),
-            "evidence source does not match Cargo metadata".to_owned(),
-        ));
-    }
-    if !is_revision(revision) || mapping.revision() != revision {
-        return Err(upstream_error(
-            package,
-            mapping.path().as_str(),
-            "evidence revision does not match Cargo metadata".to_owned(),
-        ));
-    }
-    let source_revision = package
-        .source
-        .as_ref()
-        .and_then(|source| {
-            source
-                .to_string()
-                .rsplit_once('#')
-                .map(|(_, value)| value.to_owned())
-        })
-        .filter(|value| is_revision(value));
-    if let Some(source_revision) = source_revision.as_deref() {
-        if source_revision != revision {
-            return Err(upstream_error(
-                package,
-                mapping.path().as_str(),
-                "evidence revision does not match Cargo source metadata".to_owned(),
-            ));
-        }
-    }
-    let repository = package
-        .repository
-        .as_deref()
-        .unwrap_or(mapping.repository());
-    if normalize_repository(repository) != normalize_repository(mapping.repository()) {
-        return Err(upstream_error(
-            package,
-            mapping.path().as_str(),
-            "evidence repository does not match Cargo metadata".to_owned(),
-        ));
-    }
-    if mapping.kind() == CargoEvidenceKind::Materials {
-        validate_materials_url(
-            mapping.url(),
-            mapping.repository(),
-            revision,
-            mapping.path().as_str(),
-        )?;
-    } else {
-        validate_source_url(
-            mapping.url(),
-            mapping.repository(),
-            revision,
-            mapping.path().as_str(),
-        )?;
-    }
-    Ok(())
-}
-
-fn validate_source_url(
-    url: &str,
-    repository: &str,
-    revision: &str,
-    path: &str,
-) -> Result<(), CargoError> {
-    let Some((repository_host, repository_parts)) = repository_identity(repository) else {
-        return Err(upstream_url_error(
-            url,
-            "repository must be an HTTPS GitHub or GitLab URL",
-        ));
-    };
-    let Some(parsed) = immutable_source_url(url) else {
-        return Err(upstream_url_error(
-            url,
-            "evidence URL must be an immutable HTTPS provider URL",
-        ));
-    };
-    let segments = parsed
-        .path_segments()
-        .map(|segments| segments.collect::<Vec<_>>())
-        .unwrap_or_default();
-    let path_segments = path.split('/').collect::<Vec<_>>();
-    let revision_matches = |value: &str| value.eq_ignore_ascii_case(revision);
-    let path_matches = |tail: &[&str]| tail == path_segments.as_slice();
-    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
-    let matches = if repository_host == "github.com" {
-        let [owner, repo] = repository_parts.as_slice() else {
-            return Err(upstream_url_error(
-                url,
-                "repository path must be owner/repository",
-            ));
-        };
-        (host == "raw.githubusercontent.com"
-            && segments.len() >= 3
-            && segments[0].eq_ignore_ascii_case(owner)
-            && segments[1].eq_ignore_ascii_case(repo)
-            && revision_matches(segments[2])
-            && path_matches(&segments[3..]))
-            || (host == "github.com"
-                && segments.len() >= 5
-                && segments[0].eq_ignore_ascii_case(owner)
-                && segments[1].eq_ignore_ascii_case(repo)
-                && matches!(segments[2], "blob" | "raw")
-                && revision_matches(segments[3])
-                && path_matches(&segments[4..]))
-    } else {
-        let repository_len = repository_parts.len();
-        host == "gitlab.com"
-            && repository_len >= 2
-            && segments.len() >= repository_len + 3
-            && segments[..repository_len]
-                .iter()
-                .zip(&repository_parts)
-                .all(|(actual, expected)| actual.eq_ignore_ascii_case(expected))
-            && segments[repository_len] == "-"
-            && segments[repository_len + 1] == "raw"
-            && revision_matches(segments[repository_len + 2])
-            && path_matches(&segments[repository_len + 3..])
-    };
-    if !matches {
-        return Err(upstream_url_error(
-            url,
-            "evidence URL does not match the configured repository, revision, and path",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_materials_url(
-    url: &str,
-    repository: &str,
-    revision: &str,
-    path: &str,
-) -> Result<(), CargoError> {
-    let Some((repository_host, repository_parts)) = repository_identity(repository) else {
-        return Err(upstream_url_error(
-            url,
-            "repository must be an HTTPS GitHub or GitLab URL",
-        ));
-    };
-    let Some(parsed) = immutable_source_url(url) else {
-        return Err(upstream_url_error(
-            url,
-            "materials URL must be an immutable HTTPS provider URL",
-        ));
-    };
-    let segments = parsed
-        .path_segments()
-        .map(|segments| {
-            segments
-                .filter(|segment| !segment.is_empty())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let path_segments = path.split('/').collect::<Vec<_>>();
-    let revision_matches = |value: &str| value.eq_ignore_ascii_case(revision);
-    let path_matches = |tail: &[&str]| tail == path_segments.as_slice();
-    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
-    let matches = if repository_host == "github.com" {
-        let [owner, repo] = repository_parts.as_slice() else {
-            return Err(upstream_url_error(
-                url,
-                "repository path must be owner/repository",
-            ));
-        };
-        (host == "github.com"
-            && segments.len() >= 5
-            && segments[0].eq_ignore_ascii_case(owner)
-            && segments[1].eq_ignore_ascii_case(repo)
-            && matches!(segments[2], "blob" | "raw" | "tree")
-            && revision_matches(segments[3])
-            && path_matches(&segments[4..]))
-            || (host == "raw.githubusercontent.com"
-                && segments.len() >= 3
-                && segments[0].eq_ignore_ascii_case(owner)
-                && segments[1].eq_ignore_ascii_case(repo)
-                && revision_matches(segments[2])
-                && path_matches(&segments[3..]))
-    } else {
-        let repository_len = repository_parts.len();
-        host == "gitlab.com"
-            && repository_len >= 2
-            && segments.len() >= repository_len + 3
-            && segments[..repository_len]
-                .iter()
-                .zip(&repository_parts)
-                .all(|(actual, expected)| actual.eq_ignore_ascii_case(expected))
-            && segments[repository_len] == "-"
-            && matches!(segments[repository_len + 1], "raw" | "tree")
-            && revision_matches(segments[repository_len + 2])
-            && path_matches(&segments[repository_len + 3..])
-    };
-    if !matches {
-        return Err(upstream_url_error(
-            url,
-            "materials URL does not match the configured repository, revision, and path",
-        ));
-    }
-    Ok(())
-}
-
-fn repository_identity(value: &str) -> Option<(String, Vec<String>)> {
-    let parsed = Url::parse(value).ok()?;
-    if parsed.scheme() != "https"
-        || parsed.username() != ""
-        || parsed.password().is_some()
-        || parsed.port().is_some()
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-    {
-        return None;
-    }
-    let host = parsed.host_str()?.to_ascii_lowercase();
-    if !matches!(host.as_str(), "github.com" | "gitlab.com") {
-        return None;
-    }
-    let mut parts = parsed.path_segments()?.collect::<Vec<_>>();
-    if let Some(last) = parts.last_mut() {
-        if let Some(stripped) = last.strip_suffix(".git") {
-            *last = stripped;
-        }
-    }
-    if parts.len() < 2
-        || parts
-            .iter()
-            .any(|part| part.is_empty() || part.contains('%'))
-    {
-        return None;
-    }
-    Some((host, parts.into_iter().map(str::to_owned).collect()))
-}
-
-fn immutable_source_url(value: &str) -> Option<Url> {
-    let parsed = Url::parse(value).ok()?;
-    if parsed.scheme() != "https"
-        || parsed.username() != ""
-        || parsed.password().is_some()
-        || parsed.port().is_some()
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-        || parsed.path().contains('%')
-    {
-        return None;
-    }
-    Some(parsed)
-}
-
-fn upstream_url_error(url: &str, reason: &str) -> CargoError {
-    CargoError::UpstreamEvidence {
-        package: "unknown".to_owned(),
-        version: "unknown".to_owned(),
-        location: url.to_owned(),
-        reason: reason.to_owned(),
-    }
-}
-
-fn verify_manifest(
-    package: &Package,
-    manifest: &toml::Value,
-    manifest_path: &str,
-    evidence_path: &str,
-    transport: &dyn CargoEvidenceTransport,
-    repository: &str,
-    revision: &str,
-) -> Result<(), CargoError> {
-    let package_table = manifest
-        .get("package")
-        .and_then(toml::Value::as_table)
-        .ok_or_else(|| {
-            upstream_error(
-                package,
-                manifest_path,
-                "manifest has no [package]".to_owned(),
-            )
-        })?;
-    let name = package_table.get("name").and_then(toml::Value::as_str);
-    let version = package_table.get("version").and_then(toml::Value::as_str);
-    if name != Some(package.name.as_str()) || version != Some(package.version.to_string().as_str())
-    {
-        return Err(upstream_error(
-            package,
-            manifest_path,
-            "upstream manifest package identity does not match Cargo metadata".to_owned(),
-        ));
-    }
-    let license = package_table.get("license");
-    let license_file = package_table
-        .get("license-file")
-        .and_then(toml::Value::as_str);
-    let inherited = license
-        .and_then(toml::Value::as_table)
-        .and_then(|table| table.get("workspace"))
-        .and_then(toml::Value::as_bool)
-        .unwrap_or(false);
-    if license.is_none() && license_file.is_none() && !inherited {
-        return Err(upstream_error(
-            package,
-            manifest_path,
-            "manifest does not establish license applicability".to_owned(),
-        ));
-    }
-    if inherited {
-        let root_request = CargoEvidenceRequest::new(
-            immutable_url(repository, revision, "Cargo.toml")?,
-            "Cargo.toml".to_owned(),
-            package,
-            revision,
-            MAX_UPSTREAM_RESPONSE_BYTES,
-        );
-        let root_manifest = fetch_text(transport, &root_request, "workspace manifest")?;
-        let root_manifest: toml::Value = toml::from_str(&root_manifest).map_err(|error| {
-            upstream_error(
-                package,
-                "Cargo.toml",
-                format!("invalid workspace Cargo.toml: {error}"),
-            )
-        })?;
-        let workspace_license = root_manifest
-            .get("workspace")
-            .and_then(toml::Value::as_table)
-            .and_then(|workspace| workspace.get("package"))
-            .and_then(toml::Value::as_table)
-            .and_then(|package| {
-                package
-                    .get("license")
-                    .or_else(|| package.get("license-file"))
-            });
-        if workspace_license.is_none() {
-            return Err(upstream_error(
-                package,
-                "Cargo.toml",
-                "workspace inheritance does not establish license applicability".to_owned(),
-            ));
-        }
-    }
-    if let Some(license_file) = license_file {
-        let expected = join_repo_path(manifest_path, license_file)?;
-        if expected != evidence_path {
-            return Err(upstream_error(
-                package,
-                evidence_path,
-                "evidence path is not the manifest license-file".to_owned(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn fetch_text(
-    transport: &dyn CargoEvidenceTransport,
-    request: &CargoEvidenceRequest,
-    location: &str,
-) -> Result<String, CargoError> {
-    let response = transport
-        .fetch(request)
-        .map_err(|error| upstream_error_fields(request, location, transport_error(error)))?;
-    if response.status() != 200 {
-        return Err(upstream_error_fields(
-            request,
-            location,
-            format!("upstream returned HTTP {}", response.status()),
-        ));
-    }
-    String::from_utf8(response.body().to_vec()).map_err(|_| {
-        upstream_error_fields(
-            request,
-            location,
-            "upstream manifest is not UTF-8".to_owned(),
-        )
-    })
+    let source_note = format!(
+        "License files are sourced from the owning repository.\n<{}>\n",
+        write.located.evidence_url
+    );
+    push_artifact(
+        recovered,
+        write.budget,
+        write.request.limits().max_aggregate_bytes(),
+        RepoPath::parse("AHCL-EVIDENCE-SOURCE.md").expect("static path"),
+        source_note.into_bytes(),
+        write.package,
+    )
 }
 
 fn push_artifact(
@@ -1110,142 +780,7 @@ fn push_artifact(
     Ok(())
 }
 
-fn immutable_url(repository: &str, revision: &str, path: &str) -> Result<String, CargoError> {
-    let normalized = normalize_repository(repository);
-    let (host, rest) = normalized
-        .strip_prefix("https://")
-        .and_then(|value| value.split_once('/'))
-        .ok_or_else(|| CargoError::UpstreamEvidence {
-            package: "unknown".to_owned(),
-            version: "unknown".to_owned(),
-            location: repository.to_owned(),
-            reason: "repository must be an HTTPS GitHub or GitLab URL".to_owned(),
-        })?;
-    if host.eq_ignore_ascii_case("github.com") {
-        Ok(format!(
-            "https://raw.githubusercontent.com/{rest}/{revision}/{path}"
-        ))
-    } else if host.eq_ignore_ascii_case("gitlab.com") {
-        Ok(format!("https://gitlab.com/{rest}/-/raw/{revision}/{path}"))
-    } else {
-        Err(CargoError::UpstreamEvidence {
-            package: "unknown".to_owned(),
-            version: "unknown".to_owned(),
-            location: repository.to_owned(),
-            reason: "repository host is not an allowed provider".to_owned(),
-        })
-    }
-}
-
-fn relative_to_manifest_dir(
-    manifest_path: &str,
-    evidence_path: &str,
-    allow_shared_license: bool,
-) -> Result<String, CargoError> {
-    let manifest_dir = Path::new(manifest_path)
-        .parent()
-        .unwrap_or_else(|| Path::new(""));
-    let evidence = Path::new(evidence_path);
-    let relative = evidence.strip_prefix(manifest_dir).or_else(|_| {
-        if allow_shared_license
-            && matches!(
-                evidence_path,
-                "LICENSE" | "COPYING" | "NOTICE" | "COPYRIGHT"
-            )
-        {
-            Ok(Path::new(evidence_path))
-        } else {
-            Err(CargoError::UpstreamEvidence {
-                package: "unknown".to_owned(),
-                version: "unknown".to_owned(),
-                location: evidence_path.to_owned(),
-                reason: "evidence path is outside package manifest directory".to_owned(),
-            })
-        }
-    })?;
-    let value = relative.to_str().unwrap_or_default().replace('\\', "/");
-    if value.is_empty() || value.contains("..") {
-        return Err(CargoError::UpstreamEvidence {
-            package: "unknown".to_owned(),
-            version: "unknown".to_owned(),
-            location: evidence_path.to_owned(),
-            reason: "evidence path is not package-relative".to_owned(),
-        });
-    }
-    Ok(value)
-}
-
-fn manifest_inherits_license(manifest: &toml::Value) -> bool {
-    manifest
-        .get("package")
-        .and_then(toml::Value::as_table)
-        .and_then(|package| package.get("license"))
-        .and_then(toml::Value::as_table)
-        .and_then(|license| license.get("workspace"))
-        .and_then(toml::Value::as_bool)
-        .unwrap_or(false)
-}
-
-fn join_repo_path(manifest_path: &str, value: &str) -> Result<String, CargoError> {
-    let manifest = RepoPath::parse(manifest_path).map_err(|_| CargoError::UpstreamEvidence {
-        package: "unknown".to_owned(),
-        version: "unknown".to_owned(),
-        location: manifest_path.to_owned(),
-        reason: "upstream manifest path is not repository-safe".to_owned(),
-    })?;
-    let relative = RepoPath::parse(value).map_err(|_| CargoError::UpstreamEvidence {
-        package: "unknown".to_owned(),
-        version: "unknown".to_owned(),
-        location: value.to_owned(),
-        reason: "manifest license-file escapes package scope".to_owned(),
-    })?;
-    let parent = manifest
-        .as_str()
-        .rsplit_once('/')
-        .map_or("", |(parent, _)| parent);
-    let result = if parent.is_empty() {
-        relative.as_str().to_owned()
-    } else {
-        format!("{parent}/{}", relative.as_str())
-    };
-    if RepoPath::parse(&result).is_err() {
-        return Err(CargoError::UpstreamEvidence {
-            package: "unknown".to_owned(),
-            version: "unknown".to_owned(),
-            location: value.to_owned(),
-            reason: "manifest license-file escapes package scope".to_owned(),
-        });
-    }
-    Ok(result)
-}
-
-fn normalize_repository(value: &str) -> String {
-    value
-        .trim_end_matches('/')
-        .trim_end_matches(".git")
-        .to_ascii_lowercase()
-}
-
-fn is_allowed_repository(value: &str) -> bool {
-    let normalized = normalize_repository(value);
-    normalized.starts_with("https://github.com/") || normalized.starts_with("https://gitlab.com/")
-}
-
-fn is_revision(value: &str) -> bool {
-    (value.len() == 40 || value.len() == 64)
-        && value.chars().all(|character| character.is_ascii_hexdigit())
-}
-
-fn transport_error(error: CargoTransportError) -> String {
-    match error {
-        CargoTransportError::RequestFailed => "upstream request failed".to_owned(),
-        CargoTransportError::ResponseTooLarge => {
-            "upstream response exceeded the bounded limit".to_owned()
-        }
-    }
-}
-
-fn upstream_error(package: &Package, location: &str, reason: String) -> CargoError {
+pub(crate) fn upstream_error(package: &Package, location: &str, reason: String) -> CargoError {
     CargoError::UpstreamEvidence {
         package: package.name.to_string(),
         version: package.version.to_string(),
@@ -1254,7 +789,7 @@ fn upstream_error(package: &Package, location: &str, reason: String) -> CargoErr
     }
 }
 
-fn upstream_error_fields(
+pub(crate) fn upstream_error_fields(
     request: &CargoEvidenceRequest,
     location: &str,
     reason: String,

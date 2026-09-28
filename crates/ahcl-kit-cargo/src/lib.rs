@@ -35,6 +35,8 @@ mod host;
 mod limits;
 mod settings;
 mod upstream;
+mod upstream_manifest;
+mod upstream_url;
 
 pub use adapter::{CargoAdapter, CargoError, CargoResolveRequest};
 pub use ahcl_kit_core::{PackageDirectoryInput, assign_package_directories};

@@ -30,8 +30,8 @@ use crate::collector::{self, EvidenceBudget};
 use crate::upstream::{self, CargoEvidenceTransport};
 use ahcl_kit_config::PackageRuleClassification;
 use ahcl_kit_core::{
-    DependencyEdge, DependencyKind, LockfileEvidence, RepoPath, ResolvedGraph, ResolvedPackage,
-    sha256_hex,
+    DependencyEdge, DependencyKind, LicenseArtifact, LockfileEvidence, RepoPath, ResolvedGraph,
+    ResolvedPackage, sha256_hex,
 };
 use ahcl_kit_fs as platform_fs;
 use cargo_metadata::{
@@ -68,14 +68,7 @@ pub(crate) fn resolve(
         )?;
     }
 
-    for selection in request.packages() {
-        if !matched_selections.contains(selection) {
-            return Err(CargoError::PackageSelection {
-                package: selection.clone(),
-            });
-        }
-    }
-
+    ensure_selected(request, &matched_selections)?;
     let mut packages = packages.into_values().collect::<Vec<_>>();
     packages.sort_by(|left, right| left.id.cmp(&right.id));
     for package in &mut packages {
@@ -94,6 +87,20 @@ pub(crate) fn resolve(
         })
         .collect();
     Ok(ResolvedGraph { packages, edges })
+}
+
+fn ensure_selected(
+    request: &CargoResolveRequest,
+    matched_selections: &BTreeSet<String>,
+) -> Result<(), CargoError> {
+    for selection in request.packages() {
+        if !matched_selections.contains(selection) {
+            return Err(CargoError::PackageSelection {
+                package: selection.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn metadata_for(
@@ -142,26 +149,59 @@ fn merge_metadata(
         .ok_or_else(|| CargoError::MissingResolve {
             manifest: manifest.clone(),
         })?;
-    let package_by_id: HashMap<_, _> = metadata
+    let package_by_id = package_index(metadata);
+    let node_by_id = node_index(resolve);
+    let workspace_ids = workspace_index(metadata);
+    let roots = selected_roots(request, metadata, &package_by_id, matched_selections)?;
+    let reachable = walk_reachable(&node_by_id, roots, edges)?;
+    let lockfile = lockfile_evidence(request, metadata)?;
+    let mut classifications = BTreeMap::new();
+    let mut record = PackageRecord {
+        request,
+        workspace_ids: &workspace_ids,
+        lockfile: &lockfile,
+        packages,
+        budget,
+        transport,
+        classifications: &mut classifications,
+    };
+    record_reachable(&reachable, &package_by_id, &mut record)?;
+    retain_included_edges(edges, &classifications);
+    Ok(())
+}
+
+fn package_index(metadata: &Metadata) -> HashMap<String, &Package> {
+    metadata
         .packages
         .iter()
         .map(|package| (package.id.to_string(), package))
-        .collect();
-    let node_by_id: HashMap<_, _> = resolve
+        .collect()
+}
+
+fn node_index(resolve: &cargo_metadata::Resolve) -> HashMap<String, &cargo_metadata::Node> {
+    resolve
         .nodes
         .iter()
         .map(|node| (node.id.to_string(), node))
-        .collect();
-    let workspace_ids: BTreeSet<_> = metadata
+        .collect()
+}
+
+fn workspace_index(metadata: &Metadata) -> BTreeSet<String> {
+    metadata
         .workspace_members
         .iter()
         .map(ToString::to_string)
-        .collect();
-    let roots = selected_roots(request, metadata, &package_by_id, matched_selections)?;
+        .collect()
+}
+
+fn walk_reachable(
+    node_by_id: &HashMap<String, &cargo_metadata::Node>,
+    roots: Vec<String>,
+    edges: &mut BTreeMap<EdgeKey, bool>,
+) -> Result<BTreeSet<String>, CargoError> {
     let root_ids: BTreeSet<_> = roots.iter().cloned().collect();
     let mut reachable = BTreeSet::new();
     let mut queue: VecDeque<_> = roots.into_iter().collect();
-
     while let Some(package_id) = queue.pop_front() {
         if !reachable.insert(package_id.clone()) {
             continue;
@@ -171,94 +211,182 @@ fn merge_metadata(
             .ok_or_else(|| CargoError::MissingNode {
                 package_id: package_id.clone(),
             })?;
-        for dependency in &node.deps {
-            let dependency_id = dependency.pkg.to_string();
-            queue.push_back(dependency_id.clone());
-            for kind in &dependency.dep_kinds {
-                let Some(kind_key) = EdgeKind::from_metadata(kind.kind) else {
-                    continue;
-                };
+        enqueue_node_dependencies(node, &package_id, &root_ids, edges, &mut queue);
+    }
+    Ok(reachable)
+}
+
+fn enqueue_node_dependencies(
+    node: &cargo_metadata::Node,
+    package_id: &str,
+    root_ids: &BTreeSet<String>,
+    edges: &mut BTreeMap<EdgeKey, bool>,
+    queue: &mut VecDeque<String>,
+) {
+    for dependency in &node.deps {
+        let dependency_id = dependency.pkg.to_string();
+        queue.push_back(dependency_id.clone());
+        for kind in &dependency.dep_kinds {
+            if let Some(kind_key) = EdgeKind::from_metadata(kind.kind) {
                 let key = EdgeKey {
-                    from: package_id.clone(),
+                    from: package_id.to_owned(),
                     to: dependency_id.clone(),
                     kind: kind_key,
                     target: kind.target.as_ref().map(ToString::to_string),
                 };
                 let direct = edges.entry(key).or_default();
-                *direct |= root_ids.contains(&package_id);
+                *direct |= root_ids.contains(package_id);
             }
         }
     }
+}
 
-    let lockfile = lockfile_evidence(request, metadata)?;
-    let mut classifications = BTreeMap::new();
-    for package_id in &reachable {
-        let package = package_by_id
+struct PackageRecord<'a> {
+    request: &'a CargoResolveRequest,
+    workspace_ids: &'a BTreeSet<String>,
+    lockfile: &'a LockfileEvidence,
+    packages: &'a mut BTreeMap<String, ResolvedPackage>,
+    budget: &'a mut EvidenceBudget,
+    transport: &'a dyn CargoEvidenceTransport,
+    classifications: &'a mut BTreeMap<String, PackageRuleClassification>,
+}
+
+fn record_reachable(
+    reachable: &BTreeSet<String>,
+    package_by_id: &HashMap<String, &Package>,
+    record: &mut PackageRecord<'_>,
+) -> Result<(), CargoError> {
+    for package_id in reachable {
+        record_package(package_id, package_by_id, record)?;
+    }
+    Ok(())
+}
+
+fn record_package(
+    package_id: &str,
+    package_by_id: &HashMap<String, &Package>,
+    record: &mut PackageRecord<'_>,
+) -> Result<(), CargoError> {
+    let package =
+        package_by_id
             .get(package_id)
+            .copied()
             .ok_or_else(|| CargoError::MissingPackage {
-                package_id: package_id.clone(),
+                package_id: package_id.to_owned(),
             })?;
-        let classification = if workspace_ids.contains(package_id) {
-            PackageRuleClassification::FirstParty
-        } else {
-            let source = package
-                .source
-                .as_ref()
-                .map_or_else(|| "path".to_owned(), ToString::to_string);
-            request.classify(&format!("{}@{}", package.name, package.version), &source)
-        };
-        classifications.insert(package_id.clone(), classification);
-        if classification == PackageRuleClassification::Exclude {
-            continue;
-        }
-
-        if let Some(existing) = packages.get_mut(package_id) {
-            if !existing
-                .contributing_lockfiles
-                .iter()
-                .any(|current| current.path == lockfile.path)
-            {
-                existing.contributing_lockfiles.push(lockfile.clone());
-            }
-            continue;
-        }
-        let first_party = classification == PackageRuleClassification::FirstParty;
-        let license_artifacts = if first_party {
-            Vec::new()
-        } else {
-            let mut artifacts = collector::collect(package, request.limits(), budget)?;
-            if !has_license_evidence(package, &artifacts) {
-                let recovered = upstream::recover(package, request, transport, budget, &artifacts)?;
-                artifacts.extend(recovered);
-            }
-            let notices =
-                upstream::recover_notice(package, request, transport, budget, &artifacts)?;
-            artifacts.extend(notices);
-            let materials = upstream::supplement_materials(package, request, budget, &artifacts)?;
-            artifacts.extend(materials);
-            if !has_license_evidence(package, &artifacts) && request.strict_license_files() {
-                return Err(CargoError::MissingLicenseEvidence {
-                    package_id: package_id.clone(),
-                    package: package.name.to_string(),
-                    version: package.version.to_string(),
-                    location: package.manifest_path.to_string(),
-                    reason: "packaged evidence and exact upstream evidence are unavailable"
-                        .to_owned(),
-                });
-            }
-            artifacts
-        };
-        packages.insert(
-            package_id.clone(),
-            resolved_package(package, first_party, lockfile.clone(), license_artifacts),
-        );
+    let classification =
+        classify_package(record.request, record.workspace_ids, package_id, package);
+    record
+        .classifications
+        .insert(package_id.to_owned(), classification);
+    if classification == PackageRuleClassification::Exclude {
+        return Ok(());
     }
+    if append_existing_lockfile(record.packages, package_id, record.lockfile) {
+        return Ok(());
+    }
+    let first_party = classification == PackageRuleClassification::FirstParty;
+    let artifacts = license_artifacts(
+        record.request,
+        package,
+        package_id,
+        classification,
+        record.budget,
+        record.transport,
+    )?;
+    record.packages.insert(
+        package_id.to_owned(),
+        resolved_package(package, first_party, record.lockfile.clone(), artifacts),
+    );
+    Ok(())
+}
 
+fn classify_package(
+    request: &CargoResolveRequest,
+    workspace_ids: &BTreeSet<String>,
+    package_id: &str,
+    package: &Package,
+) -> PackageRuleClassification {
+    if workspace_ids.contains(package_id) {
+        return PackageRuleClassification::FirstParty;
+    }
+    let source = package
+        .source
+        .as_ref()
+        .map_or_else(|| "path".to_owned(), ToString::to_string);
+    request.classify(&format!("{}@{}", package.name, package.version), &source)
+}
+
+fn append_existing_lockfile(
+    packages: &mut BTreeMap<String, ResolvedPackage>,
+    package_id: &str,
+    lockfile: &LockfileEvidence,
+) -> bool {
+    let Some(existing) = packages.get_mut(package_id) else {
+        return false;
+    };
+    if !existing
+        .contributing_lockfiles
+        .iter()
+        .any(|current| current.path == lockfile.path)
+    {
+        existing.contributing_lockfiles.push(lockfile.clone());
+    }
+    true
+}
+
+fn license_artifacts(
+    request: &CargoResolveRequest,
+    package: &Package,
+    package_id: &str,
+    classification: PackageRuleClassification,
+    budget: &mut EvidenceBudget,
+    transport: &dyn CargoEvidenceTransport,
+) -> Result<Vec<LicenseArtifact>, CargoError> {
+    if classification == PackageRuleClassification::FirstParty {
+        return Ok(Vec::new());
+    }
+    let mut artifacts = collector::collect(package, request.limits(), budget)?;
+    // Packaged evidence comes first. Upstream fills only the gaps that remain.
+    extend_upstream_evidence(package, request, transport, budget, &mut artifacts)?;
+    if !has_license_evidence(package, &artifacts) && request.strict_license_files() {
+        return Err(CargoError::MissingLicenseEvidence {
+            package_id: package_id.to_owned(),
+            package: package.name.to_string(),
+            version: package.version.to_string(),
+            location: package.manifest_path.to_string(),
+            reason: "packaged evidence and exact upstream evidence are unavailable".to_owned(),
+        });
+    }
+    Ok(artifacts)
+}
+
+fn extend_upstream_evidence(
+    package: &Package,
+    request: &CargoResolveRequest,
+    transport: &dyn CargoEvidenceTransport,
+    budget: &mut EvidenceBudget,
+    artifacts: &mut Vec<LicenseArtifact>,
+) -> Result<(), CargoError> {
+    if !has_license_evidence(package, artifacts) {
+        let recovered = upstream::recover(package, request, transport, budget, artifacts)?;
+        artifacts.extend(recovered);
+    }
+    let notices = upstream::recover_notice(package, request, transport, budget, artifacts)?;
+    artifacts.extend(notices);
+    let materials = upstream::supplement_materials(package, request, budget, artifacts)?;
+    artifacts.extend(materials);
+    Ok(())
+}
+
+fn retain_included_edges(
+    edges: &mut BTreeMap<EdgeKey, bool>,
+    classifications: &BTreeMap<String, PackageRuleClassification>,
+) {
     edges.retain(|key, _| {
         classifications.get(&key.to) != Some(&PackageRuleClassification::Exclude)
             && classifications.get(&key.from) != Some(&PackageRuleClassification::Exclude)
     });
-    Ok(())
 }
 
 fn has_license_evidence(package: &Package, artifacts: &[ahcl_kit_core::LicenseArtifact]) -> bool {
@@ -290,20 +418,7 @@ fn selected_roots(
     matched_selections: &mut BTreeSet<String>,
 ) -> Result<Vec<String>, CargoError> {
     if request.packages().is_empty() {
-        if metadata.workspace_default_members.is_available()
-            && !metadata.workspace_default_members.is_empty()
-        {
-            return Ok(metadata
-                .workspace_default_members
-                .iter()
-                .map(ToString::to_string)
-                .collect());
-        }
-        return Ok(metadata
-            .workspace_members
-            .iter()
-            .map(ToString::to_string)
-            .collect());
+        return Ok(default_roots(metadata));
     }
 
     let workspace: BTreeSet<_> = metadata
@@ -336,6 +451,23 @@ fn selected_roots(
     selected.sort();
     selected.dedup();
     Ok(selected)
+}
+
+fn default_roots(metadata: &Metadata) -> Vec<String> {
+    if metadata.workspace_default_members.is_available()
+        && !metadata.workspace_default_members.is_empty()
+    {
+        return metadata
+            .workspace_default_members
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+    }
+    metadata
+        .workspace_members
+        .iter()
+        .map(ToString::to_string)
+        .collect()
 }
 
 fn lockfile_evidence(

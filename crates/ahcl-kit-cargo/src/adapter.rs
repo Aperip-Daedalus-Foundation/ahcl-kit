@@ -226,102 +226,180 @@ pub enum CargoError {
 
 impl CargoError {
     pub const fn code(&self) -> &'static str {
-        match self {
-            Self::ManifestInvalid { .. } => "cargo.manifest_invalid",
-            Self::Metadata { .. } => "cargo.metadata_failed",
-            Self::MissingResolve { .. } => "cargo.resolve_missing",
-            Self::PackageSelection { .. } => "cargo.package_selection",
-            Self::MissingPackage { .. } | Self::MissingNode { .. } => "cargo.metadata_incomplete",
-            Self::LockfileOutsideProject => "cargo.lockfile_outside_project",
-            Self::LockfileRead { .. } => "cargo.lockfile_read",
-            Self::InvalidRepositoryPath { .. } => "cargo.path_invalid",
-            Self::EvidenceRead { .. } => "cargo.evidence_read",
-            Self::EvidencePathEncoding { .. } => "cargo.evidence_path_encoding",
-            Self::EvidenceOutsidePackage { .. } => "cargo.evidence_outside_package",
-            Self::LinkOrReparsePoint { .. } => "cargo.evidence_link",
-            Self::EvidenceFileTooLarge { .. } => "cargo.evidence_file_too_large",
-            Self::TooManyEvidenceFiles { .. } => "cargo.evidence_file_count",
-            Self::AggregateEvidenceTooLarge { .. } => "cargo.evidence_aggregate_too_large",
-            Self::MissingLicenseEvidence { .. } => "cargo.evidence_missing",
-            Self::UpstreamEvidence { .. } => "cargo.evidence_upstream",
+        // Stable machine codes stay grouped so each match remains exhaustive.
+        if let Some(code) = manifest_error_code(self) {
+            return code;
         }
+        if let Some(code) = path_error_code(self) {
+            return code;
+        }
+        evidence_error_code(self)
+    }
+}
+
+const fn manifest_error_code(error: &CargoError) -> Option<&'static str> {
+    match error {
+        CargoError::ManifestInvalid { .. } => Some("cargo.manifest_invalid"),
+        CargoError::Metadata { .. } => Some("cargo.metadata_failed"),
+        CargoError::MissingResolve { .. } => Some("cargo.resolve_missing"),
+        CargoError::PackageSelection { .. } => Some("cargo.package_selection"),
+        CargoError::MissingPackage { .. } | CargoError::MissingNode { .. } => {
+            Some("cargo.metadata_incomplete")
+        }
+        CargoError::LockfileOutsideProject => Some("cargo.lockfile_outside_project"),
+        _ => None,
+    }
+}
+
+const fn path_error_code(error: &CargoError) -> Option<&'static str> {
+    match error {
+        CargoError::LockfileRead { .. } => Some("cargo.lockfile_read"),
+        CargoError::InvalidRepositoryPath { .. } => Some("cargo.path_invalid"),
+        CargoError::EvidenceRead { .. } => Some("cargo.evidence_read"),
+        CargoError::EvidencePathEncoding { .. } => Some("cargo.evidence_path_encoding"),
+        CargoError::EvidenceOutsidePackage { .. } => Some("cargo.evidence_outside_package"),
+        CargoError::LinkOrReparsePoint { .. } => Some("cargo.evidence_link"),
+        _ => None,
+    }
+}
+
+const fn evidence_error_code(error: &CargoError) -> &'static str {
+    match error {
+        CargoError::EvidenceFileTooLarge { .. } => "cargo.evidence_file_too_large",
+        CargoError::TooManyEvidenceFiles { .. } => "cargo.evidence_file_count",
+        CargoError::AggregateEvidenceTooLarge { .. } => "cargo.evidence_aggregate_too_large",
+        CargoError::MissingLicenseEvidence { .. } => "cargo.evidence_missing",
+        CargoError::UpstreamEvidence { .. } => "cargo.evidence_upstream",
+        CargoError::ManifestInvalid { .. }
+        | CargoError::Metadata { .. }
+        | CargoError::MissingResolve { .. }
+        | CargoError::PackageSelection { .. }
+        | CargoError::MissingPackage { .. }
+        | CargoError::MissingNode { .. }
+        | CargoError::LockfileOutsideProject
+        | CargoError::LockfileRead { .. }
+        | CargoError::InvalidRepositoryPath { .. }
+        | CargoError::EvidenceRead { .. }
+        | CargoError::EvidencePathEncoding { .. }
+        | CargoError::EvidenceOutsidePackage { .. }
+        | CargoError::LinkOrReparsePoint { .. } => "cargo.evidence_upstream",
     }
 }
 
 impl fmt::Display for CargoError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ManifestInvalid { manifest } => write!(
-                formatter,
-                "Cargo manifest is not a safe regular file: {manifest}"
-            ),
-            Self::Metadata { manifest, .. } => {
-                write!(formatter, "Cargo metadata failed for {manifest}")
-            }
-            Self::MissingResolve { manifest } => write!(
-                formatter,
-                "Cargo metadata omitted the resolve graph for {manifest}"
-            ),
-            Self::PackageSelection { package } => write!(
-                formatter,
-                "Cargo workspace package selection did not match: {package}"
-            ),
-            Self::MissingPackage { package_id } => {
-                write!(formatter, "Cargo metadata omitted package {package_id}")
-            }
-            Self::MissingNode { package_id } => write!(
-                formatter,
-                "Cargo metadata omitted resolve node {package_id}"
-            ),
-            Self::LockfileOutsideProject => {
-                formatter.write_str("Cargo lockfile is outside the project root")
-            }
-            Self::LockfileRead { .. } => formatter.write_str("Cargo lockfile could not be read"),
-            Self::InvalidRepositoryPath { .. } => {
-                formatter.write_str("Cargo path cannot be represented safely")
-            }
-            Self::EvidenceRead { .. } => {
-                formatter.write_str("Cargo license evidence could not be read")
-            }
-            Self::EvidencePathEncoding { .. } => {
-                formatter.write_str("Cargo license evidence path is not Unicode")
-            }
-            Self::EvidenceOutsidePackage { .. } => {
-                formatter.write_str("Cargo license evidence escapes the package root")
-            }
-            Self::LinkOrReparsePoint { .. } => {
-                formatter.write_str("Cargo license evidence uses a link or reparse point")
-            }
-            Self::EvidenceFileTooLarge { .. } => {
-                formatter.write_str("Cargo license evidence exceeds the per-file limit")
-            }
-            Self::TooManyEvidenceFiles { .. } => {
-                formatter.write_str("Cargo package exceeds the evidence-file count limit")
-            }
-            Self::AggregateEvidenceTooLarge { .. } => {
-                formatter.write_str("Cargo license evidence exceeds the aggregate limit")
-            }
-            Self::MissingLicenseEvidence {
-                package_id,
-                package,
-                version,
-                location,
-                reason,
-            } => {
-                write!(
-                    formatter,
-                    "Cargo package {package}@{version} ({package_id}) has no license evidence at {location}: {reason}"
-                )
-            }
-            Self::UpstreamEvidence {
-                package,
-                version,
-                location,
-                reason,
-            } => write!(
-                formatter,
-                "Cargo upstream evidence failed for {package}@{version} at {location}: {reason}"
-            ),
+        if let Some(result) = fmt_manifest_error(self, formatter) {
+            return result;
+        }
+        if let Some(result) = fmt_path_error(self, formatter) {
+            return result;
+        }
+        fmt_evidence_error(self, formatter)
+    }
+}
+
+fn fmt_manifest_error(
+    error: &CargoError,
+    formatter: &mut fmt::Formatter<'_>,
+) -> Option<fmt::Result> {
+    match error {
+        CargoError::ManifestInvalid { manifest } => Some(write!(
+            formatter,
+            "Cargo manifest is not a safe regular file: {manifest}"
+        )),
+        CargoError::Metadata { manifest, .. } => {
+            Some(write!(formatter, "Cargo metadata failed for {manifest}"))
+        }
+        CargoError::MissingResolve { manifest } => Some(write!(
+            formatter,
+            "Cargo metadata omitted the resolve graph for {manifest}"
+        )),
+        CargoError::PackageSelection { package } => Some(write!(
+            formatter,
+            "Cargo workspace package selection did not match: {package}"
+        )),
+        CargoError::MissingPackage { package_id } => Some(write!(
+            formatter,
+            "Cargo metadata omitted package {package_id}"
+        )),
+        CargoError::MissingNode { package_id } => Some(write!(
+            formatter,
+            "Cargo metadata omitted resolve node {package_id}"
+        )),
+        _ => None,
+    }
+}
+
+fn fmt_path_error(error: &CargoError, formatter: &mut fmt::Formatter<'_>) -> Option<fmt::Result> {
+    match error {
+        CargoError::LockfileOutsideProject => {
+            Some(formatter.write_str("Cargo lockfile is outside the project root"))
+        }
+        CargoError::LockfileRead { .. } => {
+            Some(formatter.write_str("Cargo lockfile could not be read"))
+        }
+        CargoError::InvalidRepositoryPath { .. } => {
+            Some(formatter.write_str("Cargo path cannot be represented safely"))
+        }
+        CargoError::EvidenceRead { .. } => {
+            Some(formatter.write_str("Cargo license evidence could not be read"))
+        }
+        CargoError::EvidencePathEncoding { .. } => {
+            Some(formatter.write_str("Cargo license evidence path is not Unicode"))
+        }
+        CargoError::EvidenceOutsidePackage { .. } => {
+            Some(formatter.write_str("Cargo license evidence escapes the package root"))
+        }
+        _ => None,
+    }
+}
+
+fn fmt_evidence_error(error: &CargoError, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match error {
+        CargoError::LinkOrReparsePoint { .. } => {
+            formatter.write_str("Cargo license evidence uses a link or reparse point")
+        }
+        CargoError::EvidenceFileTooLarge { .. } => {
+            formatter.write_str("Cargo license evidence exceeds the per-file limit")
+        }
+        CargoError::TooManyEvidenceFiles { .. } => {
+            formatter.write_str("Cargo package exceeds the evidence-file count limit")
+        }
+        CargoError::AggregateEvidenceTooLarge { .. } => {
+            formatter.write_str("Cargo license evidence exceeds the aggregate limit")
+        }
+        CargoError::MissingLicenseEvidence {
+            package_id,
+            package,
+            version,
+            location,
+            reason,
+        } => write!(
+            formatter,
+            "Cargo package {package}@{version} ({package_id}) has no license evidence at {location}: {reason}"
+        ),
+        CargoError::UpstreamEvidence {
+            package,
+            version,
+            location,
+            reason,
+        } => write!(
+            formatter,
+            "Cargo upstream evidence failed for {package}@{version} at {location}: {reason}"
+        ),
+        CargoError::ManifestInvalid { .. }
+        | CargoError::Metadata { .. }
+        | CargoError::MissingResolve { .. }
+        | CargoError::PackageSelection { .. }
+        | CargoError::MissingPackage { .. }
+        | CargoError::MissingNode { .. }
+        | CargoError::LockfileOutsideProject
+        | CargoError::LockfileRead { .. }
+        | CargoError::InvalidRepositoryPath { .. }
+        | CargoError::EvidenceRead { .. }
+        | CargoError::EvidencePathEncoding { .. }
+        | CargoError::EvidenceOutsidePackage { .. } => {
+            formatter.write_str("Cargo operation failed")
         }
     }
 }

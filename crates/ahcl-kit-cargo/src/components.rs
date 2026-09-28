@@ -28,7 +28,7 @@
 use crate::settings::{CargoBinding, CargoComponent};
 use crate::{CargoAdapter, CargoError, CargoResolveRequest, EvidenceLimits};
 use ahcl_kit_config::{ConfigError, EffectiveConfig};
-use ahcl_kit_core::{ProjectRoot, RepoPath, ResolvedGraph};
+use ahcl_kit_core::{ProjectRoot, RepoPath, ResolvedGraph, ResolvedPackage};
 use std::fmt;
 
 /// A Cargo component resolved from one explicitly configured workspace package.
@@ -193,85 +193,17 @@ impl CargoAdapter {
         config: &EffectiveConfig,
         component: &CargoComponent,
     ) -> Result<CargoComponentResolution, CargoComponentError> {
-        if !component.enabled() {
-            return Err(CargoComponentError::InvalidConfig {
-                component: component.id().to_owned(),
-                source: ahcl_kit_config::ConfigError::InvalidValue {
-                    path: format!("rust.cargo.component.{}.enabled", component.id()),
-                    message: "disabled components are not resolved".to_owned(),
-                },
-            });
-        }
-        let component_config = component_config(config, component).map_err(|source| {
-            CargoComponentError::InvalidConfig {
-                component: component.id().to_owned(),
-                source,
-            }
-        })?;
-        let request = CargoResolveRequest::from_config(
-            project_root.clone(),
-            &component_config,
-            component_config.generation().strict_license_files(),
-        )
-        .with_limits(EvidenceLimits::new(
-            component_config.limits().evidence_file_bytes(),
-            component_config.limits().files_per_package(),
-            component_config.limits().aggregate_evidence_bytes(),
-        ));
+        ensure_component_enabled(component)?;
+        let component_config = loaded_component_config(config, component)?;
+        let request = component_request(project_root, &component_config);
         let graph =
             self.resolve_request(&request)
                 .map_err(|source| CargoComponentError::Resolve {
                     component: component.id().to_owned(),
                     source: Box::new(source),
                 })?;
-        let mut selected = graph
-            .packages
-            .iter()
-            .filter(|package| package.first_party && package.name == component.package())
-            .collect::<Vec<_>>();
-        if selected.is_empty() {
-            return Err(CargoComponentError::PackageMissing {
-                component: component.id().to_owned(),
-                package: component.package().to_owned(),
-            });
-        }
-        if selected.len() > 1 {
-            return Err(CargoComponentError::PackageAmbiguous {
-                component: component.id().to_owned(),
-                package: component.package().to_owned(),
-            });
-        }
-        let package = selected.remove(0);
-        let manifest = package.manifest_path.as_path();
-        let root =
-            manifest
-                .parent()
-                .ok_or_else(|| CargoComponentError::PackagePathOutsideProject {
-                    component: component.id().to_owned(),
-                    path: manifest.display().to_string(),
-                })?;
-        let relative = root.strip_prefix(project_root.as_path()).map_err(|_| {
-            CargoComponentError::PackagePathOutsideProject {
-                component: component.id().to_owned(),
-                path: root.display().to_string(),
-            }
-        })?;
-        let relative = relative
-            .to_str()
-            .ok_or_else(|| CargoComponentError::UnsafePackagePath {
-                component: component.id().to_owned(),
-                path: root.display().to_string(),
-            })?;
-        let component_root = if relative.is_empty() {
-            None
-        } else {
-            Some(RepoPath::parse(relative.replace('\\', "/")).map_err(|_| {
-                CargoComponentError::UnsafePackagePath {
-                    component: component.id().to_owned(),
-                    path: relative.to_owned(),
-                }
-            })?)
-        };
+        let package = unique_component_package(&graph, component)?;
+        let component_root = component_package_root(project_root, component, package)?;
         Ok(CargoComponentResolution::new(
             component.clone(),
             component_config,
@@ -280,4 +212,106 @@ impl CargoAdapter {
             graph,
         ))
     }
+}
+
+fn ensure_component_enabled(component: &CargoComponent) -> Result<(), CargoComponentError> {
+    if component.enabled() {
+        return Ok(());
+    }
+    Err(CargoComponentError::InvalidConfig {
+        component: component.id().to_owned(),
+        source: ConfigError::InvalidValue {
+            path: format!("rust.cargo.component.{}.enabled", component.id()),
+            message: "disabled components are not resolved".to_owned(),
+        },
+    })
+}
+
+fn loaded_component_config(
+    config: &EffectiveConfig,
+    component: &CargoComponent,
+) -> Result<EffectiveConfig, CargoComponentError> {
+    component_config(config, component).map_err(|source| CargoComponentError::InvalidConfig {
+        component: component.id().to_owned(),
+        source,
+    })
+}
+
+fn component_request(project_root: &ProjectRoot, config: &EffectiveConfig) -> CargoResolveRequest {
+    CargoResolveRequest::from_config(
+        project_root.clone(),
+        config,
+        config.generation().strict_license_files(),
+    )
+    .with_limits(EvidenceLimits::new(
+        config.limits().evidence_file_bytes(),
+        config.limits().files_per_package(),
+        config.limits().aggregate_evidence_bytes(),
+    ))
+}
+
+fn unique_component_package<'a>(
+    graph: &'a ResolvedGraph,
+    component: &CargoComponent,
+) -> Result<&'a ResolvedPackage, CargoComponentError> {
+    let mut selected = graph
+        .packages
+        .iter()
+        .filter(|package| package.first_party && package.name == component.package())
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        return Err(CargoComponentError::PackageMissing {
+            component: component.id().to_owned(),
+            package: component.package().to_owned(),
+        });
+    }
+    if selected.len() > 1 {
+        return Err(CargoComponentError::PackageAmbiguous {
+            component: component.id().to_owned(),
+            package: component.package().to_owned(),
+        });
+    }
+    Ok(selected.remove(0))
+}
+
+fn component_package_root(
+    project_root: &ProjectRoot,
+    component: &CargoComponent,
+    package: &ResolvedPackage,
+) -> Result<Option<RepoPath>, CargoComponentError> {
+    let manifest = package.manifest_path.as_path();
+    let root = manifest
+        .parent()
+        .ok_or_else(|| CargoComponentError::PackagePathOutsideProject {
+            component: component.id().to_owned(),
+            path: manifest.display().to_string(),
+        })?;
+    let relative = root.strip_prefix(project_root.as_path()).map_err(|_| {
+        CargoComponentError::PackagePathOutsideProject {
+            component: component.id().to_owned(),
+            path: root.display().to_string(),
+        }
+    })?;
+    let relative = relative
+        .to_str()
+        .ok_or_else(|| CargoComponentError::UnsafePackagePath {
+            component: component.id().to_owned(),
+            path: root.display().to_string(),
+        })?;
+    parsed_component_root(component, relative)
+}
+
+fn parsed_component_root(
+    component: &CargoComponent,
+    relative: &str,
+) -> Result<Option<RepoPath>, CargoComponentError> {
+    if relative.is_empty() {
+        return Ok(None);
+    }
+    RepoPath::parse(relative.replace('\\', "/"))
+        .map(Some)
+        .map_err(|_| CargoComponentError::UnsafePackagePath {
+            component: component.id().to_owned(),
+            path: relative.to_owned(),
+        })
 }
