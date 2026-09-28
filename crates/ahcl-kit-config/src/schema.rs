@@ -26,13 +26,16 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::ast::{DocumentAst, ScalarValue, Value};
-use crate::binding::{ConfigValue, LanguageBinding, is_config_name};
+use crate::binding::{ConfigValue, LanguageBinding, LanguageContributor, is_config_name};
 use crate::{ConfigDocument, ConfigError};
 use ahcl_kit_core::{RepoPath, ResolvedPackage, UtcDate};
 use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 use url::Url;
+
+#[path = "schema_glob.rs"]
+mod glob;
 
 /// Latest supported configuration schema version.
 pub const LATEST_SCHEMA: u32 = 1;
@@ -171,60 +174,7 @@ impl GlobPattern {
         let mut tokens = Vec::new();
         let mut index = 0;
         while index < characters.len() {
-            match characters[index] {
-                '*' if package_name && characters.get(index + 1) == Some(&'*') => {
-                    if !matches!(tokens.last(), Some(GlobToken::Globstar)) {
-                        tokens.push(GlobToken::Globstar);
-                    }
-                    index += 2;
-                }
-                '*' => {
-                    if !matches!(tokens.last(), Some(GlobToken::Star)) {
-                        tokens.push(GlobToken::Star);
-                    }
-                    index += 1;
-                }
-                '?' => {
-                    tokens.push(GlobToken::Any);
-                    index += 1;
-                }
-                '[' => {
-                    let Some(close) = characters[index + 1..]
-                        .iter()
-                        .position(|character| *character == ']')
-                    else {
-                        return Err("unterminated character class".to_owned());
-                    };
-                    let close = index + 1 + close;
-                    let mut member_index = index + 1;
-                    let negative = matches!(characters.get(member_index), Some('!' | '^'));
-                    if negative {
-                        member_index += 1;
-                    }
-                    if member_index == close {
-                        return Err("empty character class".to_owned());
-                    }
-                    let mut members = Vec::new();
-                    while member_index < close {
-                        if member_index + 2 < close && characters[member_index + 1] == '-' {
-                            members.push(ClassMember::Range(
-                                characters[member_index],
-                                characters[member_index + 2],
-                            ));
-                            member_index += 3;
-                        } else {
-                            members.push(ClassMember::Single(characters[member_index]));
-                            member_index += 1;
-                        }
-                    }
-                    tokens.push(GlobToken::Class { negative, members });
-                    index = close + 1;
-                }
-                character => {
-                    tokens.push(GlobToken::Literal(character));
-                    index += 1;
-                }
-            }
+            index = glob::push_glob_token(&characters, &mut tokens, index, package_name)?;
         }
         Ok(Self {
             raw,
@@ -239,33 +189,12 @@ impl GlobPattern {
 
     fn matches(&self, value: &str) -> bool {
         let characters: Vec<_> = value.chars().collect();
-        let mut previous = vec![false; characters.len() + 1];
-        let mut current = vec![false; characters.len() + 1];
-        previous[0] = true;
-        let separators = !self.package_name;
-
+        let mut active = vec![false; characters.len() + 1];
+        active[0] = true;
         for token in &self.tokens {
-            current.fill(false);
-            match token {
-                GlobToken::Star | GlobToken::Globstar => {
-                    let crosses_separators =
-                        self.package_name || matches!(token, GlobToken::Globstar);
-                    current[0] = previous[0];
-                    for index in 1..=characters.len() {
-                        let allowed = crosses_separators || !is_separator(characters[index - 1]);
-                        current[index] = previous[index] || (allowed && current[index - 1]);
-                    }
-                }
-                token => {
-                    for index in 1..=characters.len() {
-                        current[index] = previous[index - 1]
-                            && token.matches_character(characters[index - 1], separators);
-                    }
-                }
-            }
-            std::mem::swap(&mut previous, &mut current);
+            active = glob::advance_glob(self, token, &characters, &active);
         }
-        previous[characters.len()]
+        active[characters.len()]
     }
 }
 
@@ -436,79 +365,13 @@ pub struct EffectiveConfig {
 impl EffectiveConfig {
     pub fn resolve(document: &ConfigDocument) -> Result<Self, ConfigError> {
         let ast = document.ast();
-        let latest_schema = i64::from(LATEST_SCHEMA);
-        let schema = optional_integer(ast, None, "schema")?.unwrap_or(latest_schema);
-        if schema != latest_schema {
-            return Err(ConfigError::InvalidSchema(format!(
-                "unsupported schema version: {schema}"
-            )));
-        }
-
-        let version = match optional_string(ast, Some("license"), "version")?.as_deref() {
-            None | Some("1.1") => AhclVersion::V1_1,
-            Some("1.0") => AhclVersion::V1_0,
-            Some("1.2") => AhclVersion::V1_2,
-            Some(value) => {
-                return invalid(
-                    "license.version",
-                    format!("unsupported AHCL version: {value}"),
-                );
-            }
-        };
-        let configured_directory = optional_string(ast, None, "materials-directory")?;
-        let directory = configured_directory.unwrap_or_else(|| match version {
-            AhclVersion::V1_0 => "AHCL".to_owned(),
-            AhclVersion::V1_1 => ".ahcl".to_owned(),
-            AhclVersion::V1_2 => ".ahcl".to_owned(),
-        });
-        let materials_directory = parse_materials_directory(version, &directory)?;
-        let requested = optional_string_list(ast, None, "languages")?.unwrap_or_default();
+        let version = resolve_version(ast)?;
+        let materials_directory = resolve_directory(ast, version)?;
+        let requested = requested_languages(ast)?;
         let (languages, bindings) = load_bindings(document, &requested)?;
-        let canonical_repository =
-            optional_string(ast, Some("project"), "canonical-repository")?.unwrap_or_default();
-        if !canonical_repository.is_empty() && !is_absolute_https_url(&canonical_repository) {
-            return invalid(
-                "project.canonical-repository",
-                "must be an absolute HTTPS URL".to_owned(),
-            );
-        }
-        let adoption_date = match optional_string(ast, Some("project"), "adoption-date")? {
-            None => None,
-            Some(value) if value.is_empty() => None,
-            Some(value) => Some(parse_date_at(&value, "project.adoption-date")?),
-        };
-        let project = ProjectSettings {
-            name: optional_string(ast, Some("project"), "name")?.unwrap_or_default(),
-            canonical_repository,
-            canonical_branch: optional_string(ast, Some("project"), "canonical-branch")?
-                .unwrap_or_else(|| "master".to_owned()),
-            right_holders: optional_string_list(ast, Some("project"), "right-holders")?
-                .unwrap_or_default(),
-            contact: optional_string(ast, Some("project"), "contact")?.unwrap_or_default(),
-            adoption_date,
-        };
-        let license = LicenseSettings {
-            version,
-            enabled: optional_boolean(ast, Some("license"), "enabled")?.unwrap_or(true),
-            covered_scope: optional_string(ast, Some("license"), "covered-scope")?
-                .map(|value| validate_scope("license.covered-scope", value))
-                .transpose()?
-                .unwrap_or_default(),
-            special_authorization_channel: optional_string(
-                ast,
-                Some("license"),
-                "special-authorization-channel",
-            )?
-            .unwrap_or_default(),
-        };
-        let generation = GenerationSettings {
-            strict_license_files: optional_boolean(
-                ast,
-                Some("generation"),
-                "strict-license-files",
-            )?
-            .unwrap_or(true),
-        };
+        let project = resolve_project(ast)?;
+        let license = resolve_license(ast, version)?;
+        let generation = resolve_generation(ast)?;
         Ok(Self {
             schema: LATEST_SCHEMA,
             materials_directory,
@@ -517,11 +380,7 @@ impl EffectiveConfig {
             license,
             generation,
             bindings,
-            limits: ConfigLimits {
-                evidence_file_bytes: EVIDENCE_FILE_BYTES,
-                files_per_package: FILES_PER_PACKAGE,
-                aggregate_evidence_bytes: AGGREGATE_EVIDENCE_BYTES,
-            },
+            limits: default_limits(),
         })
     }
 
@@ -691,51 +550,218 @@ impl fmt::Debug for EffectiveConfig {
 
 type LoadedLanguages = (Vec<String>, Vec<Arc<dyn LanguageBinding>>);
 
+fn resolve_version(ast: &DocumentAst) -> Result<AhclVersion, ConfigError> {
+    require_latest_schema(ast)?;
+    match optional_string(ast, Some("license"), "version")?.as_deref() {
+        None | Some("1.1") => Ok(AhclVersion::V1_1),
+        Some("1.0") => Ok(AhclVersion::V1_0),
+        Some("1.2") => Ok(AhclVersion::V1_2),
+        Some(value) => invalid(
+            "license.version",
+            format!("unsupported AHCL version: {value}"),
+        ),
+    }
+}
+
+fn require_latest_schema(ast: &DocumentAst) -> Result<(), ConfigError> {
+    let latest_schema = i64::from(LATEST_SCHEMA);
+    let schema = optional_integer(ast, None, "schema")?.unwrap_or(latest_schema);
+    if schema != latest_schema {
+        return Err(ConfigError::InvalidSchema(format!(
+            "unsupported schema version: {schema}"
+        )));
+    }
+    Ok(())
+}
+
+fn resolve_directory(ast: &DocumentAst, version: AhclVersion) -> Result<RepoPath, ConfigError> {
+    let configured = optional_string(ast, None, "materials-directory")?;
+    let directory = configured.unwrap_or_else(|| default_directory(version));
+    parse_materials_directory(version, &directory)
+}
+
+fn default_directory(version: AhclVersion) -> String {
+    match version {
+        AhclVersion::V1_0 => "AHCL".to_owned(),
+        AhclVersion::V1_1 | AhclVersion::V1_2 => ".ahcl".to_owned(),
+    }
+}
+
+fn requested_languages(ast: &DocumentAst) -> Result<Vec<String>, ConfigError> {
+    Ok(optional_string_list(ast, None, "languages")?.unwrap_or_default())
+}
+
+fn resolve_project(ast: &DocumentAst) -> Result<ProjectSettings, ConfigError> {
+    let identity = project_identity(ast)?;
+    Ok(ProjectSettings {
+        name: identity.name,
+        canonical_repository: identity.repository,
+        canonical_branch: identity.branch,
+        right_holders: identity.holders,
+        contact: identity.contact,
+        adoption_date: resolve_adoption_date(ast)?,
+    })
+}
+
+struct ProjectIdentityFields {
+    name: String,
+    repository: String,
+    branch: String,
+    holders: Vec<String>,
+    contact: String,
+}
+
+fn project_identity(ast: &DocumentAst) -> Result<ProjectIdentityFields, ConfigError> {
+    Ok(ProjectIdentityFields {
+        name: project_string(ast, "name")?,
+        repository: canonical_repository(ast)?,
+        branch: optional_string(ast, Some("project"), "canonical-branch")?
+            .unwrap_or_else(|| "master".to_owned()),
+        holders: optional_string_list(ast, Some("project"), "right-holders")?.unwrap_or_default(),
+        contact: project_string(ast, "contact")?,
+    })
+}
+
+fn project_string(ast: &DocumentAst, key: &str) -> Result<String, ConfigError> {
+    Ok(optional_string(ast, Some("project"), key)?.unwrap_or_default())
+}
+
+fn canonical_repository(ast: &DocumentAst) -> Result<String, ConfigError> {
+    let value = project_string(ast, "canonical-repository")?;
+    if !value.is_empty() && !is_absolute_https_url(&value) {
+        return invalid(
+            "project.canonical-repository",
+            "must be an absolute HTTPS URL".to_owned(),
+        );
+    }
+    Ok(value)
+}
+
+fn resolve_adoption_date(ast: &DocumentAst) -> Result<Option<UtcDate>, ConfigError> {
+    match optional_string(ast, Some("project"), "adoption-date")? {
+        None => Ok(None),
+        Some(value) if value.is_empty() => Ok(None),
+        Some(value) => Ok(Some(parse_date_at(&value, "project.adoption-date")?)),
+    }
+}
+
+fn resolve_license(
+    ast: &DocumentAst,
+    version: AhclVersion,
+) -> Result<LicenseSettings, ConfigError> {
+    Ok(LicenseSettings {
+        version,
+        enabled: optional_boolean(ast, Some("license"), "enabled")?.unwrap_or(true),
+        covered_scope: covered_scope_setting(ast)?,
+        special_authorization_channel: optional_string(
+            ast,
+            Some("license"),
+            "special-authorization-channel",
+        )?
+        .unwrap_or_default(),
+    })
+}
+
+fn covered_scope_setting(ast: &DocumentAst) -> Result<String, ConfigError> {
+    Ok(optional_string(ast, Some("license"), "covered-scope")?
+        .map(|value| validate_scope("license.covered-scope", value))
+        .transpose()?
+        .unwrap_or_default())
+}
+
+fn resolve_generation(ast: &DocumentAst) -> Result<GenerationSettings, ConfigError> {
+    Ok(GenerationSettings {
+        strict_license_files: optional_boolean(ast, Some("generation"), "strict-license-files")?
+            .unwrap_or(true),
+    })
+}
+
+fn default_limits() -> ConfigLimits {
+    ConfigLimits {
+        evidence_file_bytes: EVIDENCE_FILE_BYTES,
+        files_per_package: FILES_PER_PACKAGE,
+        aggregate_evidence_bytes: AGGREGATE_EVIDENCE_BYTES,
+    }
+}
+
 fn load_bindings(
     document: &ConfigDocument,
     requested: &[String],
 ) -> Result<LoadedLanguages, ConfigError> {
+    let known = known_languages(document)?;
+    let languages = selected_languages(requested, &known)?;
+    let bindings = language_bindings(document, &languages)?;
+    Ok((languages, bindings))
+}
+
+fn known_languages(document: &ConfigDocument) -> Result<BTreeSet<&'static str>, ConfigError> {
     let mut known = BTreeSet::new();
     for contributor in document.contributors() {
-        let language_id = contributor.language_id();
-        if !is_config_name(language_id) || !known.insert(language_id) {
-            return invalid(
-                "languages",
-                format!("duplicate language contributor: {language_id}"),
-            );
-        }
+        record_language(&mut known, contributor.language_id())?;
     }
+    Ok(known)
+}
+
+fn record_language(
+    known: &mut BTreeSet<&'static str>,
+    language_id: &'static str,
+) -> Result<(), ConfigError> {
+    if !is_config_name(language_id) || !known.insert(language_id) {
+        return invalid(
+            "languages",
+            format!("duplicate language contributor: {language_id}"),
+        );
+    }
+    Ok(())
+}
+
+fn selected_languages(
+    requested: &[String],
+    known: &BTreeSet<&'static str>,
+) -> Result<Vec<String>, ConfigError> {
     let mut languages = Vec::new();
-    let mut selected = BTreeSet::new();
+    let mut selected: BTreeSet<&str> = BTreeSet::new();
     for language in requested {
-        if !selected.insert(language.as_str()) {
-            return invalid("languages", "duplicate language".to_owned());
-        }
-        if !known.contains(language.as_str()) {
-            return invalid("languages", format!("unsupported language: {language}"));
-        }
-        languages.push(language.clone());
+        push_selected_language(&mut languages, &mut selected, known, language)?;
     }
+    Ok(languages)
+}
+
+fn push_selected_language<'a>(
+    languages: &mut Vec<String>,
+    selected: &mut BTreeSet<&'a str>,
+    known: &BTreeSet<&'static str>,
+    language: &'a String,
+) -> Result<(), ConfigError> {
+    if !selected.insert(language.as_str()) {
+        return invalid("languages", "duplicate language".to_owned());
+    }
+    if !known.contains(language.as_str()) {
+        return invalid("languages", format!("unsupported language: {language}"));
+    }
+    languages.push(language.clone());
+    Ok(())
+}
+
+fn language_bindings(
+    document: &ConfigDocument,
+    languages: &[String],
+) -> Result<Vec<Arc<dyn LanguageBinding>>, ConfigError> {
+    let selected = languages
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
     let mut bindings = Vec::new();
     let mut resolved_keys = BTreeSet::new();
     let mut fallbacks = 0_usize;
     for contributor in document.contributors() {
-        let enabled = selected.contains(contributor.language_id());
-        let binding = contributor.load(document, enabled)?;
-        let (key, _) = binding.resolved_entry();
-        if !resolved_keys.insert(key) {
-            return invalid(
-                "languages",
-                format!(
-                    "duplicate resolved configuration from {}",
-                    contributor.language_id()
-                ),
-            );
-        }
-        if binding.is_package_fallback() {
-            fallbacks += 1;
-        }
-        bindings.push(Arc::from(binding));
+        fallbacks += push_language_binding(
+            document,
+            *contributor,
+            &selected,
+            &mut bindings,
+            &mut resolved_keys,
+        )?;
     }
     if fallbacks > 1 {
         return invalid(
@@ -743,7 +769,31 @@ fn load_bindings(
             "multiple package identity fallbacks".to_owned(),
         );
     }
-    Ok((languages, bindings))
+    Ok(bindings)
+}
+
+fn push_language_binding(
+    document: &ConfigDocument,
+    contributor: &'static dyn LanguageContributor,
+    selected: &BTreeSet<&str>,
+    bindings: &mut Vec<Arc<dyn LanguageBinding>>,
+    resolved_keys: &mut BTreeSet<String>,
+) -> Result<usize, ConfigError> {
+    let enabled = selected.contains(contributor.language_id());
+    let binding = contributor.load(document, enabled)?;
+    let (key, _) = binding.resolved_entry();
+    if !resolved_keys.insert(key) {
+        return invalid(
+            "languages",
+            format!(
+                "duplicate resolved configuration from {}",
+                contributor.language_id()
+            ),
+        );
+    }
+    let fallback = usize::from(binding.is_package_fallback());
+    bindings.push(Arc::from(binding));
+    Ok(fallback)
 }
 
 fn component_right_holders(
@@ -860,48 +910,87 @@ fn resolve_package_rule(
     package_mode: PackagePatternMode,
     fields: std::collections::BTreeMap<String, ScalarValue>,
 ) -> Result<PackageRule, ConfigError> {
-    for key in fields.keys() {
-        if !matches!(key.as_str(), "package" | "source" | "classification") {
-            return invalid(prefix, format!("unknown rule field: {key}"));
-        }
-    }
-    let package =
-        rule_string(prefix, &fields, "package")?.ok_or_else(|| ConfigError::InvalidValue {
-            path: format!("{prefix}.package"),
-            message: "is required".to_owned(),
-        })?;
-    let package = match package_mode {
-        PackagePatternMode::Path => GlobPattern::compile(package),
-        PackagePatternMode::PackageName => GlobPattern::compile_package_name(package),
-    }
-    .map_err(|message| ConfigError::InvalidValue {
-        path: format!("{prefix}.package"),
-        message,
-    })?;
-    let source = rule_string(prefix, &fields, "source")?
-        .map(GlobPattern::compile)
-        .transpose()
-        .map_err(|message| ConfigError::InvalidValue {
-            path: format!("{prefix}.source"),
-            message,
-        })?;
-    let classification = match rule_string(prefix, &fields, "classification")?.as_deref() {
-        Some("first-party") => PackageRuleClassification::FirstParty,
-        Some("third-party") => PackageRuleClassification::ThirdParty,
-        Some("exclude") => PackageRuleClassification::Exclude,
-        Some(value) => {
-            return invalid(
-                format!("{prefix}.classification"),
-                format!("unsupported classification: {value}"),
-            );
-        }
-        None => return invalid(format!("{prefix}.classification"), "is required".to_owned()),
-    };
+    reject_unknown_rule_fields(prefix, &fields)?;
+    let package = required_rule_string(prefix, &fields, "package")?;
+    let package = compile_package_pattern(prefix, package_mode, package)?;
+    let source = compile_optional_source(prefix, &fields)?;
+    let classification = rule_classification(prefix, &fields)?;
     Ok(PackageRule {
         package,
         source,
         classification,
     })
+}
+
+fn reject_unknown_rule_fields(
+    prefix: &str,
+    fields: &std::collections::BTreeMap<String, ScalarValue>,
+) -> Result<(), ConfigError> {
+    for key in fields.keys() {
+        if !known_rule_field(key) {
+            return invalid(prefix, format!("unknown rule field: {key}"));
+        }
+    }
+    Ok(())
+}
+
+fn known_rule_field(key: &str) -> bool {
+    matches!(key, "package" | "source" | "classification")
+}
+
+fn required_rule_string(
+    prefix: &str,
+    fields: &std::collections::BTreeMap<String, ScalarValue>,
+    key: &str,
+) -> Result<String, ConfigError> {
+    rule_string(prefix, fields, key)?.ok_or_else(|| ConfigError::InvalidValue {
+        path: format!("{prefix}.{key}"),
+        message: "is required".to_owned(),
+    })
+}
+
+fn compile_package_pattern(
+    prefix: &str,
+    package_mode: PackagePatternMode,
+    package: String,
+) -> Result<GlobPattern, ConfigError> {
+    let compiled = match package_mode {
+        PackagePatternMode::Path => GlobPattern::compile(package),
+        PackagePatternMode::PackageName => GlobPattern::compile_package_name(package),
+    };
+    compiled.map_err(|message| ConfigError::InvalidValue {
+        path: format!("{prefix}.package"),
+        message,
+    })
+}
+
+fn compile_optional_source(
+    prefix: &str,
+    fields: &std::collections::BTreeMap<String, ScalarValue>,
+) -> Result<Option<GlobPattern>, ConfigError> {
+    rule_string(prefix, fields, "source")?
+        .map(GlobPattern::compile)
+        .transpose()
+        .map_err(|message| ConfigError::InvalidValue {
+            path: format!("{prefix}.source"),
+            message,
+        })
+}
+
+fn rule_classification(
+    prefix: &str,
+    fields: &std::collections::BTreeMap<String, ScalarValue>,
+) -> Result<PackageRuleClassification, ConfigError> {
+    match rule_string(prefix, fields, "classification")?.as_deref() {
+        Some("first-party") => Ok(PackageRuleClassification::FirstParty),
+        Some("third-party") => Ok(PackageRuleClassification::ThirdParty),
+        Some("exclude") => Ok(PackageRuleClassification::Exclude),
+        Some(value) => invalid(
+            format!("{prefix}.classification"),
+            format!("unsupported classification: {value}"),
+        ),
+        None => invalid(format!("{prefix}.classification"), "is required".to_owned()),
+    }
 }
 
 fn rule_string(
