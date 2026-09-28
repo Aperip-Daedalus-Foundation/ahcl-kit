@@ -77,9 +77,10 @@ x86-64/ARM64 output.
 
 ## Commits And Pull Requests
 
-Use Conventional Commit subjects such as `feat:`, `fix:`, `docs:`, `test:`,
-`refactor:`, and `chore:`. Keep commits independently reviewable and include a
-body when the reason or compatibility impact is not obvious.
+Use Conventional Commit subjects such as `feat(config):`, `fix(packaging):`,
+`docs(license):`, `refactor(cli):`, and `chore(release):`. Keep commits
+independently reviewable and include a body when the reason or compatibility
+impact is not obvious.
 
 Pull requests should explain the user-visible behavior, compatibility impact,
 security considerations, and commands used for verification. Do not include

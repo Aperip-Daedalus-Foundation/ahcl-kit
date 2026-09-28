@@ -97,6 +97,8 @@ run `ahcl <command> --help` for the accepted flags and output formats.
 
 ## Configuration
 
+</div>
+
 ```text
 schema = 1
 materials-directory = ".ahcl"
@@ -120,7 +122,9 @@ special-authorization-channel = ""
 
 [generation]
 strict-license-files = true
+```
 
+```text
 [rust.cargo]
 manifests:
   - "Cargo.toml"
@@ -153,6 +157,18 @@ adoption-date = "2026-09-20"
 special-authorization-channel = ""
 ```
 
+<div align="center">
+
+`enabled`, `covered-scope`, `[rust.cargo.evidence.*]`, and
+`[rust.cargo.component.*]` are optional. Evidence `kind` is `license`,
+`notice`, or `materials`. Component `layout` is `independent` or
+`centralized`. Omitted `schema` uses the latest supported schema, omitted
+`materials-directory` uses `.ahcl`, and omitted languages resolve to an empty
+set. Empty languages allow the generic AHCL project material commands to run
+without invoking an ecosystem adapter.
+
+</div>
+
 ```text
 [javascript]
 manifests:
@@ -163,6 +179,8 @@ packages = []
 rules = []
 ```
 
+<div align="center">
+
 `managers` accepts `npm`, `pnpm`, `yarn`, and `bun`. Omit `managers` to use the
 single lockfile beside each manifest: `package-lock.json`, `pnpm-lock.yaml`,
 `yarn.lock`, or text `bun.lock`. npm lockfiles must be version 2 or 3. pnpm
@@ -170,14 +188,6 @@ lockfiles must be version 6 or 9. Yarn classic and Yarn Berry lockfiles are
 both accepted. Binary `bun.lockb` is rejected. The JavaScript adapter does not
 install dependencies, traverse `node_modules`, or contact a registry. When more
 than one lockfile is present, set `managers` explicitly.
-
-`enabled`, `covered-scope`, `[rust.cargo.evidence.*]`, and
-`[rust.cargo.component.*]` are optional. Evidence `kind` is `license`,
-`notice`, or `materials`. Component `layout` is `independent` or
-`centralized`. Omitted `schema` uses the latest supported schema, omitted
-`materials-directory` uses `.ahcl`, and omitted languages resolve to an empty
-set. Empty languages allow the generic AHCL project material commands to run
-without invoking an ecosystem adapter.
 
 ## Build From Source
 
