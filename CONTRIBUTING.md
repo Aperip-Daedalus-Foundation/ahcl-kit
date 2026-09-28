@@ -42,6 +42,42 @@ target/debug/ahcl project check
 
 On Windows, use `target\debug\ahcl.exe` for the final two commands.
 
+## Source Limits
+
+A handwritten production function, including a closure, stays at McCabe
+cyclomatic complexity 8 or below. Count branches, loops, short-circuit
+boolean arms, `match` arms, and early returns. Splitting an expression across
+lines does not reduce the count.
+
+Keep a function within 80 lines, 4 levels of nesting, and 6 parameters. Split
+it when it passes one of those limits, unless the split would hide a safety
+or protocol boundary. Explain that case in the pull request.
+
+Review a source file as it nears 800 lines. Split it before 1,200 lines in
+the same change, or explain why it cannot be split. Do not count the AHCL
+notice at the top of the file.
+
+## Crate Boundaries
+
+An extension crate implements one language or package manager and depends on
+the public crates. A public crate does not depend on, name, call, or contain
+an extension.
+
+The public crates are `ahcl-kit-core`, `ahcl-kit-fs`, `ahcl-kit-config`,
+`ahcl-kit-license`, `ahcl-kit-materials`, and `ahcl-kit-cli`. They expose
+language-neutral contracts only. Ecosystem identifiers, settings, lockfile
+parsing, and other package-manager behavior stay in the extension that owns
+them.
+
+`crates/ahcl-kit` is the composition root and the only crate that depends on
+extensions. It registers their contributors and hosts. `assets/packaging`
+builds that binary and does not name an ecosystem. Adding a language or
+package manager means a new extension crate and a registration in the
+composition root. Do not change a public crate to teach it the new ecosystem.
+
+Behavior used by more than one extension belongs in a public crate. Do not
+copy it into an extension. Behavior used by only one ecosystem stays there.
+
 ## Tests
 
 Verify behavior changes with focused, repeatable checks. Security-sensitive
@@ -78,9 +114,10 @@ x86-64/ARM64 output.
 ## Commits And Pull Requests
 
 Use Conventional Commit subjects such as `feat(config):`, `fix(packaging):`,
-`docs(license):`, `refactor(cli):`, and `chore(release):`. Keep commits
-independently reviewable and include a body when the reason or compatibility
-impact is not obvious.
+`docs(license):`, `refactor(cli):`, and `chore(release):`. Split commits by
+responsibility. Do not combine unrelated work into one commit that is
+difficult to review. Include a body when the reason or compatibility impact
+is not obvious.
 
 Pull requests should explain the user-visible behavior, compatibility impact,
 security considerations, and commands used for verification. Do not include
