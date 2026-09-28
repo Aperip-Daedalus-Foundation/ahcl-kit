@@ -1,4 +1,4 @@
-// crates/ahcl-kit-fs/src/lib.rs - Shared no-follow package evidence reads.
+// crates/ahcl-kit-fs/src/lib.rs - Shared no-follow reads and writes.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -28,15 +28,32 @@
 use std::fs::File;
 use std::io::{self, Read};
 
+mod failure;
+mod safe_component;
+mod temp_name;
+
 #[cfg(unix)]
 mod unix;
 #[cfg(windows)]
 mod windows;
 
 #[cfg(unix)]
-pub use unix::{PackageDirectory, read_regular_file, validate_regular_file};
+pub use unix::{FsDirectory, FsRoot, PackageDirectory, read_regular_file, validate_regular_file};
 #[cfg(windows)]
-pub use windows::{PackageDirectory, read_regular_file, validate_regular_file};
+pub use windows::{
+    FsDirectory, FsRoot, PackageDirectory, read_regular_file, validate_regular_file,
+};
+
+#[cfg(unix)]
+pub(crate) use unix::fill_random;
+#[cfg(windows)]
+pub(crate) use windows::fill_random;
+
+pub use failure::{
+    Inspected, PathFailure, ReadNode, RemoveFailure, RemoveStatus, RootFailure, ScanFailure,
+    WriteFailure,
+};
+pub use safe_component::is_safe_component;
 
 #[derive(Debug)]
 pub enum PackageFsError {

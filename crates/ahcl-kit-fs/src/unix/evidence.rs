@@ -1,4 +1,4 @@
-// crates/ahcl-kit-fs/src/unix.rs - Unix package evidence capability.
+// crates/ahcl-kit-fs/src/unix/evidence.rs - Unix no-follow package evidence reads.
 //
 // Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.
 //
@@ -25,7 +25,7 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-use super::{PackageFsError, read_file_with_limit};
+use crate::{PackageFsError, read_file_with_limit};
 use rustix::fd::OwnedFd;
 use rustix::fs::{AtFlags, Dir, FileType, Mode, OFlags, fstat, open, openat, statat};
 use rustix::io::{self as rio, Errno};
@@ -58,25 +58,10 @@ enum DirectoryOpenError {
 
 impl PackageDirectory {
     pub fn open(path: &Path) -> Result<Self, PackageFsError> {
-        if !path.is_absolute() {
-            return Err(PackageFsError::InvalidPath);
-        }
-
-        let mut components = Vec::new();
-        let mut saw_root = false;
-        for component in path.components() {
-            match component {
-                Component::RootDir if !saw_root => saw_root = true,
-                Component::Normal(value) if saw_root => components.push(value.to_os_string()),
-                _ => return Err(PackageFsError::InvalidPath),
-            }
-        }
-        if !saw_root {
-            return Err(PackageFsError::InvalidPath);
-        }
-
-        let mut current = open(Path::new("/"), DIRECTORY_FLAGS, Mode::empty())
-            .map_err(|error| PackageFsError::Io(io_error(error)))?;
+        let components = absolute_components(path)?;
+        // Descend from the filesystem root with no-follow directory opens.
+        // Reparse points and non-directories remain hard failures.
+        let mut current = open_root()?;
         for component in components {
             current = open_directory_at(&current, &component).map_err(map_directory_error)?;
         }
@@ -90,32 +75,27 @@ impl PackageDirectory {
             Dir::read_from(&self.handle).map_err(|error| PackageFsError::Io(io_error(error)))?;
         while let Some(entry) = entries.read() {
             let entry = entry.map_err(|error| PackageFsError::Io(io_error(error)))?;
-            let name = OsStr::from_bytes(entry.file_name().to_bytes());
-            if name == OsStr::new(".") || name == OsStr::new("..") {
-                continue;
-            }
-            let name = name.to_str().ok_or(PackageFsError::PathEncoding)?;
-            let upper = name.to_ascii_uppercase();
-            if !["LICENSE", "COPYING", "NOTICE", "COPYRIGHT"]
-                .iter()
-                .any(|prefix| upper.starts_with(prefix))
-            {
-                continue;
-            }
-            if open_regular_file_at(&self.handle, OsStr::new(name))?.is_none() {
-                continue;
-            }
-            if portable.insert(name.to_ascii_lowercase()) {
-                let count = u64::try_from(candidates.len())
-                    .map_or(u64::MAX, |length| length.saturating_add(1));
-                if count > max_files {
-                    return Err(PackageFsError::TooManyFiles(count));
-                }
-                candidates.push(PathBuf::from(name));
-            }
+            self.consider_license_entry(&entry, &mut candidates, &mut portable, max_files)?;
         }
         sort_candidates(&mut candidates);
         Ok(candidates)
+    }
+
+    fn consider_license_entry(
+        &self,
+        entry: &rustix::fs::DirEntry,
+        candidates: &mut Vec<PathBuf>,
+        portable: &mut BTreeSet<String>,
+        max_files: u64,
+    ) -> Result<(), PackageFsError> {
+        let Some(name) = license_file_name(entry)? else {
+            return Ok(());
+        };
+        // The no-follow regular-file open rejects links before the name is kept.
+        if open_regular_file_at(&self.handle, OsStr::new(&name))?.is_none() {
+            return Ok(());
+        }
+        push_unique_candidate(candidates, portable, &name, max_files)
     }
 
     pub fn read_bounded_file(
@@ -123,17 +103,25 @@ impl PackageDirectory {
         relative: &Path,
         limit: u64,
     ) -> Result<Option<Vec<u8>>, PackageFsError> {
+        let (parent, name) = self.open_relative(relative)?;
+        let Some((handle, advertised_len)) = open_regular_file_at(&parent, &name)? else {
+            return Ok(None);
+        };
+        read_file_with_limit(File::from(handle), advertised_len, limit).map(Some)
+    }
+
+    fn open_relative(&self, relative: &Path) -> Result<(OwnedFd, OsString), PackageFsError> {
         let components = normal_components(relative)?;
-        let (final_name, parents) = components.split_last().ok_or(PackageFsError::InvalidPath)?;
+        let Some((final_name, parents)) = components.split_last() else {
+            return Err(PackageFsError::InvalidPath);
+        };
+        let name = final_name.clone();
         let mut current =
             rio::dup(&self.handle).map_err(|error| PackageFsError::Io(io_error(error)))?;
         for component in parents {
             current = open_directory_at(&current, component).map_err(map_directory_error)?;
         }
-        let Some((handle, advertised_len)) = open_regular_file_at(&current, final_name)? else {
-            return Ok(None);
-        };
-        read_file_with_limit(File::from(handle), advertised_len, limit).map(Some)
+        Ok((current, name))
     }
 }
 
@@ -204,15 +192,21 @@ fn classify_directory_error(parent: &OwnedFd, name: &OsStr, error: Errno) -> Dir
     match error {
         Errno::NOENT => DirectoryOpenError::Missing,
         Errno::LOOP => DirectoryOpenError::Reparse,
-        Errno::NOTDIR => match statat(parent, name, AtFlags::SYMLINK_NOFOLLOW) {
-            Ok(metadata) if FileType::from_raw_mode(metadata.st_mode).is_symlink() => {
-                DirectoryOpenError::Reparse
-            }
-            Ok(_) => DirectoryOpenError::NotDirectory,
-            Err(Errno::NOENT) => DirectoryOpenError::Missing,
-            Err(source) => DirectoryOpenError::Io(source),
-        },
+        Errno::NOTDIR => classify_not_directory(parent, name),
         source => DirectoryOpenError::Io(source),
+    }
+}
+
+fn classify_not_directory(parent: &OwnedFd, name: &OsStr) -> DirectoryOpenError {
+    // The failed open did not follow a link. This stat confirms whether the
+    // entry itself is a symlink or simply not a directory.
+    match statat(parent, name, AtFlags::SYMLINK_NOFOLLOW) {
+        Ok(metadata) if FileType::from_raw_mode(metadata.st_mode).is_symlink() => {
+            DirectoryOpenError::Reparse
+        }
+        Ok(_) => DirectoryOpenError::NotDirectory,
+        Err(Errno::NOENT) => DirectoryOpenError::Missing,
+        Err(source) => DirectoryOpenError::Io(source),
     }
 }
 
@@ -228,6 +222,93 @@ fn map_directory_error(error: DirectoryOpenError) -> PackageFsError {
 
 fn io_error(error: Errno) -> io::Error {
     io::Error::from_raw_os_error(error.raw_os_error())
+}
+
+enum ComponentPiece {
+    Root,
+    Normal(OsString),
+}
+
+fn absolute_components(path: &Path) -> Result<Vec<OsString>, PackageFsError> {
+    if !path.is_absolute() {
+        return Err(PackageFsError::InvalidPath);
+    }
+    collect_absolute_components(path)
+}
+
+fn collect_absolute_components(path: &Path) -> Result<Vec<OsString>, PackageFsError> {
+    let mut components = Vec::new();
+    let mut saw_root = false;
+    for component in path.components() {
+        apply_component(&mut components, &mut saw_root, component)?;
+    }
+    if saw_root {
+        Ok(components)
+    } else {
+        Err(PackageFsError::InvalidPath)
+    }
+}
+
+fn apply_component(
+    components: &mut Vec<OsString>,
+    saw_root: &mut bool,
+    component: Component,
+) -> Result<(), PackageFsError> {
+    match component_piece(component, *saw_root)? {
+        ComponentPiece::Root => *saw_root = true,
+        ComponentPiece::Normal(value) => components.push(value),
+    }
+    Ok(())
+}
+
+fn component_piece(component: Component, saw_root: bool) -> Result<ComponentPiece, PackageFsError> {
+    match component {
+        Component::RootDir if !saw_root => Ok(ComponentPiece::Root),
+        Component::Normal(value) if saw_root => Ok(ComponentPiece::Normal(value.to_os_string())),
+        _ => Err(PackageFsError::InvalidPath),
+    }
+}
+
+fn open_root() -> Result<OwnedFd, PackageFsError> {
+    open(Path::new("/"), DIRECTORY_FLAGS, Mode::empty())
+        .map_err(|error| PackageFsError::Io(io_error(error)))
+}
+
+fn license_file_name(entry: &rustix::fs::DirEntry) -> Result<Option<String>, PackageFsError> {
+    let name = OsStr::from_bytes(entry.file_name().to_bytes());
+    if name == OsStr::new(".") || name == OsStr::new("..") {
+        return Ok(None);
+    }
+    let name = name.to_str().ok_or(PackageFsError::PathEncoding)?;
+    if is_license_name(name) {
+        Ok(Some(name.to_owned()))
+    } else {
+        Ok(None)
+    }
+}
+
+fn is_license_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    ["LICENSE", "COPYING", "NOTICE", "COPYRIGHT"]
+        .iter()
+        .any(|prefix| upper.starts_with(prefix))
+}
+
+fn push_unique_candidate(
+    candidates: &mut Vec<PathBuf>,
+    portable: &mut BTreeSet<String>,
+    name: &str,
+    max_files: u64,
+) -> Result<(), PackageFsError> {
+    if !portable.insert(name.to_ascii_lowercase()) {
+        return Ok(());
+    }
+    let count = u64::try_from(candidates.len()).map_or(u64::MAX, |length| length.saturating_add(1));
+    if count > max_files {
+        return Err(PackageFsError::TooManyFiles(count));
+    }
+    candidates.push(PathBuf::from(name));
+    Ok(())
 }
 
 fn sort_candidates(candidates: &mut [PathBuf]) {

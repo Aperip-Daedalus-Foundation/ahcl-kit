@@ -25,33 +25,208 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
-use crate::MaterialsError;
+// Materials policy over `ahcl-kit-fs`. Platform opens, renames, and deletes live
+// in that crate. This module maps those outcomes onto material errors, checks
+// evidence digests, and classifies the managed third-party tree.
+
+mod inventory;
+
+use crate::{ManagedThirdPartyInventory, MaterialsError, MaterialsErrorCode, SafeRelPath};
+use ahcl_kit_core::ProjectEntry;
+use ahcl_kit_fs::{
+    FsDirectory, FsRoot, PathFailure, ReadNode, RemoveFailure, RemoveStatus, RootFailure,
+    WriteFailure,
+};
 use sha2::{Digest, Sha256};
+use std::fs::File;
 use std::io::{self, Read};
+use std::path::Path;
 
 pub(crate) const MAX_MANAGED_ROOT_ENTRIES: usize = 2_048;
 pub(crate) const MAX_MANAGED_PACKAGES: usize = 1_024;
 pub(crate) const MAX_MANAGED_EVIDENCE_PER_PACKAGE: usize = 64;
 pub(crate) const MAX_MANAGED_TOTAL_ENTRIES: usize = 8_192;
 
-#[cfg(unix)]
-mod unix;
-#[cfg(windows)]
-mod windows;
+pub(crate) struct PlatformRoot {
+    inner: FsRoot,
+}
 
-#[cfg(unix)]
-pub(crate) use unix::{ManagedDirectory, PlatformRoot, fill_random};
-#[cfg(windows)]
-pub(crate) use windows::{ManagedDirectory, PlatformRoot, fill_random};
+pub(crate) struct ManagedDirectory {
+    inner: Option<FsDirectory>,
+}
 
-fn inventory_limit_error() -> MaterialsError {
+impl PlatformRoot {
+    pub(crate) fn open(path: &Path) -> Result<Self, MaterialsError> {
+        FsRoot::open(path)
+            .map(|inner| Self { inner })
+            .map_err(map_root)
+    }
+
+    pub(crate) fn read_entry(&self, path: &SafeRelPath) -> Result<ProjectEntry, MaterialsError> {
+        match self
+            .inner
+            .read_entry(path.repo_path().as_path(), path.components())
+        {
+            Ok(node) => Ok(project_entry(node)),
+            Err(error) => Err(map_path(path, error)),
+        }
+    }
+
+    pub(crate) fn atomic_write(
+        &self,
+        path: &SafeRelPath,
+        bytes: &[u8],
+        replace: bool,
+    ) -> Result<(), MaterialsError> {
+        self.inner
+            .write_file(path.components(), bytes, replace)
+            .map_err(|error| map_write(path, error))
+    }
+
+    pub(crate) fn open_managed(
+        &self,
+        namespace: &SafeRelPath,
+    ) -> Result<ManagedDirectory, MaterialsError> {
+        match self.inner.open_directory(namespace.components()) {
+            Ok(inner) => Ok(ManagedDirectory { inner }),
+            Err(error) => Err(map_path(namespace, error)),
+        }
+    }
+}
+
+impl ManagedDirectory {
+    pub(crate) fn inventory(&self) -> Result<ManagedThirdPartyInventory, MaterialsError> {
+        match &self.inner {
+            None => Ok(ManagedThirdPartyInventory::absent()),
+            Some(directory) => inventory::inventory_directory(directory),
+        }
+    }
+
+    pub(crate) fn ensure_present(&self) -> Result<(), MaterialsError> {
+        if self.inner.is_some() {
+            Ok(())
+        } else {
+            Err(managed_tree_error())
+        }
+    }
+
+    pub(crate) fn remove_file(
+        &self,
+        path: &SafeRelPath,
+        expected_sha256: &str,
+    ) -> Result<(), MaterialsError> {
+        let directory = self.inner.as_ref().ok_or_else(managed_tree_error)?;
+        match directory.remove_file(path.components(), |file| {
+            reader_matches_sha256(file, expected_sha256)
+        }) {
+            Ok(RemoveStatus::Removed | RemoveStatus::Absent) => Ok(()),
+            Ok(RemoveStatus::Rejected) => Err(managed_changed_error(path)),
+            Err(error) => Err(map_remove(path, error)),
+        }
+    }
+
+    pub(crate) fn remove_empty_directory(&self, path: &SafeRelPath) -> Result<(), MaterialsError> {
+        let directory = self.inner.as_ref().ok_or_else(managed_tree_error)?;
+        match directory.remove_empty_directory(path.components()) {
+            Ok(RemoveStatus::Removed | RemoveStatus::Absent) => Ok(()),
+            Ok(RemoveStatus::Rejected) => Err(managed_changed_error(path)),
+            Err(error) => Err(map_remove(path, error)),
+        }
+    }
+}
+
+fn project_entry(node: ReadNode) -> ProjectEntry {
+    match node {
+        ReadNode::Absent => ProjectEntry::Absent,
+        ReadNode::Other => ProjectEntry::Other,
+        ReadNode::File(bytes) => ProjectEntry::File(bytes),
+    }
+}
+
+fn map_root(error: RootFailure) -> MaterialsError {
+    match error {
+        RootFailure::NotAbsolute => MaterialsError::root(
+            "materials.root.not_absolute",
+            "project root must be absolute",
+        ),
+        RootFailure::Invalid => invalid_root_error(),
+        RootFailure::FilesystemRoot => MaterialsError::root(
+            "materials.root.filesystem_root",
+            "filesystem root cannot be a project root",
+        ),
+        RootFailure::Open => {
+            MaterialsError::root("materials.root.open", "project root cannot be opened")
+        }
+        RootFailure::Reparse => root_reparse_error(),
+        RootFailure::NotDirectory => MaterialsError::root(
+            "materials.root.not_directory",
+            "project root must be a directory",
+        ),
+    }
+}
+
+fn root_reparse_error() -> MaterialsError {
+    #[cfg(windows)]
+    let message = "project root cannot contain a link or reparse point";
+    #[cfg(not(windows))]
+    let message = "project root cannot contain a symbolic link";
+    MaterialsError::root("materials.root.reparse", message)
+}
+
+fn map_path(path: &SafeRelPath, error: PathFailure) -> MaterialsError {
+    match error {
+        PathFailure::Reparse => reparse_error(path),
+        PathFailure::NotDirectory => MaterialsError::at_path(
+            "materials.path.not_directory",
+            "path component is not a directory",
+            path,
+        ),
+        PathFailure::Io => path_io_error(path),
+        PathFailure::Internal => internal_error(),
+    }
+}
+
+fn map_write(path: &SafeRelPath, error: WriteFailure) -> MaterialsError {
+    match error {
+        WriteFailure::Path(inner) => map_path(path, inner),
+        WriteFailure::Commit => commit_error(path),
+        WriteFailure::Write => MaterialsError::at_path(
+            "materials.apply.write",
+            "temporary file could not be written",
+            path,
+        ),
+        WriteFailure::TempCreate => MaterialsError::at_path(
+            "materials.apply.temp_create",
+            "temporary file could not be created",
+            path,
+        ),
+    }
+}
+
+fn map_remove(path: &SafeRelPath, error: RemoveFailure) -> MaterialsError {
+    match error {
+        RemoveFailure::Path(inner) => map_path(path, inner),
+        RemoveFailure::ManagedLink => managed_link_error(),
+        RemoveFailure::ManagedTree => managed_tree_error(),
+        RemoveFailure::ManagedRemove => managed_remove_error(path),
+    }
+}
+
+pub(crate) fn inventory_limit_error() -> MaterialsError {
     MaterialsError::filesystem(
         "materials.managed.inventory_limit",
         "managed third-party inventory exceeds supported entry limits",
     )
 }
 
-fn reader_matches_sha256(reader: &mut impl Read, expected_sha256: &str) -> io::Result<bool> {
+pub(crate) fn inventory_error() -> MaterialsError {
+    MaterialsError::filesystem(
+        "materials.managed.inventory",
+        "managed third-party inventory could not be read",
+    )
+}
+
+fn reader_matches_sha256(reader: &mut File, expected_sha256: &str) -> io::Result<bool> {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
@@ -63,12 +238,74 @@ fn reader_matches_sha256(reader: &mut impl Read, expected_sha256: &str) -> io::R
         digest.update(&buffer[..read]);
     }
     let digest = digest.finalize();
-    Ok(expected_sha256
-        .as_bytes()
+    Ok(digest_matches(expected_sha256.as_bytes(), &digest, HEX))
+}
+
+fn digest_matches(expected: &[u8], digest: &[u8], hex: &[u8; 16]) -> bool {
+    expected
         .chunks_exact(2)
         .zip(digest)
-        .all(|(expected, actual)| {
-            expected[0] == HEX[usize::from(actual >> 4)]
-                && expected[1] == HEX[usize::from(actual & 0x0f)]
-        }))
+        .all(|(pair, actual)| hex_pair_matches(pair, *actual, hex))
+}
+
+fn hex_pair_matches(pair: &[u8], actual: u8, hex: &[u8; 16]) -> bool {
+    pair[0] == hex[usize::from(actual >> 4)] && pair[1] == hex[usize::from(actual & 0x0f)]
+}
+
+fn invalid_root_error() -> MaterialsError {
+    MaterialsError::root(
+        "materials.root.invalid",
+        "project root has an unsupported absolute-path form",
+    )
+}
+
+fn internal_error() -> MaterialsError {
+    MaterialsError::root(
+        "materials.internal.invariant",
+        "filesystem capability invariant failed",
+    )
+}
+
+fn reparse_error(path: &SafeRelPath) -> MaterialsError {
+    #[cfg(windows)]
+    let message = "links and reparse points are forbidden";
+    #[cfg(not(windows))]
+    let message = "symbolic links are forbidden";
+    MaterialsError::at_path("materials.path.reparse", message, path)
+}
+
+fn path_io_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.path.io",
+        "project entry could not be accessed",
+        path,
+    )
+}
+
+fn commit_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path("materials.apply.commit", "atomic file commit failed", path)
+}
+
+fn managed_tree_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::ManagedTreeInvalid)
+}
+
+fn managed_link_error() -> MaterialsError {
+    MaterialsError::new(MaterialsErrorCode::LinkOrReparsePoint)
+}
+
+fn managed_remove_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.managed.remove",
+        "managed entry could not be removed",
+        path,
+    )
+}
+
+fn managed_changed_error(path: &SafeRelPath) -> MaterialsError {
+    MaterialsError::at_path(
+        "materials.managed.changed",
+        "managed evidence changed after planning",
+        path,
+    )
 }

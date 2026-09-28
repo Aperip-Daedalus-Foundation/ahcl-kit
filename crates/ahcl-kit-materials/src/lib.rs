@@ -49,9 +49,10 @@ pub use view::{ManagedThirdPartyDir, ProjectFilesystem};
 
 use ahcl_kit_config::EffectiveConfig;
 use ahcl_kit_core::{ChangePlan, ProjectView, RepoPath, ResolvedGraph, UtcDate};
+use ahcl_kit_fs::is_safe_component;
 use ahcl_kit_license::VerifiedLicense;
 use std::collections::BTreeMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 
 pub struct ProjectGenerationPlanner;
 
@@ -64,28 +65,115 @@ impl ProjectGenerationPlanner {
         inventory: &ManagedThirdPartyInventory,
         current_date: UtcDate,
     ) -> Result<MaterialGenerationPlan, MaterialsError> {
-        let layout = LayoutPolicy::from_config(config)?;
-        let dependency_path = layout.dependencies_path()?;
-        let project =
-            ProjectMaterialGenerator::plan_project_files(view, config, license, current_date)?;
-        let license_plan = ProjectMaterialGenerator::plan_license_sync(view, config, license)?;
-        let dependency = DependencyMaterialGenerator::plan_document(view, config, graph)?;
-        let third_party = ThirdPartyMaterialGenerator::plan_tree(view, config, graph, inventory)?;
-        let (third_party_changes, removals, diagnostics) = third_party.into_parts();
-        let mut writes = BTreeMap::new();
-        collect_writes(&mut writes, &project, Some(&dependency_path))?;
-        collect_writes(&mut writes, &license_plan, None)?;
-        collect_writes(&mut writes, &dependency, None)?;
-        collect_writes(&mut writes, &third_party_changes, None)?;
-        let mut desired = ChangePlan::new();
-        for (path, bytes) in writes {
-            desired
-                .write(path, bytes)
-                .map_err(MaterialsError::from_plan)?;
-        }
-        let changes = desired.compare(view).map_err(MaterialsError::from_plan)?;
-        Ok(MaterialGenerationPlan::new(changes, removals, diagnostics))
+        let planned = plan_documents(PlanInputs {
+            view,
+            config,
+            license,
+            graph,
+            inventory,
+            current_date,
+        })?;
+        assemble_plan(view, planned)
     }
+}
+
+struct PlanInputs<'a> {
+    view: &'a dyn ProjectView,
+    config: &'a EffectiveConfig,
+    license: &'a VerifiedLicense,
+    graph: &'a ResolvedGraph,
+    inventory: &'a ManagedThirdPartyInventory,
+    current_date: UtcDate,
+}
+
+struct PlannedDocuments {
+    writes: BTreeMap<RepoPath, Vec<u8>>,
+    removals: Vec<crate::ManagedRemoval>,
+    diagnostics: Vec<ahcl_kit_core::Diagnostic>,
+}
+
+fn plan_documents(input: PlanInputs<'_>) -> Result<PlannedDocuments, MaterialsError> {
+    let layout = LayoutPolicy::from_config(input.config)?;
+    let dependency_path = layout.dependencies_path()?;
+    let documents = generate_documents(&input)?;
+    let writes = collect_document_writes(&documents, &dependency_path)?;
+    Ok(PlannedDocuments {
+        writes,
+        removals: documents.removals,
+        diagnostics: documents.diagnostics,
+    })
+}
+
+struct GeneratedDocuments {
+    project: ChangePlan,
+    license_plan: ChangePlan,
+    dependency: ChangePlan,
+    third_party: ChangePlan,
+    removals: Vec<crate::ManagedRemoval>,
+    diagnostics: Vec<ahcl_kit_core::Diagnostic>,
+}
+
+fn generate_documents(input: &PlanInputs<'_>) -> Result<GeneratedDocuments, MaterialsError> {
+    let project = ProjectMaterialGenerator::plan_project_files(
+        input.view,
+        input.config,
+        input.license,
+        input.current_date,
+    )?;
+    let license_plan =
+        ProjectMaterialGenerator::plan_license_sync(input.view, input.config, input.license)?;
+    let dependency =
+        DependencyMaterialGenerator::plan_document(input.view, input.config, input.graph)?;
+    let third_party = ThirdPartyMaterialGenerator::plan_tree(
+        input.view,
+        input.config,
+        input.graph,
+        input.inventory,
+    )?;
+    let (third_party_changes, removals, diagnostics) = third_party.into_parts();
+    Ok(GeneratedDocuments {
+        project,
+        license_plan,
+        dependency,
+        third_party: third_party_changes,
+        removals,
+        diagnostics,
+    })
+}
+
+fn collect_document_writes(
+    documents: &GeneratedDocuments,
+    dependency_path: &RepoPath,
+) -> Result<BTreeMap<RepoPath, Vec<u8>>, MaterialsError> {
+    let mut writes = BTreeMap::new();
+    collect_writes(&mut writes, &documents.project, Some(dependency_path))?;
+    collect_writes(&mut writes, &documents.license_plan, None)?;
+    collect_writes(&mut writes, &documents.dependency, None)?;
+    collect_writes(&mut writes, &documents.third_party, None)?;
+    Ok(writes)
+}
+
+fn assemble_plan(
+    view: &dyn ProjectView,
+    planned: PlannedDocuments,
+) -> Result<MaterialGenerationPlan, MaterialsError> {
+    let desired = desired_plan(planned.writes)?;
+    let changes = desired.compare(view).map_err(MaterialsError::from_plan)?;
+    Ok(MaterialGenerationPlan::new(
+        changes,
+        planned.removals,
+        planned.diagnostics,
+    ))
+}
+
+fn desired_plan(writes: BTreeMap<RepoPath, Vec<u8>>) -> Result<ChangePlan, MaterialsError> {
+    let mut desired = ChangePlan::new();
+    for (path, bytes) in writes {
+        desired
+            .write(path, bytes)
+            .map_err(MaterialsError::from_plan)?;
+    }
+    Ok(desired)
 }
 
 fn collect_writes(
@@ -120,20 +208,13 @@ pub(crate) struct SafeRelPath {
 impl SafeRelPath {
     pub(crate) fn from_repo_path(path: &RepoPath) -> Result<Self, MaterialsError> {
         let value = path.as_str();
-        if value.is_empty()
-            || value.starts_with('/')
-            || value.starts_with('\\')
-            || has_windows_prefix(value)
-        {
+        if !relative_shape_ok(value) {
             return Err(Self::invalid(path));
         }
 
         let mut components = Vec::new();
         for component in value.split(['/', '\\']) {
-            if !is_safe_component(component) {
-                return Err(Self::invalid(path));
-            }
-            components.push(OsString::from(component));
+            push_safe_component(&mut components, component, path)?;
         }
         if components.is_empty() {
             return Err(Self::invalid(path));
@@ -175,127 +256,26 @@ impl SafeRelPath {
     }
 }
 
+fn relative_shape_ok(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('/')
+        && !value.starts_with('\\')
+        && !has_windows_prefix(value)
+}
+
+fn push_safe_component(
+    components: &mut Vec<OsString>,
+    component: &str,
+    path: &RepoPath,
+) -> Result<(), MaterialsError> {
+    if !is_safe_component(component) {
+        return Err(SafeRelPath::invalid(path));
+    }
+    components.push(OsString::from(component));
+    Ok(())
+}
+
 fn has_windows_prefix(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
-}
-
-fn is_safe_component(component: &str) -> bool {
-    if component.is_empty()
-        || component == "."
-        || component == ".."
-        || component.as_bytes().contains(&0)
-        || component.ends_with([' ', '.'])
-        || component.chars().any(|character| {
-            character.is_control()
-                || matches!(
-                    character,
-                    '<' | '>' | ':' | '"' | '|' | '?' | '*' | '/' | '\\'
-                )
-        })
-    {
-        return false;
-    }
-
-    let base_name = match component.split_once('.') {
-        Some((name, _)) => name,
-        None => component,
-    }
-    .to_ascii_uppercase();
-    if matches!(base_name.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
-        return false;
-    }
-
-    let suffix = match base_name
-        .strip_prefix("COM")
-        .or_else(|| base_name.strip_prefix("LPT"))
-    {
-        Some(value) => value,
-        None => return true,
-    };
-    !matches!(
-        suffix,
-        "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "\u{b9}" | "\u{b2}" | "\u{b3}"
-    )
-}
-
-#[cfg(windows)]
-pub(crate) fn is_safe_os_component(component: &OsStr) -> bool {
-    match component.to_str() {
-        Some(value) => is_safe_component(value),
-        None => false,
-    }
-}
-
-pub(crate) fn temp_component() -> Result<OsString, MaterialsError> {
-    temp_component_from(platform_fs::fill_random).map_err(|_| {
-        MaterialsError::filesystem(
-            "materials.random.unavailable",
-            "secure temporary-name generation failed",
-        )
-    })
-}
-
-fn temp_component_from<E>(fill: impl FnOnce(&mut [u8]) -> Result<(), E>) -> Result<OsString, E> {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut random = [0_u8; 16];
-    fill(&mut random)?;
-    let mut name = String::with_capacity(14 + random.len() * 2);
-    name.push_str(".ahcl-kit-tmp-");
-    for byte in random {
-        name.push(char::from(HEX[usize::from(byte >> 4)]));
-        name.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    Ok(OsString::from(name))
-}
-
-#[cfg(unix)]
-pub(crate) fn is_dot_entry(name: &OsStr) -> bool {
-    name == OsStr::new(".") || name == OsStr::new("..")
-}
-
-#[cfg(test)]
-mod temp_component_contracts {
-    use super::temp_component_from;
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn randomness_failure_stops_generation() {
-        let error = temp_component_from(|_| Err("rng unavailable"))
-            .expect_err("randomness failure must stop temporary-name generation");
-
-        assert_eq!(error, "rng unavailable");
-    }
-
-    #[test]
-    fn every_random_byte_changes_the_temporary_name() {
-        let mut names = BTreeSet::new();
-        let zero = [0_u8; 16];
-        let zero_name = temp_component_from(|output| {
-            output.copy_from_slice(&zero);
-            Ok::<(), ()>(())
-        })
-        .expect("infallible test source");
-        assert!(names.insert(zero_name));
-
-        for index in 0..16 {
-            for value in 1..=u8::MAX {
-                let mut random = [0_u8; 16];
-                random[index] = value;
-                let name = temp_component_from(|output| {
-                    output.copy_from_slice(&random);
-                    Ok::<(), ()>(())
-                })
-                .expect("infallible test source");
-                let name_text = name.to_str().expect("temporary name is ASCII");
-                assert!(name_text.starts_with(".ahcl-kit-tmp-"));
-                assert_eq!(name_text.len(), 46);
-                assert!(
-                    names.insert(name),
-                    "duplicate for byte {index} value {value}"
-                );
-            }
-        }
-        assert_eq!(names.len(), 4_081);
-    }
 }

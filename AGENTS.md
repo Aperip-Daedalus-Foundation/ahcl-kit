@@ -5,7 +5,7 @@ AHCL Kit initializes, generates, and maintains AHCL materials for projects.
 ## Public Crates
 
 - `ahcl-kit-core`: shared domain boundaries for generators and adapters.
-- `ahcl-kit-fs`: no-follow reads of package evidence.
+- `ahcl-kit-fs`: no-follow reads and writes for package evidence and project trees.
 - `ahcl-kit-config`: strict parsing and resolution of `.ahclkitconfigs`.
 - `ahcl-kit-license`: download and verification of official AHCL license records.
 - `ahcl-kit-materials`: deterministic planning and capability-scoped application of AHCL materials.

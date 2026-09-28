@@ -68,7 +68,9 @@ dependencies = [
 name = "ahcl-kit-fs"
 version = "0.2.0"
 dependencies = [
+ "getrandom",
  "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -100,14 +102,12 @@ version = "0.2.0"
 dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
+ "ahcl-kit-fs",
  "ahcl-kit-license",
- "getrandom",
- "rustix",
  "serde",
  "serde_json",
  "sha2",
  "url",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
