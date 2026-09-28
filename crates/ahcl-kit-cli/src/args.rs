@@ -222,10 +222,32 @@ impl InvocationRegistry {
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        if !initial_cwd.is_absolute() {
-            return Err(InvocationError::InitialCwdNotAbsolute);
-        }
-        let mut argv = argv.into_iter().map(Into::into).collect::<Vec<OsString>>();
+        let argv = self.invocation_argv(argv, &initial_cwd)?;
+        let invocation_name = self.canonical_name.to_owned();
+        let cli = Cli::try_parse_from(argv).map_err(InvocationError::Arguments)?;
+        Ok(ParsedInvocation {
+            invocation_name,
+            initial_cwd,
+            cli,
+        })
+    }
+
+    fn invocation_argv<I, T>(
+        &self,
+        argv: I,
+        initial_cwd: &Path,
+    ) -> Result<Vec<OsString>, InvocationError>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        absolute_initial_cwd(initial_cwd)?;
+        let mut argv = argv.into_iter().map(Into::into).collect::<Vec<_>>();
+        self.accept_argv0(&mut argv)?;
+        Ok(argv)
+    }
+
+    fn accept_argv0(&self, argv: &mut Vec<OsString>) -> Result<(), InvocationError> {
         let Some(observed) = argv.first() else {
             return Err(InvocationError::MissingArgv0);
         };
@@ -233,16 +255,10 @@ impl InvocationRegistry {
         if !self.accepts(&normalized) {
             return Err(InvocationError::UnknownInvocation { observed });
         }
-        let invocation_name = self.canonical_name.to_owned();
         if let Some(program) = argv.first_mut() {
-            *program = OsString::from(&invocation_name);
+            *program = OsString::from(self.canonical_name);
         }
-        let cli = Cli::try_parse_from(argv).map_err(InvocationError::Arguments)?;
-        Ok(ParsedInvocation {
-            invocation_name,
-            initial_cwd,
-            cli,
-        })
+        Ok(())
     }
 
     fn accepts(&self, invocation_name: &str) -> bool {
@@ -272,16 +288,8 @@ impl ParsedInvocation {
 
     pub fn command_id(&self) -> CommandId {
         match &self.cli.command {
-            TopCommand::Config { command } => match command {
-                ConfigCommand::Init(_) => CommandId::ConfigInit,
-                ConfigCommand::Validate(_) => CommandId::ConfigValidate,
-                ConfigCommand::Show(_) => CommandId::ConfigShowResolved,
-            },
-            TopCommand::Project { command } => match command {
-                ProjectCommand::Init(_) => CommandId::ProjectInit,
-                ProjectCommand::Generate(_) => CommandId::ProjectGenerate,
-                ProjectCommand::Check(_) => CommandId::ProjectCheck,
-            },
+            TopCommand::Config { command } => config_command_id(command),
+            TopCommand::Project { command } => project_command_id(command),
             TopCommand::License { .. } => CommandId::LicenseSync,
             TopCommand::Dependency { .. } => CommandId::DependencyGenerate,
             TopCommand::ThirdParty { .. } => CommandId::ThirdPartyGenerate,
@@ -368,16 +376,8 @@ impl ParsedInvocation {
 
     fn project_args(&self) -> &ProjectArgs {
         match &self.cli.command {
-            TopCommand::Config { command } => match command {
-                ConfigCommand::Init(args) => &args.project,
-                ConfigCommand::Validate(args) => &args.project,
-                ConfigCommand::Show(args) => &args.project,
-            },
-            TopCommand::Project { command } => match command {
-                ProjectCommand::Init(args) => &args.project,
-                ProjectCommand::Generate(args) => &args.project,
-                ProjectCommand::Check(args) => &args.project,
-            },
+            TopCommand::Config { command } => config_project_args(command),
+            TopCommand::Project { command } => project_command_args(command),
             TopCommand::License {
                 command: LicenseCommand::Sync(args),
             }
@@ -388,6 +388,46 @@ impl ParsedInvocation {
                 command: ThirdPartyCommand::Generate(args),
             } => &args.project,
         }
+    }
+}
+
+fn absolute_initial_cwd(initial_cwd: &Path) -> Result<(), InvocationError> {
+    if initial_cwd.is_absolute() {
+        Ok(())
+    } else {
+        Err(InvocationError::InitialCwdNotAbsolute)
+    }
+}
+
+fn config_command_id(command: &ConfigCommand) -> CommandId {
+    match command {
+        ConfigCommand::Init(_) => CommandId::ConfigInit,
+        ConfigCommand::Validate(_) => CommandId::ConfigValidate,
+        ConfigCommand::Show(_) => CommandId::ConfigShowResolved,
+    }
+}
+
+fn project_command_id(command: &ProjectCommand) -> CommandId {
+    match command {
+        ProjectCommand::Init(_) => CommandId::ProjectInit,
+        ProjectCommand::Generate(_) => CommandId::ProjectGenerate,
+        ProjectCommand::Check(_) => CommandId::ProjectCheck,
+    }
+}
+
+fn config_project_args(command: &ConfigCommand) -> &ProjectArgs {
+    match command {
+        ConfigCommand::Init(args) => &args.project,
+        ConfigCommand::Validate(args) => &args.project,
+        ConfigCommand::Show(args) => &args.project,
+    }
+}
+
+fn project_command_args(command: &ProjectCommand) -> &ProjectArgs {
+    match command {
+        ProjectCommand::Init(args) => &args.project,
+        ProjectCommand::Generate(args) => &args.project,
+        ProjectCommand::Check(args) => &args.project,
     }
 }
 

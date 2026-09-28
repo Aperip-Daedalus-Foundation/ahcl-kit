@@ -43,6 +43,23 @@ pub(crate) fn resolve_projects(
     projects_from: Option<&Path>,
     mode: DiscoveryMode,
 ) -> Result<Vec<PathBuf>, DiscoveryError> {
+    let entries = project_entries(initial_cwd, positional, projects_from)?;
+    if entries.is_empty() {
+        return discover_default(initial_cwd, mode).map(|path| vec![path]);
+    }
+
+    let mut projects = BTreeMap::new();
+    for entry in entries {
+        insert_project(initial_cwd, entry, &mut projects)?;
+    }
+    Ok(projects.into_values().collect())
+}
+
+fn project_entries(
+    initial_cwd: &Path,
+    positional: &[PathBuf],
+    projects_from: Option<&Path>,
+) -> Result<Vec<ProjectEntry>, DiscoveryError> {
     let mut entries = positional
         .iter()
         .cloned()
@@ -51,37 +68,37 @@ pub(crate) fn resolve_projects(
     if let Some(file) = projects_from {
         entries.extend(read_projects_file(initial_cwd, file)?);
     }
-    if entries.is_empty() {
-        return discover_default(initial_cwd, mode).map(|path| vec![path]);
-    }
+    Ok(entries)
+}
 
-    let mut projects = BTreeMap::new();
-    for entry in entries {
-        let requested = if entry.path.is_absolute() {
-            entry.path
-        } else {
-            initial_cwd.join(entry.path)
-        };
-        let canonical =
-            fs::canonicalize(&requested).map_err(|source| DiscoveryError::ProjectPath {
-                path: requested.clone(),
-                line: entry.line,
-                source,
-            })?;
-        let metadata = fs::metadata(&canonical).map_err(|source| DiscoveryError::ProjectPath {
-            path: requested.clone(),
+fn insert_project(
+    initial_cwd: &Path,
+    entry: ProjectEntry,
+    projects: &mut BTreeMap<String, PathBuf>,
+) -> Result<(), DiscoveryError> {
+    let requested = if entry.path.is_absolute() {
+        entry.path
+    } else {
+        initial_cwd.join(entry.path)
+    };
+    let canonical = fs::canonicalize(&requested).map_err(|source| DiscoveryError::ProjectPath {
+        path: requested.clone(),
+        line: entry.line,
+        source,
+    })?;
+    let metadata = fs::metadata(&canonical).map_err(|source| DiscoveryError::ProjectPath {
+        path: requested.clone(),
+        line: entry.line,
+        source,
+    })?;
+    if !metadata.is_dir() {
+        return Err(DiscoveryError::ProjectNotDirectory {
+            path: requested,
             line: entry.line,
-            source,
-        })?;
-        if !metadata.is_dir() {
-            return Err(DiscoveryError::ProjectNotDirectory {
-                path: requested,
-                line: entry.line,
-            });
-        }
-        projects.entry(path_key(&canonical)).or_insert(canonical);
+        });
     }
-    Ok(projects.into_values().collect())
+    projects.entry(path_key(&canonical)).or_insert(canonical);
+    Ok(())
 }
 
 fn read_projects_file(
@@ -126,26 +143,54 @@ fn discover_default(initial_cwd: &Path, mode: DiscoveryMode) -> Result<PathBuf, 
         path: initial_cwd.to_path_buf(),
         source,
     })?;
-    let mut current = Some(canonical.as_path());
+    let found = walk_project_markers(&canonical);
+    if let Some(config) = found.config {
+        return Ok(config);
+    }
+    default_without_config(canonical, mode, found.git_root)
+}
+
+struct ProjectMarkers {
+    config: Option<PathBuf>,
+    git_root: Option<PathBuf>,
+}
+
+fn walk_project_markers(start: &Path) -> ProjectMarkers {
+    let mut current = Some(start);
     let mut git_root = None;
     while let Some(directory) = current {
         if directory.join(".ahclkitconfigs").is_file() {
-            return Ok(directory.to_path_buf());
+            return ProjectMarkers {
+                config: Some(directory.to_path_buf()),
+                git_root,
+            };
         }
         if git_root.is_none() {
-            let marker = directory.join(".git");
-            if marker.is_dir() || marker.is_file() {
-                git_root = Some(directory.to_path_buf());
-            }
+            record_git_root(&mut git_root, directory);
         }
         current = directory.parent();
     }
+    ProjectMarkers {
+        config: None,
+        git_root,
+    }
+}
+
+fn record_git_root(git_root: &mut Option<PathBuf>, directory: &Path) {
+    let marker = directory.join(".git");
+    if marker.is_dir() || marker.is_file() {
+        *git_root = Some(directory.to_path_buf());
+    }
+}
+
+fn default_without_config(
+    canonical: PathBuf,
+    mode: DiscoveryMode,
+    git_root: Option<PathBuf>,
+) -> Result<PathBuf, DiscoveryError> {
     match mode {
         DiscoveryMode::ExistingConfig => Err(DiscoveryError::ConfigNotFound { start: canonical }),
-        DiscoveryMode::Initialization => match git_root {
-            Some(root) => Ok(root),
-            None => Ok(canonical),
-        },
+        DiscoveryMode::Initialization => Ok(git_root.unwrap_or(canonical)),
     }
 }
 

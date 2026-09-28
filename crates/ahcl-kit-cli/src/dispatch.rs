@@ -26,9 +26,10 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.1
 
 use crate::{
-    CommandReport, CommandRuntime, LanguageAdapterRegistry, OutputChange, OutputChangeKind,
-    OutputDiagnostic, OutputSeverity, ParsedInvocation, PlanRequest, PlanScope, ProjectReport,
-    ProjectStatus, ResolvedAdapter, RuntimeError, RuntimePlan, execute_batch,
+    AdapterKind, CommandReport, CommandRuntime, LanguageAdapterRegistry, OutputChange,
+    OutputChangeKind, OutputDiagnostic, OutputSeverity, ParsedInvocation, PlanRequest, PlanScope,
+    ProjectIdentityArgs, ProjectReport, ProjectStatus, ResolvedAdapter, RuntimeError, RuntimePlan,
+    execute_batch,
 };
 use ahcl_kit_config::{ConfigValue, EffectiveConfig, ProjectIdentity};
 use ahcl_kit_core::{ChangeKind, CommandId, Diagnostic, DiagnosticSeverity, ProjectRoot, UtcDate};
@@ -38,25 +39,19 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 pub fn run(invocation: &ParsedInvocation, runtime: &mut dyn CommandRuntime) -> CommandReport {
-    let projects = match invocation.resolve_projects() {
-        Ok(projects) => projects,
-        Err(error) => {
-            return command_error(invocation, error.code(), error.to_string());
-        }
-    };
-    let identity = match project_identity(invocation) {
-        Ok(identity) => identity,
-        Err(error) => return command_error(invocation, error.code(), error.to_string()),
-    };
-    let current_date = if invocation.command_id() == CommandId::ProjectInit {
-        match runtime.current_utc_date() {
-            Ok(date) => Some(date),
-            Err(error) => return command_runtime_error(invocation, &error),
-        }
-    } else {
-        None
-    };
+    match dispatched(invocation, runtime) {
+        Ok(report) => report,
+        Err(report) => report,
+    }
+}
 
+fn dispatched(
+    invocation: &ParsedInvocation,
+    runtime: &mut dyn CommandRuntime,
+) -> Result<CommandReport, CommandReport> {
+    let projects = resolved_projects(invocation)?;
+    let identity = resolved_identity(invocation)?;
+    let current_date = init_date(invocation, runtime)?;
     let batch = execute_batch(projects, invocation.fail_fast(), |path| {
         execute_project(invocation, runtime, path, identity.as_ref(), current_date)
     });
@@ -68,12 +63,40 @@ pub fn run(invocation: &ParsedInvocation, runtime: &mut dyn CommandRuntime) -> C
             Err(error) => runtime_error_report(item.project, &error),
         })
         .collect();
-    CommandReport::new(
+    Ok(CommandReport::new(
         invocation.command_id(),
         invocation.invocation_name(),
         reports,
         Vec::new(),
-    )
+    ))
+}
+
+fn resolved_projects(
+    invocation: &ParsedInvocation,
+) -> Result<Vec<std::path::PathBuf>, CommandReport> {
+    invocation
+        .resolve_projects()
+        .map_err(|error| command_error(invocation, error.code(), error.to_string()))
+}
+
+fn resolved_identity(
+    invocation: &ParsedInvocation,
+) -> Result<Option<ProjectIdentity>, CommandReport> {
+    project_identity(invocation)
+        .map_err(|error| command_error(invocation, error.code(), error.to_string()))
+}
+
+fn init_date(
+    invocation: &ParsedInvocation,
+    runtime: &mut dyn CommandRuntime,
+) -> Result<Option<UtcDate>, CommandReport> {
+    if invocation.command_id() != CommandId::ProjectInit {
+        return Ok(None);
+    }
+    match runtime.current_utc_date() {
+        Ok(date) => Ok(Some(date)),
+        Err(error) => Err(command_runtime_error(invocation, &error)),
+    }
 }
 
 fn execute_project(
@@ -83,77 +106,141 @@ fn execute_project(
     identity: Option<&ProjectIdentity>,
     current_date: Option<UtcDate>,
 ) -> Result<crate::BatchValue<ProjectReport>, RuntimeError> {
-    let project = ProjectRoot::new(path.to_path_buf())
-        .map_err(|error| RuntimeError::with_source("cli.project_root", error))?;
+    let project = open_project(path)?;
     let command_id = invocation.command_id();
+    if let Some(report) = config_only_report(command_id, runtime, &project, path)? {
+        return Ok(report);
+    }
+    apply_planned(invocation, runtime, path, &project, identity, current_date)
+}
+
+fn open_project(path: &Path) -> Result<ProjectRoot, RuntimeError> {
+    ProjectRoot::new(path.to_path_buf())
+        .map_err(|error| RuntimeError::with_source("cli.project_root", error))
+}
+
+fn config_only_report(
+    command_id: CommandId,
+    runtime: &mut dyn CommandRuntime,
+    project: &ProjectRoot,
+    path: &Path,
+) -> Result<Option<crate::BatchValue<ProjectReport>>, RuntimeError> {
     if command_id == CommandId::ConfigValidate {
-        runtime.load_config(&project)?;
-        return Ok(crate::BatchValue::success(ProjectReport::new(
+        return validate_report(runtime, project, path).map(Some);
+    }
+    if command_id == CommandId::ConfigShowResolved {
+        return show_report(runtime, project, path).map(Some);
+    }
+    Ok(None)
+}
+
+fn validate_report(
+    runtime: &mut dyn CommandRuntime,
+    project: &ProjectRoot,
+    path: &Path,
+) -> Result<crate::BatchValue<ProjectReport>, RuntimeError> {
+    runtime.load_config(project)?;
+    Ok(crate::BatchValue::success(ProjectReport::new(
+        path.to_path_buf(),
+        ProjectStatus::Success,
+        Vec::new(),
+        Vec::new(),
+    )))
+}
+
+fn show_report(
+    runtime: &mut dyn CommandRuntime,
+    project: &ProjectRoot,
+    path: &Path,
+) -> Result<crate::BatchValue<ProjectReport>, RuntimeError> {
+    let config = runtime.load_config(project)?;
+    Ok(crate::BatchValue::success(
+        ProjectReport::new(
             path.to_path_buf(),
             ProjectStatus::Success,
             Vec::new(),
             Vec::new(),
-        )));
-    }
-    if command_id == CommandId::ConfigShowResolved {
-        let config = runtime.load_config(&project)?;
-        return Ok(crate::BatchValue::success(
-            ProjectReport::new(
-                path.to_path_buf(),
-                ProjectStatus::Success,
-                Vec::new(),
-                Vec::new(),
-            )
-            .with_resolved_config(resolved_config(&config)),
-        ));
-    }
+        )
+        .with_resolved_config(resolved_config(&config)),
+    ))
+}
 
-    let scopes = scopes(command_id);
-    let config = load_config(invocation, runtime, &project, identity, current_date)?;
+fn apply_planned(
+    invocation: &ParsedInvocation,
+    runtime: &mut dyn CommandRuntime,
+    path: &Path,
+    project: &ProjectRoot,
+    identity: Option<&ProjectIdentity>,
+    current_date: Option<UtcDate>,
+) -> Result<crate::BatchValue<ProjectReport>, RuntimeError> {
+    let command_id = invocation.command_id();
+    let planned = plan_compared(invocation, runtime, project, identity, current_date)?;
+    if command_id == CommandId::ProjectCheck {
+        return Ok(check_value(path, planned));
+    }
+    if !invocation.dry_run() {
+        runtime.apply_project(project, &planned.compared)?;
+    }
+    Ok(crate::BatchValue::success(ProjectReport::new(
+        path.to_path_buf(),
+        ProjectStatus::Success,
+        planned.diagnostics,
+        planned.planned_changes,
+    )))
+}
+
+struct PlannedProject {
+    compared: RuntimePlan,
+    diagnostics: Vec<OutputDiagnostic>,
+    planned_changes: Vec<OutputChange>,
+}
+
+fn plan_compared(
+    invocation: &ParsedInvocation,
+    runtime: &mut dyn CommandRuntime,
+    project: &ProjectRoot,
+    identity: Option<&ProjectIdentity>,
+    current_date: Option<UtcDate>,
+) -> Result<PlannedProject, RuntimeError> {
+    let command_id = invocation.command_id();
+    let config = load_config(invocation, runtime, project, identity, current_date)?;
     let license = fetch_license(command_id, runtime, config.as_ref())?;
-    let adapters = resolve_adapters(command_id, runtime, &project, config.as_ref())?;
+    let adapters = resolve_adapters(command_id, runtime, project, config.as_ref())?;
     let request = PlanRequest::new(
-        scopes,
+        scopes(command_id),
         config.as_ref(),
         license.as_ref(),
         &adapters,
         current_date,
         invocation.force(),
-        identity,
-    );
-    let desired = runtime.plan_project(&project, request)?;
-    let compared = runtime.compare_project(&project, desired)?;
-    let planned_changes = output_changes(&compared);
-    let diagnostics = output_diagnostics(compared.diagnostics());
+    )
+    .with_identity(identity);
+    let desired = runtime.plan_project(project, request)?;
+    let compared = runtime.compare_project(project, desired)?;
+    Ok(PlannedProject {
+        diagnostics: output_diagnostics(compared.diagnostics()),
+        planned_changes: output_changes(&compared),
+        compared,
+    })
+}
 
-    if command_id == CommandId::ProjectCheck {
-        let drift = !compared.is_empty();
-        let report = ProjectReport::new(
-            path.to_path_buf(),
-            if drift {
-                ProjectStatus::Drift
-            } else {
-                ProjectStatus::Success
-            },
-            diagnostics,
-            planned_changes,
-        );
-        return if drift {
-            Ok(crate::BatchValue::drift(report))
-        } else {
-            Ok(crate::BatchValue::success(report))
-        };
-    }
-
-    if !invocation.dry_run() {
-        runtime.apply_project(&project, &compared)?;
-    }
-    Ok(crate::BatchValue::success(ProjectReport::new(
+fn check_value(path: &Path, planned: PlannedProject) -> crate::BatchValue<ProjectReport> {
+    let drift = !planned.compared.is_empty();
+    let report = ProjectReport::new(
         path.to_path_buf(),
-        ProjectStatus::Success,
-        diagnostics,
-        planned_changes,
-    )))
+        if drift {
+            ProjectStatus::Drift
+        } else {
+            ProjectStatus::Success
+        },
+        planned.diagnostics,
+        planned.planned_changes,
+    );
+    if drift {
+        crate::BatchValue::drift(report)
+    } else {
+        crate::BatchValue::success(report)
+    }
 }
 
 fn project_identity(
@@ -162,28 +249,34 @@ fn project_identity(
     let Some(identity) = invocation.project_identity() else {
         return Ok(None);
     };
-    let any = identity.name.is_some()
-        || identity.repository.is_some()
-        || !identity.right_holders.is_empty();
-    if !any {
+    if !identity_present(&identity) {
         return Ok(None);
     }
-    let complete = identity
-        .name
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
-        && identity
-            .repository
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        && !identity.right_holders.is_empty()
-        && identity
-            .right_holders
-            .iter()
-            .all(|holder| !holder.trim().is_empty());
-    if !complete {
+    if !identity_complete(&identity) {
         return Err(RuntimeError::operation("config.identity_required"));
     }
+    identity_value(identity)
+}
+
+fn identity_present(identity: &ProjectIdentityArgs) -> bool {
+    identity.name.is_some() || identity.repository.is_some() || !identity.right_holders.is_empty()
+}
+
+fn identity_complete(identity: &ProjectIdentityArgs) -> bool {
+    nonempty_text(identity.name.as_deref())
+        && nonempty_text(identity.repository.as_deref())
+        && holders_present(&identity.right_holders)
+}
+
+fn nonempty_text(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
+fn holders_present(holders: &[String]) -> bool {
+    !holders.is_empty() && holders.iter().all(|holder| !holder.trim().is_empty())
+}
+
+fn identity_value(identity: ProjectIdentityArgs) -> Result<Option<ProjectIdentity>, RuntimeError> {
     match (identity.name, identity.repository) {
         (Some(name), Some(repository)) => Ok(Some(ProjectIdentity::new(
             name,
@@ -240,28 +333,67 @@ fn resolve_adapters(
     project: &ProjectRoot,
     config: Option<&EffectiveConfig>,
 ) -> Result<Vec<ResolvedAdapter>, RuntimeError> {
-    if !matches!(
+    if !adapter_command(command_id) {
+        return Ok(Vec::new());
+    }
+    let config = config.ok_or_else(|| RuntimeError::operation("config.unavailable"))?;
+    collect_adapters(runtime, project, config)
+}
+
+fn adapter_command(command_id: CommandId) -> bool {
+    matches!(
         command_id,
         CommandId::ProjectGenerate
             | CommandId::ProjectCheck
             | CommandId::DependencyGenerate
             | CommandId::ThirdPartyGenerate
-    ) {
-        return Ok(Vec::new());
-    }
-    let config = config.ok_or_else(|| RuntimeError::operation("config.unavailable"))?;
+    )
+}
+
+fn collect_adapters(
+    runtime: &mut dyn CommandRuntime,
+    project: &ProjectRoot,
+    config: &EffectiveConfig,
+) -> Result<Vec<ResolvedAdapter>, RuntimeError> {
     let registry = LanguageAdapterRegistry::new(runtime.ecosystems().hosts());
-    let mut adapter_kinds = BTreeSet::new();
+    let languages = config.languages().to_vec();
+    let mut kinds = BTreeSet::new();
     let mut adapters = Vec::with_capacity(config.languages().len());
-    for language in config.languages() {
-        let adapter = registry.adapter_for(language)?;
-        if !adapter_kinds.insert(adapter) {
-            return Err(RuntimeError::operation("cli.adapter_duplicate"));
-        }
-        let graph = runtime.resolve_adapter(adapter, project, config)?;
-        adapters.push(ResolvedAdapter::new(adapter, graph));
+    let mut accum = AdapterAccum {
+        runtime,
+        project,
+        config,
+        kinds: &mut kinds,
+        adapters: &mut adapters,
+    };
+    for language in &languages {
+        remember_adapter(&mut accum, &registry, language)?;
     }
     Ok(adapters)
+}
+
+struct AdapterAccum<'a> {
+    runtime: &'a mut dyn CommandRuntime,
+    project: &'a ProjectRoot,
+    config: &'a EffectiveConfig,
+    kinds: &'a mut BTreeSet<AdapterKind>,
+    adapters: &'a mut Vec<ResolvedAdapter>,
+}
+
+fn remember_adapter(
+    accum: &mut AdapterAccum<'_>,
+    registry: &LanguageAdapterRegistry,
+    language: &str,
+) -> Result<(), RuntimeError> {
+    let adapter = registry.adapter_for(language)?;
+    if !accum.kinds.insert(adapter) {
+        return Err(RuntimeError::operation("cli.adapter_duplicate"));
+    }
+    let graph = accum
+        .runtime
+        .resolve_adapter(adapter, accum.project, accum.config)?;
+    accum.adapters.push(ResolvedAdapter::new(adapter, graph));
+    Ok(())
 }
 
 fn scopes(command_id: CommandId) -> &'static [PlanScope] {

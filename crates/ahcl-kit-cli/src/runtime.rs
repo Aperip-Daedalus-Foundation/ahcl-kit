@@ -170,7 +170,6 @@ impl<'a> PlanRequest<'a> {
         adapters: &'a [ResolvedAdapter],
         current_date: Option<UtcDate>,
         force: bool,
-        identity: Option<&'a ProjectIdentity>,
     ) -> Self {
         Self {
             scopes,
@@ -179,8 +178,13 @@ impl<'a> PlanRequest<'a> {
             adapters,
             current_date,
             force,
-            identity,
+            identity: None,
         }
+    }
+
+    pub(crate) fn with_identity(mut self, identity: Option<&'a ProjectIdentity>) -> Self {
+        self.identity = identity;
+        self
     }
 
     pub fn scopes(&self) -> &[PlanScope] {

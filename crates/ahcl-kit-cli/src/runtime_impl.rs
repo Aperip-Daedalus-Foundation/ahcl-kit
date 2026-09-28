@@ -38,15 +38,26 @@ use ahcl_kit_core::{
 };
 use ahcl_kit_license::{OfficialLicenseClient, VerifiedLicense};
 use ahcl_kit_materials::{
-    DependencyMaterialGenerator, ManagedThirdPartyInventory, MaterialGenerationPlan, PlanApplier,
-    ProjectFilesystem, ProjectGenerationPlanner, ProjectMaterialGenerator,
-    ThirdPartyMaterialGenerator,
+    ManagedThirdPartyInventory, MaterialGenerationPlan, PlanApplier, ProjectFilesystem,
+    ProjectMaterialGenerator, ThirdPartyMaterialGenerator,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use time::OffsetDateTime;
 
+#[path = "runtime_components.rs"]
+mod runtime_components;
+#[path = "runtime_plan.rs"]
+mod runtime_plan;
+
 const CONFIG_PATH: &str = ".ahclkitconfigs";
+
+struct ComponentPlanInput<'a> {
+    config: &'a EffectiveConfig,
+    license: Option<&'a VerifiedLicense>,
+    current_date: Option<UtcDate>,
+    scopes: &'a [PlanScope],
+}
 
 pub struct ConcreteRuntime {
     current_date: Option<UtcDate>,
@@ -86,181 +97,7 @@ impl ConcreteRuntime {
         let key = project.as_path().to_path_buf();
         self.filesystems.remove(&key);
         let filesystem = ProjectFilesystem::open(project.as_path()).map_err(materials_error)?;
-        let plan = match request.scopes() {
-            [PlanScope::ConfigInit] => {
-                plan_config_init(&filesystem, request.force(), self.installed.contributors())?
-            }
-            [PlanScope::ProjectInit] => {
-                plan_project_init(&filesystem, request, self.installed.contributors())?
-            }
-            [PlanScope::ProjectFiles] => {
-                let config = required_config(request.config())?;
-                let license = required_license(request.license())?;
-                let date = adoption_date(config)?;
-                let mut components = self.plan_components(
-                    &filesystem,
-                    project,
-                    config,
-                    Some(license),
-                    Some(date),
-                    &[PlanScope::ProjectFiles],
-                )?;
-                let mut changes = if let Some(centralized) = components.centralized_project.take() {
-                    centralized
-                } else {
-                    ProjectMaterialGenerator::plan_project_files(&filesystem, config, license, date)
-                        .map_err(materials_error)?
-                };
-                append_plan(&mut changes, &components.changes)?;
-                RuntimePlan::new(
-                    changes.compare(&filesystem).map_err(plan_error)?,
-                    Vec::new(),
-                    components.diagnostics,
-                    Some(config.materials_directory().clone()),
-                )
-            }
-            [PlanScope::License] => {
-                let config = required_config(request.config())?;
-                let license = required_license(request.license())?;
-                let components = self.plan_components(
-                    &filesystem,
-                    project,
-                    config,
-                    Some(license),
-                    None,
-                    &[PlanScope::License],
-                )?;
-                let mut changes = components
-                    .centralized_project
-                    .unwrap_or_else(ChangePlan::new);
-                if changes.is_empty() {
-                    changes =
-                        ProjectMaterialGenerator::plan_license_sync(&filesystem, config, license)
-                            .map_err(materials_error)?;
-                }
-                append_plan(&mut changes, &components.changes)?;
-                RuntimePlan::new(
-                    changes.compare(&filesystem).map_err(plan_error)?,
-                    Vec::new(),
-                    components.diagnostics,
-                    Some(config.materials_directory().clone()),
-                )
-            }
-            [PlanScope::Dependencies] => {
-                let config = required_config(request.config())?;
-                let root_graph = resolved_graph(request.adapters())?;
-                let components = self.plan_components(
-                    &filesystem,
-                    project,
-                    config,
-                    None,
-                    None,
-                    &[PlanScope::Dependencies],
-                )?;
-                let graph = merge_component_graph(&root_graph, &components.centralized_graph)?;
-                let mut changes =
-                    DependencyMaterialGenerator::plan_document(&filesystem, config, &graph)
-                        .map_err(materials_error)?;
-                append_plan(&mut changes, &components.changes)?;
-                RuntimePlan::new(
-                    changes.compare(&filesystem).map_err(plan_error)?,
-                    Vec::new(),
-                    components.diagnostics,
-                    Some(config.materials_directory().clone()),
-                )
-            }
-            [PlanScope::ThirdParty] => {
-                let config = required_config(request.config())?;
-                let root_graph = resolved_graph(request.adapters())?;
-                let components = self.plan_components(
-                    &filesystem,
-                    project,
-                    config,
-                    None,
-                    None,
-                    &[PlanScope::ThirdParty],
-                )?;
-                let graph = merge_component_graph(&root_graph, &components.centralized_graph)?;
-                let generated = plan_third_party(&filesystem, config, &graph)?;
-                let mut changes = generated.changes().clone();
-                append_plan(&mut changes, &components.changes)?;
-                let mut diagnostics = generated.diagnostics().to_vec();
-                diagnostics.extend(components.diagnostics);
-                RuntimePlan::new(
-                    changes.compare(&filesystem).map_err(plan_error)?,
-                    generated.managed_removals().to_vec(),
-                    diagnostics,
-                    Some(config.materials_directory().clone()),
-                )
-            }
-            [
-                PlanScope::ProjectFiles,
-                PlanScope::Dependencies,
-                PlanScope::ThirdParty,
-            ] => {
-                let config = required_config(request.config())?;
-                let license = required_license(request.license())?;
-                let root_graph = resolved_graph(request.adapters())?;
-                let mut components = self.plan_components(
-                    &filesystem,
-                    project,
-                    config,
-                    Some(license),
-                    request.current_date(),
-                    request.scopes(),
-                )?;
-                let graph = merge_component_graph(&root_graph, &components.centralized_graph)?;
-                let date = adoption_date(config)?;
-                let managed = filesystem
-                    .managed_third_party_dir(config.materials_directory())
-                    .map_err(materials_error)?;
-                let inventory = managed.inventory().map_err(materials_error)?;
-                let mut plan = if let Some(centralized) = components.centralized_project.take() {
-                    let dependency =
-                        DependencyMaterialGenerator::plan_document(&filesystem, config, &graph)
-                            .map_err(materials_error)?;
-                    let third_party = ThirdPartyMaterialGenerator::plan_tree(
-                        &filesystem,
-                        config,
-                        &graph,
-                        &inventory,
-                    )
-                    .map_err(materials_error)?;
-                    let mut changes = centralized;
-                    append_plan(&mut changes, &dependency)?;
-                    append_plan(&mut changes, third_party.changes())?;
-                    RuntimePlan::new(
-                        changes.compare(&filesystem).map_err(plan_error)?,
-                        third_party.managed_removals().to_vec(),
-                        third_party.diagnostics().to_vec(),
-                        Some(config.materials_directory().clone()),
-                    )
-                } else {
-                    let generated = ProjectGenerationPlanner::plan_all(
-                        &filesystem,
-                        config,
-                        license,
-                        &graph,
-                        &inventory,
-                        date,
-                    )
-                    .map_err(materials_error)?;
-                    runtime_plan(generated, config.materials_directory().clone())
-                };
-                let mut changes = plan.changes().clone();
-                append_plan(&mut changes, &components.changes)?;
-                let mut diagnostics = plan.diagnostics().to_vec();
-                diagnostics.extend(components.diagnostics);
-                plan = RuntimePlan::new(
-                    changes.compare(&filesystem).map_err(plan_error)?,
-                    plan.managed_removals().to_vec(),
-                    diagnostics,
-                    Some(config.materials_directory().clone()),
-                );
-                plan
-            }
-            _ => return Err(RuntimeError::operation("cli.plan_scope")),
-        };
+        let plan = runtime_plan::plan_scoped(self, &filesystem, project, &request)?;
         self.filesystems.insert(key, filesystem);
         Ok(plan)
     }
@@ -282,29 +119,12 @@ impl CommandRuntime for ConcreteRuntime {
         current_date: UtcDate,
     ) -> Result<EffectiveConfig, RuntimeError> {
         let filesystem = ProjectFilesystem::open(project.as_path()).map_err(materials_error)?;
-        match config_entry(&filesystem)? {
-            ProjectEntry::Absent => prepared_config(
-                identity.ok_or_else(|| RuntimeError::operation("config.identity_required"))?,
-                AhclVersion::V1_2,
-                current_date,
-                self.installed.contributors(),
-            ),
-            ProjectEntry::File(bytes) => {
-                let existing = parse_config(&bytes, self.installed.contributors())?;
-                if complete_identity(&existing) {
-                    Ok(existing)
-                } else {
-                    prepared_config(
-                        identity
-                            .ok_or_else(|| RuntimeError::operation("config.identity_required"))?,
-                        existing.license().version(),
-                        current_date,
-                        self.installed.contributors(),
-                    )
-                }
-            }
-            ProjectEntry::Other => Err(RuntimeError::operation("config.invalid")),
-        }
+        prepare_opened_init(
+            &filesystem,
+            identity,
+            current_date,
+            self.installed.contributors(),
+        )
     }
 
     fn current_utc_date(&mut self) -> Result<UtcDate, RuntimeError> {
@@ -411,137 +231,9 @@ impl ConcreteRuntime {
         &mut self,
         root_view: &ProjectFilesystem,
         project: &ProjectRoot,
-        config: &EffectiveConfig,
-        license: Option<&VerifiedLicense>,
-        current_date: Option<UtcDate>,
-        scopes: &[PlanScope],
+        input: &ComponentPlanInput<'_>,
     ) -> Result<ComponentPlanSet, RuntimeError> {
-        let wants_project = scopes.contains(&PlanScope::ProjectFiles);
-        let wants_license = scopes.contains(&PlanScope::License);
-        let wants_dependencies = scopes.contains(&PlanScope::Dependencies);
-        let wants_third_party = scopes.contains(&PlanScope::ThirdParty);
-        let mut result = ComponentPlanSet::default();
-        let mut centralized_configs = Vec::new();
-
-        for host in self.installed.hosts() {
-            let components = host
-                .resolve_components(project, config)
-                .map_err(|error| RuntimeError::with_source(error.code(), error))?;
-            for resolution in components {
-                if resolution.centralized() {
-                    merge_graph(&mut result.centralized_graph, resolution.graph())?;
-                    centralized_configs.push(resolution.config().clone());
-                    continue;
-                }
-
-                let component_root = resolution.component_root().cloned();
-                let component_path = component_root
-                    .as_ref()
-                    .map(|path| project.resolve(path))
-                    .unwrap_or_else(|| project.as_path().to_path_buf());
-                let component_view =
-                    ProjectFilesystem::open(&component_path).map_err(materials_error)?;
-                let component_config = resolution.config();
-                let component_license = if wants_project || wants_license {
-                    Some(self.license_for_component(license, component_config)?)
-                } else {
-                    None
-                };
-                let mut local = ChangePlan::new();
-
-                if wants_project {
-                    let license = required_license(component_license.as_ref())?;
-                    let date = component_config
-                        .project()
-                        .adoption_date()
-                        .or(current_date)
-                        .ok_or_else(|| RuntimeError::operation("config.adoption_date_required"))?;
-                    let generated = ProjectMaterialGenerator::plan_project_files(
-                        &component_view,
-                        component_config,
-                        license,
-                        date,
-                    )
-                    .map_err(materials_error)?;
-                    append_plan(&mut local, &generated)?;
-                }
-                if wants_license {
-                    let license = required_license(component_license.as_ref())?;
-                    let generated = ProjectMaterialGenerator::plan_license_sync(
-                        &component_view,
-                        component_config,
-                        license,
-                    )
-                    .map_err(materials_error)?;
-                    append_plan(&mut local, &generated)?;
-                }
-                if wants_dependencies {
-                    let generated = DependencyMaterialGenerator::plan_document(
-                        &component_view,
-                        component_config,
-                        resolution.graph(),
-                    )
-                    .map_err(materials_error)?;
-                    append_plan(&mut local, &generated)?;
-                }
-                if wants_third_party {
-                    let managed = component_view
-                        .managed_third_party_dir(component_config.materials_directory())
-                        .map_err(materials_error)?;
-                    let inventory = managed.inventory().map_err(materials_error)?;
-                    let generated = ThirdPartyMaterialGenerator::plan_tree(
-                        &component_view,
-                        component_config,
-                        resolution.graph(),
-                        &inventory,
-                    )
-                    .map_err(materials_error)?;
-                    for diagnostic in generated.diagnostics() {
-                        result
-                            .diagnostics
-                            .push(prefix_diagnostic(diagnostic, component_root.as_ref())?);
-                    }
-                    append_plan(&mut local, generated.changes())?;
-                }
-
-                let prefixed = prefix_plan(&local, component_root.as_ref())?;
-                append_plan(&mut result.changes, &prefixed)?;
-            }
-        }
-
-        if !centralized_configs.is_empty() && wants_project {
-            let license = required_license(license)?;
-            let date = config
-                .project()
-                .adoption_date()
-                .or(current_date)
-                .ok_or_else(|| RuntimeError::operation("config.adoption_date_required"))?;
-            let mut scopes = Vec::with_capacity(centralized_configs.len() + 1);
-            scopes.push(config.clone());
-            scopes.extend(centralized_configs.iter().cloned());
-            result.centralized_project = Some(
-                ProjectMaterialGenerator::plan_centralized_files(root_view, &scopes, license, date)
-                    .map_err(materials_error)?,
-            );
-        }
-
-        if !centralized_configs.is_empty() && wants_license {
-            let sync_config = if config.license().enabled() {
-                config.clone()
-            } else {
-                centralized_configs
-                    .first()
-                    .cloned()
-                    .ok_or_else(|| RuntimeError::operation("license.unavailable"))?
-            };
-            let license = required_license(license)?;
-            let generated =
-                ProjectMaterialGenerator::plan_license_sync(root_view, &sync_config, license)
-                    .map_err(materials_error)?;
-            result.centralized_project = Some(generated);
-        }
-
-        Ok(result)
+        runtime_components::plan(self, root_view, project, input)
     }
 
     fn filesystem(&self, project: &ProjectRoot) -> Result<&ProjectFilesystem, RuntimeError> {
@@ -643,31 +335,71 @@ fn prefix_diagnostic(
 
 fn append_plan(target: &mut ChangePlan, source: &ChangePlan) -> Result<(), RuntimeError> {
     for change in source.changes() {
-        if let Some(existing) = target
-            .changes()
-            .into_iter()
-            .find(|existing| existing.path() == change.path())
-        {
-            if existing.kind() == change.kind() && existing.bytes() == change.bytes() {
-                continue;
-            }
-            return Err(RuntimeError::operation("materials.plan_conflict"));
-        }
-        match change.kind() {
-            ahcl_kit_core::ChangeKind::Create | ahcl_kit_core::ChangeKind::Replace => {
-                let bytes = change
-                    .bytes()
-                    .ok_or_else(|| RuntimeError::operation("materials.plan_missing_bytes"))?;
-                target
-                    .write(change.path().clone(), bytes.to_vec())
-                    .map_err(plan_error)?;
-            }
-            ahcl_kit_core::ChangeKind::Remove => {
-                target.remove(change.path().clone()).map_err(plan_error)?;
-            }
-        }
+        append_change(target, change)?;
     }
     Ok(())
+}
+
+enum PlanChangeMatch {
+    Absent,
+    Identical,
+    Conflict,
+}
+
+fn append_change(
+    target: &mut ChangePlan,
+    change: &ahcl_kit_core::Change,
+) -> Result<(), RuntimeError> {
+    match plan_change_match(target, change) {
+        PlanChangeMatch::Absent => write_plan_change(target, change),
+        PlanChangeMatch::Identical => Ok(()),
+        PlanChangeMatch::Conflict => Err(RuntimeError::operation("materials.plan_conflict")),
+    }
+}
+
+fn plan_change_match(target: &ChangePlan, change: &ahcl_kit_core::Change) -> PlanChangeMatch {
+    let Some(existing) = target
+        .changes()
+        .into_iter()
+        .find(|existing| existing.path() == change.path())
+    else {
+        return PlanChangeMatch::Absent;
+    };
+    if same_plan_change(existing, change) {
+        PlanChangeMatch::Identical
+    } else {
+        PlanChangeMatch::Conflict
+    }
+}
+
+fn same_plan_change(existing: &ahcl_kit_core::Change, change: &ahcl_kit_core::Change) -> bool {
+    existing.kind() == change.kind() && existing.bytes() == change.bytes()
+}
+
+fn write_plan_change(
+    target: &mut ChangePlan,
+    change: &ahcl_kit_core::Change,
+) -> Result<(), RuntimeError> {
+    match change.kind() {
+        ahcl_kit_core::ChangeKind::Create | ahcl_kit_core::ChangeKind::Replace => {
+            write_plan_bytes(target, change)
+        }
+        ahcl_kit_core::ChangeKind::Remove => {
+            target.remove(change.path().clone()).map_err(plan_error)
+        }
+    }
+}
+
+fn write_plan_bytes(
+    target: &mut ChangePlan,
+    change: &ahcl_kit_core::Change,
+) -> Result<(), RuntimeError> {
+    let bytes = change
+        .bytes()
+        .ok_or_else(|| RuntimeError::operation("materials.plan_missing_bytes"))?;
+    target
+        .write(change.path().clone(), bytes.to_vec())
+        .map_err(plan_error)
 }
 
 pub fn system_utc_date() -> Result<UtcDate, RuntimeError> {
@@ -735,6 +467,56 @@ fn prepared_config(
         .map_err(|error| RuntimeError::with_source("config.invalid", error))
 }
 
+fn prepare_opened_init(
+    filesystem: &ProjectFilesystem,
+    identity: Option<&ProjectIdentity>,
+    current_date: UtcDate,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<EffectiveConfig, RuntimeError> {
+    match config_entry(filesystem)? {
+        ProjectEntry::Absent => prepare_absent_init(identity, current_date, contributors),
+        ProjectEntry::File(bytes) => {
+            prepare_existing_init(&bytes, identity, current_date, contributors)
+        }
+        ProjectEntry::Other => Err(RuntimeError::operation("config.invalid")),
+    }
+}
+
+fn prepare_absent_init(
+    identity: Option<&ProjectIdentity>,
+    current_date: UtcDate,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<EffectiveConfig, RuntimeError> {
+    prepared_config(
+        required_identity(identity)?,
+        AhclVersion::V1_2,
+        current_date,
+        contributors,
+    )
+}
+
+fn prepare_existing_init(
+    bytes: &[u8],
+    identity: Option<&ProjectIdentity>,
+    current_date: UtcDate,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<EffectiveConfig, RuntimeError> {
+    let existing = parse_config(bytes, contributors)?;
+    if complete_identity(&existing) {
+        return Ok(existing);
+    }
+    prepared_config(
+        required_identity(identity)?,
+        existing.license().version(),
+        current_date,
+        contributors,
+    )
+}
+
+fn required_identity(identity: Option<&ProjectIdentity>) -> Result<&ProjectIdentity, RuntimeError> {
+    identity.ok_or_else(|| RuntimeError::operation("config.identity_required"))
+}
+
 fn plan_config_init(
     filesystem: &ProjectFilesystem,
     force: bool,
@@ -763,26 +545,14 @@ fn plan_config_init(
 
 fn plan_project_init(
     filesystem: &ProjectFilesystem,
-    request: PlanRequest<'_>,
+    request: &PlanRequest<'_>,
     contributors: &[&'static dyn LanguageContributor],
 ) -> Result<RuntimePlan, RuntimeError> {
     let license = required_license(request.license())?;
     let current_date = request
         .current_date()
         .ok_or_else(|| RuntimeError::operation("cli.current_date"))?;
-    let entry = config_entry(filesystem)?;
-    let (identity, force) = match entry {
-        ProjectEntry::Absent => (request.identity(), false),
-        ProjectEntry::File(bytes) => {
-            let config = parse_config(&bytes, contributors)?;
-            if complete_identity(&config) {
-                (None, false)
-            } else {
-                (request.identity(), true)
-            }
-        }
-        ProjectEntry::Other => return Err(RuntimeError::operation("config.invalid")),
-    };
+    let (identity, force) = init_identity(filesystem, request, contributors)?;
     let changes = ProjectMaterialGenerator::plan_init(
         filesystem,
         identity,
@@ -793,6 +563,31 @@ fn plan_project_init(
     )
     .map_err(materials_error)?;
     Ok(RuntimePlan::from_changes(changes))
+}
+
+fn init_identity<'a>(
+    filesystem: &ProjectFilesystem,
+    request: &'a PlanRequest<'a>,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<(Option<&'a ProjectIdentity>, bool), RuntimeError> {
+    match config_entry(filesystem)? {
+        ProjectEntry::Absent => Ok((request.identity(), false)),
+        ProjectEntry::File(bytes) => existing_init_identity(&bytes, request, contributors),
+        ProjectEntry::Other => Err(RuntimeError::operation("config.invalid")),
+    }
+}
+
+fn existing_init_identity<'a>(
+    bytes: &[u8],
+    request: &'a PlanRequest<'a>,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<(Option<&'a ProjectIdentity>, bool), RuntimeError> {
+    let config = parse_config(bytes, contributors)?;
+    if complete_identity(&config) {
+        Ok((None, false))
+    } else {
+        Ok((request.identity(), true))
+    }
 }
 
 fn plan_third_party(
@@ -833,6 +628,17 @@ fn adoption_date(config: &EffectiveConfig) -> Result<UtcDate, RuntimeError> {
     config
         .project()
         .adoption_date()
+        .ok_or_else(|| RuntimeError::operation("config.adoption_date_required"))
+}
+
+fn adoption_date_or_current(
+    config: &EffectiveConfig,
+    current_date: Option<UtcDate>,
+) -> Result<UtcDate, RuntimeError> {
+    config
+        .project()
+        .adoption_date()
+        .or(current_date)
         .ok_or_else(|| RuntimeError::operation("config.adoption_date_required"))
 }
 
