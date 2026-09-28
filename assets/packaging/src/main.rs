@@ -31,8 +31,9 @@ mod metadata;
 mod platform;
 
 use clap::{Parser, Subcommand};
+use metadata::ProductMetadata;
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
 #[command(name = "ahcl-dist", version, about)]
@@ -83,28 +84,39 @@ fn run() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     let root = metadata::repository_root()?;
     let product = metadata::load(&root)?;
+    dispatch(&root, &product, cli.command)
+}
 
-    match cli.command {
-        DistributionCommand::Metadata => println!("{}", product.to_pretty_json()?),
+fn dispatch(
+    root: &Path,
+    product: &ProductMetadata,
+    command: DistributionCommand,
+) -> Result<(), Box<dyn Error>> {
+    match command {
+        DistributionCommand::Metadata => print_metadata(product),
         DistributionCommand::Windows {
             architecture,
             target,
             output,
-        } => platform::windows::build(&root, &product, &architecture, &target, &output)?,
-        DistributionCommand::Macos { output } => platform::macos::build(&root, &product, &output)?,
+        } => platform::windows::build(root, product, &architecture, &target, &output),
+        DistributionCommand::Macos { output } => platform::macos::build(root, product, &output),
         DistributionCommand::Linux {
             target,
             deb_architecture,
             rpm_architecture,
             output,
         } => platform::linux::build(
-            &root,
-            &product,
+            root,
+            product,
             &target,
             &deb_architecture,
             &rpm_architecture,
             &output,
-        )?,
+        ),
     }
+}
+
+fn print_metadata(product: &ProductMetadata) -> Result<(), Box<dyn Error>> {
+    println!("{}", product.to_pretty_json()?);
     Ok(())
 }

@@ -57,14 +57,27 @@ pub fn copy_file(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>
 }
 
 pub fn copy_tree(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
+    // Classify from symlink metadata so a link is copied as a link and never followed.
     let metadata = fs::symlink_metadata(source)?;
     if metadata.file_type().is_symlink() {
-        let target = fs::read_link(source)?;
-        return create_symlink(&target, destination);
+        return copy_symlink(source, destination);
     }
     if metadata.is_file() {
         return copy_file(source, destination);
     }
+    copy_directory(&metadata, source, destination)
+}
+
+fn copy_symlink(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
+    let target = fs::read_link(source)?;
+    create_symlink(&target, destination)
+}
+
+fn copy_directory(
+    metadata: &fs::Metadata,
+    source: &Path,
+    destination: &Path,
+) -> Result<(), Box<dyn Error>> {
     if !metadata.is_dir() {
         return Err(io::Error::other(format!(
             "unsupported staged file type: {}",
@@ -72,14 +85,21 @@ pub fn copy_tree(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>
         ))
         .into());
     }
-
     fs::create_dir_all(destination)?;
-    let mut entries = fs::read_dir(source)?.collect::<Result<Vec<_>, _>>()?;
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-    for entry in entries {
+    copy_sorted_children(source, destination)
+}
+
+fn copy_sorted_children(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
+    for entry in sorted_dir_entries(source)? {
         copy_tree(&entry.path(), &destination.join(entry.file_name()))?;
     }
     Ok(())
+}
+
+fn sorted_dir_entries(root: &Path) -> Result<Vec<fs::DirEntry>, Box<dyn Error>> {
+    let mut entries = fs::read_dir(root)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    Ok(entries)
 }
 
 pub fn render_template(
@@ -125,16 +145,10 @@ pub fn create_symlink(target: &Path, link: &Path) -> Result<(), Box<dyn Error>> 
 }
 
 pub fn find_file(root: &Path, extension: &str) -> Result<PathBuf, Box<dyn Error>> {
-    let mut entries = fs::read_dir(root)?.collect::<Result<Vec<_>, _>>()?;
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-    for entry in entries {
-        let path = entry.path();
-        if path.is_dir() {
-            if let Ok(found) = find_file(&path, extension) {
-                return Ok(found);
-            }
-        } else if path.extension().and_then(|value| value.to_str()) == Some(extension) {
-            return Ok(path);
+    for entry in sorted_dir_entries(root)? {
+        // A failed directory search is skipped so a later sibling can still match.
+        if let Some(found) = find_in_entry(&entry.path(), extension) {
+            return Ok(found);
         }
     }
     Err(io::Error::new(
@@ -142,6 +156,16 @@ pub fn find_file(root: &Path, extension: &str) -> Result<PathBuf, Box<dyn Error>
         format!("no .{extension} file under {}", root.display()),
     )
     .into())
+}
+
+fn find_in_entry(path: &Path, extension: &str) -> Option<PathBuf> {
+    if path.is_dir() {
+        return find_file(path, extension).ok();
+    }
+    if path.extension().and_then(|value| value.to_str()) == Some(extension) {
+        return Some(path.to_path_buf());
+    }
+    None
 }
 
 fn xml_escape(value: &str) -> String {

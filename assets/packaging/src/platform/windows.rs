@@ -7,7 +7,7 @@ use crate::fsutil::{self, TempDir};
 use crate::metadata::ProductMetadata;
 use std::error::Error;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub fn build(
@@ -17,14 +17,32 @@ pub fn build(
     target: &str,
     output: &Path,
 ) -> Result<(), Box<dyn Error>> {
+    require_windows_host()?;
+    require_windows_mapping(architecture, target)?;
+    compile_windows(root, product, target)?;
+    package_windows(root, product, architecture, target, output)
+}
+
+fn require_windows_host() -> Result<(), Box<dyn Error>> {
     if std::env::consts::OS != "windows" {
         return Err(io::Error::other("Windows packages must be built on Windows").into());
     }
-    match (architecture, target) {
-        ("x64", "x86_64-pc-windows-msvc") | ("arm64", "aarch64-pc-windows-msvc") => {}
-        _ => return Err(io::Error::other("unsupported Windows architecture mapping").into()),
-    }
+    Ok(())
+}
 
+// Only these architecture and Rust target pairs are accepted.
+fn require_windows_mapping(architecture: &str, target: &str) -> Result<(), Box<dyn Error>> {
+    match (architecture, target) {
+        ("x64", "x86_64-pc-windows-msvc") | ("arm64", "aarch64-pc-windows-msvc") => Ok(()),
+        _ => Err(io::Error::other("unsupported Windows architecture mapping").into()),
+    }
+}
+
+fn compile_windows(
+    root: &Path,
+    product: &ProductMetadata,
+    target: &str,
+) -> Result<(), Box<dyn Error>> {
     command::run(
         Command::new("rustup").args(["target", "add", target]),
         "install Windows Rust target",
@@ -37,20 +55,49 @@ pub fn build(
             .arg(&product.binary_name),
         "build Windows executable",
     )?;
+    Ok(())
+}
 
-    let binary = root
-        .join("target")
+fn package_windows(
+    root: &Path,
+    product: &ProductMetadata,
+    architecture: &str,
+    target: &str,
+    output: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let binary = windows_release_binary(root, target, &product.binary_name);
+    require_built_binary(&binary)?;
+    let work = TempDir::new("ahcl-kit-windows")?;
+    let materials_archive = archive_ahcl_materials(root, work.path())?;
+    let output_directory = fsutil::output_directory(root, output)?;
+    build_windows_package(
+        root,
+        product,
+        architecture,
+        &binary,
+        &materials_archive,
+        &output_directory,
+    )
+}
+
+fn windows_release_binary(root: &Path, target: &str, binary_name: &str) -> PathBuf {
+    root.join("target")
         .join(target)
         .join("release")
-        .join(format!("{}.exe", product.binary_name));
+        .join(format!("{binary_name}.exe"))
+}
+
+fn require_built_binary(binary: &Path) -> Result<(), Box<dyn Error>> {
     if !binary.is_file() {
         return Err(
             io::Error::other(format!("built executable is missing: {}", binary.display())).into(),
         );
     }
+    Ok(())
+}
 
-    let work = TempDir::new("ahcl-kit-windows")?;
-    let materials_archive = work.path().join("AHCL-MATERIALS.zip");
+fn archive_ahcl_materials(root: &Path, work: &Path) -> Result<PathBuf, Box<dyn Error>> {
+    let materials_archive = work.join("AHCL-MATERIALS.zip");
     command::run(
         Command::new("tar")
             .current_dir(root)
@@ -59,8 +106,17 @@ pub fn build(
             .arg(".ahcl"),
         "archive AHCL materials",
     )?;
+    Ok(materials_archive)
+}
 
-    let output_directory = fsutil::output_directory(root, output)?;
+fn build_windows_package(
+    root: &Path,
+    product: &ProductMetadata,
+    architecture: &str,
+    binary: &Path,
+    materials_archive: &Path,
+    output_directory: &Path,
+) -> Result<(), Box<dyn Error>> {
     let package = output_directory.join(format!(
         "ahcl-kit-{}-windows-{architecture}.msi",
         product.version
@@ -69,7 +125,6 @@ pub fn build(
     let icon = root.join("assets/branding/ahcl-kit.ico");
     let license = root.join("LICENSE");
     let wix = std::env::var_os("AHCL_WIX").unwrap_or_else(|| "wix".into());
-
     command::run(
         Command::new(wix)
             .arg("build")
@@ -91,7 +146,6 @@ pub fn build(
             .arg(&package),
         "build Windows MSI",
     )?;
-
     println!("{}", package.display());
     Ok(())
 }

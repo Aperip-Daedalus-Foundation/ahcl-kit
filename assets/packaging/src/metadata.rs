@@ -61,6 +61,11 @@ fn portable_absolute_path(path: PathBuf) -> PathBuf {
 }
 
 pub fn load(root: &Path) -> Result<ProductMetadata, Box<dyn Error>> {
+    let document = cargo_metadata_document(root)?;
+    require_neutral_language(metadata_from_document(&document)?)
+}
+
+fn cargo_metadata_document(root: &Path) -> Result<Value, Box<dyn Error>> {
     let output = command::capture(
         Command::new("cargo")
             .arg("metadata")
@@ -71,30 +76,70 @@ pub fn load(root: &Path) -> Result<ProductMetadata, Box<dyn Error>> {
             .arg(root.join("Cargo.toml")),
         "cargo metadata",
     )?;
-    let document: Value = serde_json::from_slice(&output.stdout)?;
-    let package = document["packages"]
+    Ok(serde_json::from_slice(&output.stdout)?)
+}
+
+// Both the ahcl-kit package record and the workspace product table are required.
+fn metadata_from_document(document: &Value) -> Result<ProductMetadata, Box<dyn Error>> {
+    let package = ahcl_kit_package(document)?;
+    let product = product_metadata_table(document)?;
+    let (version, description, homepage) = package_fields(package)?;
+    let (product_name, binary_name, publisher, copyright, identifier, language) =
+        product_fields(product)?;
+    Ok(ProductMetadata {
+        version,
+        description,
+        homepage,
+        product_name,
+        binary_name,
+        publisher,
+        copyright,
+        identifier,
+        language,
+    })
+}
+
+fn ahcl_kit_package(document: &Value) -> Result<&Value, Box<dyn Error>> {
+    document["packages"]
         .as_array()
         .and_then(|packages| {
             packages
                 .iter()
                 .find(|package| package["name"].as_str() == Some("ahcl-kit"))
         })
-        .ok_or_else(|| io::Error::other("cargo metadata did not return ahcl-kit"))?;
-    let product = document["metadata"]["ahcl-kit"]
-        .as_object()
-        .ok_or_else(|| io::Error::other("missing workspace.metadata.ahcl-kit"))?;
+        .ok_or_else(|| io::Error::other("cargo metadata did not return ahcl-kit").into())
+}
 
-    let metadata = ProductMetadata {
-        version: required(package, "version")?,
-        description: required(package, "description")?,
-        homepage: required(package, "homepage")?,
-        product_name: required_object(product, "product-name")?,
-        binary_name: required_object(product, "binary-name")?,
-        publisher: required_object(product, "publisher")?,
-        copyright: required_object(product, "copyright")?,
-        identifier: required_object(product, "identifier")?,
-        language: required_object(product, "language")?,
-    };
+fn product_metadata_table(
+    document: &Value,
+) -> Result<&serde_json::Map<String, Value>, Box<dyn Error>> {
+    document["metadata"]["ahcl-kit"]
+        .as_object()
+        .ok_or_else(|| io::Error::other("missing workspace.metadata.ahcl-kit").into())
+}
+
+fn package_fields(package: &Value) -> Result<(String, String, String), Box<dyn Error>> {
+    Ok((
+        required(package, "version")?,
+        required(package, "description")?,
+        required(package, "homepage")?,
+    ))
+}
+
+fn product_fields(
+    product: &serde_json::Map<String, Value>,
+) -> Result<(String, String, String, String, String, String), Box<dyn Error>> {
+    Ok((
+        required_object(product, "product-name")?,
+        required_object(product, "binary-name")?,
+        required_object(product, "publisher")?,
+        required_object(product, "copyright")?,
+        required_object(product, "identifier")?,
+        required_object(product, "language")?,
+    ))
+}
+
+fn require_neutral_language(metadata: ProductMetadata) -> Result<ProductMetadata, Box<dyn Error>> {
     if metadata.language != "neutral" {
         return Err(io::Error::other("product language must be neutral").into());
     }

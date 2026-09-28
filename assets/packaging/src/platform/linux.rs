@@ -19,15 +19,44 @@ pub fn build(
     rpm_architecture: &str,
     output: &Path,
 ) -> Result<(), Box<dyn Error>> {
+    require_linux_host()?;
+    require_linux_mapping(target, deb_architecture, rpm_architecture)?;
+    compile_linux(root, product, target)?;
+    package_linux(
+        root,
+        product,
+        target,
+        deb_architecture,
+        rpm_architecture,
+        output,
+    )
+}
+
+fn require_linux_host() -> Result<(), Box<dyn Error>> {
     if std::env::consts::OS != "linux" {
         return Err(io::Error::other("Linux packages must be built on Linux").into());
     }
+    Ok(())
+}
+
+// Only these Rust target and package-architecture pairs are accepted.
+fn require_linux_mapping(
+    target: &str,
+    deb_architecture: &str,
+    rpm_architecture: &str,
+) -> Result<(), Box<dyn Error>> {
     match (target, deb_architecture, rpm_architecture) {
         ("x86_64-unknown-linux-gnu", "amd64", "x86_64")
-        | ("aarch64-unknown-linux-gnu", "arm64", "aarch64") => {}
-        _ => return Err(io::Error::other("unsupported Linux architecture mapping").into()),
+        | ("aarch64-unknown-linux-gnu", "arm64", "aarch64") => Ok(()),
+        _ => Err(io::Error::other("unsupported Linux architecture mapping").into()),
     }
+}
 
+fn compile_linux(
+    root: &Path,
+    product: &ProductMetadata,
+    target: &str,
+) -> Result<(), Box<dyn Error>> {
     command::run(
         Command::new("rustup").args(["target", "add", target]),
         "install Linux Rust target",
@@ -40,33 +69,59 @@ pub fn build(
             .arg(&product.binary_name),
         "build Linux executable",
     )?;
+    Ok(())
+}
 
+fn package_linux(
+    root: &Path,
+    product: &ProductMetadata,
+    target: &str,
+    deb_architecture: &str,
+    rpm_architecture: &str,
+    output: &Path,
+) -> Result<(), Box<dyn Error>> {
     let work = TempDir::new("ahcl-kit-linux")?;
     let payload = work.path().join("payload");
     stage_payload(root, product, target, &payload)?;
-
     let output_directory = fsutil::output_directory(root, output)?;
-    let deb = build_deb(
+    publish_linux_packages(
         work.path(),
         &payload,
         product,
         deb_architecture,
-        &output_directory,
-    )?;
-    let rpm = build_rpm(
-        work.path(),
-        &payload,
-        product,
         rpm_architecture,
         &output_directory,
-    )?;
+    )
+}
 
+fn publish_linux_packages(
+    work: &Path,
+    payload: &Path,
+    product: &ProductMetadata,
+    deb_architecture: &str,
+    rpm_architecture: &str,
+    output: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let deb = build_deb(work, payload, product, deb_architecture, output)?;
+    let rpm = build_rpm(work, payload, product, rpm_architecture, output)?;
     println!("{}", deb.display());
     println!("{}", rpm.display());
     Ok(())
 }
 
 fn stage_payload(
+    root: &Path,
+    product: &ProductMetadata,
+    target: &str,
+    payload: &Path,
+) -> Result<(), Box<dyn Error>> {
+    install_linux_binary(root, product, target, payload)?;
+    install_linux_icons(root, payload)?;
+    install_linux_documents(root, payload)?;
+    install_linux_metainfo(root, product, payload)
+}
+
+fn install_linux_binary(
     root: &Path,
     product: &ProductMetadata,
     target: &str,
@@ -86,7 +141,10 @@ fn stage_payload(
         &PathBuf::from(format!("/usr/lib/ahcl-kit/{}", product.binary_name)),
         &payload.join("usr/bin").join(&product.binary_name),
     )?;
+    Ok(())
+}
 
+fn install_linux_icons(root: &Path, payload: &Path) -> Result<(), Box<dyn Error>> {
     fsutil::copy_file(
         &root.join("assets/branding/ahcl-kit.svg"),
         &payload.join("usr/share/icons/hicolor/scalable/apps/ahcl-kit.svg"),
@@ -99,6 +157,10 @@ fn stage_payload(
             )),
         )?;
     }
+    Ok(())
+}
+
+fn install_linux_documents(root: &Path, payload: &Path) -> Result<(), Box<dyn Error>> {
     fsutil::copy_file(
         &root.join("LICENSE"),
         &payload.join("usr/share/doc/ahcl-kit/LICENSE"),
@@ -107,8 +169,30 @@ fn stage_payload(
         &root.join(".ahcl"),
         &payload.join("usr/share/doc/ahcl-kit/AHCL"),
     )?;
+    Ok(())
+}
 
+fn install_linux_metainfo(
+    root: &Path,
+    product: &ProductMetadata,
+    payload: &Path,
+) -> Result<(), Box<dyn Error>> {
     let release_date = git_release_date(root)?;
+    fsutil::render_template(
+        &root.join("assets/packaging/linux/com.aperip.ahcl-kit.metainfo.xml.template"),
+        &payload.join(format!(
+            "usr/share/metainfo/{}.metainfo.xml",
+            product.identifier
+        )),
+        &linux_metainfo_values(product, release_date),
+    )?;
+    Ok(())
+}
+
+fn linux_metainfo_values(
+    product: &ProductMetadata,
+    release_date: String,
+) -> BTreeMap<&str, String> {
     let mut values = BTreeMap::new();
     values.insert("@IDENTIFIER@", product.identifier.clone());
     values.insert("@PRODUCT_NAME@", product.product_name.clone());
@@ -118,15 +202,7 @@ fn stage_payload(
     values.insert("@HOMEPAGE@", product.homepage.clone());
     values.insert("@VERSION@", product.version.clone());
     values.insert("@RELEASE_DATE@", release_date);
-    fsutil::render_template(
-        &root.join("assets/packaging/linux/com.aperip.ahcl-kit.metainfo.xml.template"),
-        &payload.join(format!(
-            "usr/share/metainfo/{}.metainfo.xml",
-            product.identifier
-        )),
-        &values,
-    )?;
-    Ok(())
+    values
 }
 
 fn build_deb(
