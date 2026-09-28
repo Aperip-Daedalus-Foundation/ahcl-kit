@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/github/v/release/Aperip-Daedalus-Foundation/ahcl-kit?display_name=tag&amp;style=flat-square&amp;label=release" alt="Latest release">
   <img src="https://img.shields.io/github/stars/Aperip-Daedalus-Foundation/ahcl-kit?style=flat-square&amp;label=stars" alt="Repository stars">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-334155?style=flat-square" alt="Supported platforms">
-  <img src="https://img.shields.io/badge/license-AHCL%201.1-0F766E?style=flat-square" alt="AHCL 1.1 license">
+  <img src="https://img.shields.io/badge/license-AHCL%201.2-0F766E?style=flat-square" alt="AHCL 1.2 license">
 </p>
 
 English | [简体中文](docs/README.zh-CN.md) | [日本語](docs/README.ja.md)
@@ -199,7 +199,7 @@ cargo build --locked --release --package ahcl-kit --bin ahcl
 
 ## License
 
-AHCL Kit uses AHCL 1.1. Before using, modifying, or distributing the project,
+AHCL Kit uses AHCL 1.2. Before using, modifying, or distributing the project,
 read [LICENSE](LICENSE) and the complete [AHCL Materials Directory](.ahcl/).
 
 </div>
