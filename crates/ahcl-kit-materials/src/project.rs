@@ -33,8 +33,12 @@ use ahcl_kit_config::{
 };
 use ahcl_kit_core::{ChangePlan, PlanError, ProjectEntry, ProjectView, RepoPath, UtcDate};
 use ahcl_kit_license::VerifiedLicense;
-use std::collections::BTreeMap;
 use std::fmt;
+
+#[path = "project_merge.rs"]
+mod merge;
+
+use merge::{ManagedFileKind, write_managed};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MaterialsErrorCode {
@@ -55,19 +59,48 @@ pub enum MaterialsErrorCode {
 impl MaterialsErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::IdentityRequired => "config.identity_required",
-            Self::ConfigExists => "config.exists",
-            Self::InvalidConfig => "config.invalid",
-            Self::InvalidLayout => "materials.layout_invalid",
-            Self::LicenseVersionMismatch => "license.version_mismatch",
-            Self::StateInvalid => "materials.state_invalid",
-            Self::LinkOrReparsePoint => "materials.link_or_reparse",
-            Self::ManagedTreeInvalid => "materials.managed_tree_invalid",
-            Self::AmbiguousManagedContent => "materials.managed_ambiguous",
-            Self::Plan => "materials.plan",
-            Self::View => "materials.view",
-            Self::Filesystem(code) => code,
+            Self::IdentityRequired
+            | Self::ConfigExists
+            | Self::InvalidConfig
+            | Self::InvalidLayout
+            | Self::LicenseVersionMismatch
+            | Self::StateInvalid => config_error_code(self),
+            Self::LinkOrReparsePoint
+            | Self::ManagedTreeInvalid
+            | Self::AmbiguousManagedContent
+            | Self::Plan
+            | Self::View
+            | Self::Filesystem(_) => material_error_code(self),
         }
+    }
+}
+
+fn config_error_code(code: MaterialsErrorCode) -> &'static str {
+    match code {
+        MaterialsErrorCode::IdentityRequired => "config.identity_required",
+        MaterialsErrorCode::ConfigExists => "config.exists",
+        MaterialsErrorCode::InvalidConfig => "config.invalid",
+        MaterialsErrorCode::InvalidLayout => "materials.layout_invalid",
+        MaterialsErrorCode::LicenseVersionMismatch => "license.version_mismatch",
+        MaterialsErrorCode::StateInvalid => "materials.state_invalid",
+        other => material_error_code(other),
+    }
+}
+
+fn material_error_code(code: MaterialsErrorCode) -> &'static str {
+    match code {
+        MaterialsErrorCode::LinkOrReparsePoint => "materials.link_or_reparse",
+        MaterialsErrorCode::ManagedTreeInvalid => "materials.managed_tree_invalid",
+        MaterialsErrorCode::AmbiguousManagedContent => "materials.managed_ambiguous",
+        MaterialsErrorCode::Plan => "materials.plan",
+        MaterialsErrorCode::View => "materials.view",
+        MaterialsErrorCode::Filesystem(code) => code,
+        MaterialsErrorCode::IdentityRequired
+        | MaterialsErrorCode::ConfigExists
+        | MaterialsErrorCode::InvalidConfig
+        | MaterialsErrorCode::InvalidLayout
+        | MaterialsErrorCode::LicenseVersionMismatch
+        | MaterialsErrorCode::StateInvalid => "config.identity_required",
     }
 }
 
@@ -155,6 +188,23 @@ impl fmt::Display for MaterialsError {
 
 fn default_message(code: MaterialsErrorCode) -> &'static str {
     match code {
+        MaterialsErrorCode::IdentityRequired
+        | MaterialsErrorCode::ConfigExists
+        | MaterialsErrorCode::InvalidConfig
+        | MaterialsErrorCode::InvalidLayout
+        | MaterialsErrorCode::LicenseVersionMismatch
+        | MaterialsErrorCode::StateInvalid => config_error_message(code),
+        MaterialsErrorCode::LinkOrReparsePoint
+        | MaterialsErrorCode::ManagedTreeInvalid
+        | MaterialsErrorCode::AmbiguousManagedContent
+        | MaterialsErrorCode::Plan
+        | MaterialsErrorCode::View
+        | MaterialsErrorCode::Filesystem(_) => material_error_message(code),
+    }
+}
+
+fn config_error_message(code: MaterialsErrorCode) -> &'static str {
+    match code {
         MaterialsErrorCode::IdentityRequired => {
             "project identity is required before AHCL initialization"
         }
@@ -167,6 +217,12 @@ fn default_message(code: MaterialsErrorCode) -> &'static str {
             "verified license version does not match project configuration"
         }
         MaterialsErrorCode::StateInvalid => "managed third-party state is invalid",
+        other => material_error_message(other),
+    }
+}
+
+fn material_error_message(code: MaterialsErrorCode) -> &'static str {
+    match code {
         MaterialsErrorCode::LinkOrReparsePoint => {
             "managed third-party tree contains a link or reparse point"
         }
@@ -177,6 +233,14 @@ fn default_message(code: MaterialsErrorCode) -> &'static str {
         MaterialsErrorCode::Plan => "AHCL material plan could not be constructed",
         MaterialsErrorCode::View => "project entries could not be observed",
         MaterialsErrorCode::Filesystem(_) => "filesystem operation failed",
+        MaterialsErrorCode::IdentityRequired
+        | MaterialsErrorCode::ConfigExists
+        | MaterialsErrorCode::InvalidConfig
+        | MaterialsErrorCode::InvalidLayout
+        | MaterialsErrorCode::LicenseVersionMismatch
+        | MaterialsErrorCode::StateInvalid => {
+            "project identity is required before AHCL initialization"
+        }
     }
 }
 
@@ -193,66 +257,9 @@ impl ProjectMaterialGenerator {
         force: bool,
         contributors: &[&'static dyn LanguageContributor],
     ) -> Result<ChangePlan, MaterialsError> {
-        let config_path = repo_path(".ahclkitconfigs")?;
-        let entry = view
-            .entry(&config_path)
-            .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?;
-
-        let (document, write_config) = match entry {
-            ProjectEntry::Absent => {
-                let identity = identity
-                    .filter(|identity| complete_identity(identity))
-                    .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::IdentityRequired))?;
-                (
-                    render_config(identity, license.version, current_date)?,
-                    true,
-                )
-            }
-            ProjectEntry::File(_) if identity.is_some() && !force => {
-                return Err(MaterialsError::new(MaterialsErrorCode::ConfigExists));
-            }
-            ProjectEntry::File(_) if identity.is_some() => {
-                let identity = identity
-                    .filter(|identity| complete_identity(identity))
-                    .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::IdentityRequired))?;
-                (
-                    render_config(identity, license.version, current_date)?,
-                    true,
-                )
-            }
-            ProjectEntry::File(bytes) => {
-                let mut document = ConfigDocument::parse_bytes_with(&bytes, contributors)
-                    .map_err(map_config_error)?;
-                let config = EffectiveConfig::resolve(&document).map_err(map_config_error)?;
-                if !complete_config_identity(&config) {
-                    return Err(MaterialsError::new(MaterialsErrorCode::IdentityRequired));
-                }
-                let write_config = config.project().adoption_date().is_none();
-                if write_config {
-                    document
-                        .upsert_scalar(
-                            Some("project"),
-                            "adoption-date",
-                            ScalarValue::String(current_date.to_string()),
-                        )
-                        .map_err(map_config_error)?;
-                }
-                (document, write_config)
-            }
-            ProjectEntry::Other => {
-                return Err(MaterialsError::new(MaterialsErrorCode::InvalidConfig));
-            }
-        };
-
-        let config = EffectiveConfig::resolve(&document).map_err(map_config_error)?;
-        validate_license(&config, license)?;
-        let adoption_date = config.project().adoption_date().unwrap_or(current_date);
-        let mut desired = ChangePlan::new();
-        if write_config {
-            write(&mut desired, config_path, document.render().into_bytes())?;
-        }
-        add_project_files(view, &mut desired, &config, license, adoption_date)?;
-        compare(desired, view)
+        let prepared =
+            prepare_init_document(view, identity, license, current_date, force, contributors)?;
+        commit_init_plan(view, prepared, license, current_date)
     }
 
     pub fn plan_project_files(
@@ -284,67 +291,8 @@ impl ProjectMaterialGenerator {
         if first.license().version() != AhclVersion::V1_2 {
             return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
         }
-        let mut licenses = Vec::new();
-        let mut notices = Vec::new();
-        let mut sources = Vec::new();
-        let mut adoptions = Vec::new();
-        for scope in scopes {
-            validate_license(scope, license)?;
-            let layout = LayoutPolicy::from_config(scope)?;
-            if scope.license().version() != AhclVersion::V1_2
-                || layout.materials_directory() != first_layout.materials_directory()
-            {
-                return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
-            }
-            if scope.license().enabled() {
-                licenses.push(render::root_license(scope, &layout, license));
-                notices.push(render::managed_block(
-                    scope,
-                    &render::project_notice(scope, &layout, adoption_date),
-                ));
-                sources.push(render::managed_block(scope, &render::source(scope)));
-                adoptions.push(render::version_adoption(scope, adoption_date));
-            }
-        }
-        let mut desired = ChangePlan::new();
-        write_managed(
-            view,
-            &mut desired,
-            repo_path("LICENSE")?,
-            &licenses,
-            ManagedFileKind::License,
-        )?;
-        write_managed(
-            view,
-            &mut desired,
-            first_layout.project_notice_path()?,
-            &notices,
-            ManagedFileKind::Document,
-        )?;
-        write_managed(
-            view,
-            &mut desired,
-            first_layout.source_path()?,
-            &sources,
-            ManagedFileKind::Document,
-        )?;
-        write_managed(
-            view,
-            &mut desired,
-            first_layout.version_adoption_path()?,
-            &adoptions,
-            ManagedFileKind::Adoption,
-        )?;
-        if scopes.iter().any(|scope| scope.license().enabled()) {
-            write_managed(
-                view,
-                &mut desired,
-                first_layout.official_license_path(&license.source_filename)?,
-                std::slice::from_ref(&license.body),
-                ManagedFileKind::Official,
-            )?;
-        }
-        compare(desired, view)
+        let bodies = collect_centralized_bodies(scopes, license, adoption_date, &first_layout)?;
+        write_centralized_files(view, &first_layout, license, bodies)
     }
 
     pub fn plan_license_sync(
@@ -367,6 +315,292 @@ impl ProjectMaterialGenerator {
     }
 }
 
+struct PreparedInit {
+    path: RepoPath,
+    document: ConfigDocument,
+    write_config: bool,
+}
+
+fn prepare_init_document(
+    view: &dyn ProjectView,
+    identity: Option<&ProjectIdentity>,
+    license: &VerifiedLicense,
+    current_date: UtcDate,
+    force: bool,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<PreparedInit, MaterialsError> {
+    let path = repo_path(".ahclkitconfigs")?;
+    let entry = view
+        .entry(&path)
+        .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?;
+    let (document, write_config) =
+        init_document_state(entry, identity, license, current_date, force, contributors)?;
+    Ok(PreparedInit {
+        path,
+        document,
+        write_config,
+    })
+}
+
+fn init_document_state(
+    entry: ProjectEntry,
+    identity: Option<&ProjectIdentity>,
+    license: &VerifiedLicense,
+    current_date: UtcDate,
+    force: bool,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<(ConfigDocument, bool), MaterialsError> {
+    match entry {
+        ProjectEntry::Absent => fresh_init_document(identity, license, current_date),
+        ProjectEntry::File(_) if identity.is_some() => {
+            replaced_init_document(identity, license, current_date, force)
+        }
+        ProjectEntry::File(bytes) => existing_init_document(bytes, current_date, contributors),
+        ProjectEntry::Other => Err(MaterialsError::new(MaterialsErrorCode::InvalidConfig)),
+    }
+}
+
+fn fresh_init_document(
+    identity: Option<&ProjectIdentity>,
+    license: &VerifiedLicense,
+    current_date: UtcDate,
+) -> Result<(ConfigDocument, bool), MaterialsError> {
+    let identity = required_identity(identity)?;
+    Ok((
+        render_config(identity, license.version, current_date)?,
+        true,
+    ))
+}
+
+fn required_identity(
+    identity: Option<&ProjectIdentity>,
+) -> Result<&ProjectIdentity, MaterialsError> {
+    identity
+        .filter(|identity| complete_identity(identity))
+        .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::IdentityRequired))
+}
+
+fn replaced_init_document(
+    identity: Option<&ProjectIdentity>,
+    license: &VerifiedLicense,
+    current_date: UtcDate,
+    force: bool,
+) -> Result<(ConfigDocument, bool), MaterialsError> {
+    if !force {
+        return Err(MaterialsError::new(MaterialsErrorCode::ConfigExists));
+    }
+    fresh_init_document(identity, license, current_date)
+}
+
+fn existing_init_document(
+    bytes: Vec<u8>,
+    current_date: UtcDate,
+    contributors: &[&'static dyn LanguageContributor],
+) -> Result<(ConfigDocument, bool), MaterialsError> {
+    let mut document =
+        ConfigDocument::parse_bytes_with(&bytes, contributors).map_err(map_config_error)?;
+    let config = EffectiveConfig::resolve(&document).map_err(map_config_error)?;
+    if !complete_config_identity(&config) {
+        return Err(MaterialsError::new(MaterialsErrorCode::IdentityRequired));
+    }
+    let write_config = ensure_adoption_date(&mut document, &config, current_date)?;
+    Ok((document, write_config))
+}
+
+fn ensure_adoption_date(
+    document: &mut ConfigDocument,
+    config: &EffectiveConfig,
+    current_date: UtcDate,
+) -> Result<bool, MaterialsError> {
+    let write_config = config.project().adoption_date().is_none();
+    if write_config {
+        document
+            .upsert_scalar(
+                Some("project"),
+                "adoption-date",
+                ScalarValue::String(current_date.to_string()),
+            )
+            .map_err(map_config_error)?;
+    }
+    Ok(write_config)
+}
+
+fn commit_init_plan(
+    view: &dyn ProjectView,
+    prepared: PreparedInit,
+    license: &VerifiedLicense,
+    current_date: UtcDate,
+) -> Result<ChangePlan, MaterialsError> {
+    let config = EffectiveConfig::resolve(&prepared.document).map_err(map_config_error)?;
+    validate_license(&config, license)?;
+    let adoption_date = config.project().adoption_date().unwrap_or(current_date);
+    let mut desired = ChangePlan::new();
+    if prepared.write_config {
+        write(
+            &mut desired,
+            prepared.path,
+            prepared.document.render().into_bytes(),
+        )?;
+    }
+    add_project_files(view, &mut desired, &config, license, adoption_date)?;
+    compare(desired, view)
+}
+
+struct CentralizedBodies {
+    licenses: Vec<String>,
+    notices: Vec<String>,
+    sources: Vec<String>,
+    adoptions: Vec<String>,
+    include_official: bool,
+}
+
+fn collect_centralized_bodies(
+    scopes: &[EffectiveConfig],
+    license: &VerifiedLicense,
+    adoption_date: UtcDate,
+    first_layout: &LayoutPolicy,
+) -> Result<CentralizedBodies, MaterialsError> {
+    let mut bodies = CentralizedBodies {
+        licenses: Vec::new(),
+        notices: Vec::new(),
+        sources: Vec::new(),
+        adoptions: Vec::new(),
+        include_official: false,
+    };
+    for scope in scopes {
+        push_centralized_scope(&mut bodies, scope, license, adoption_date, first_layout)?;
+    }
+    Ok(bodies)
+}
+
+fn push_centralized_scope(
+    bodies: &mut CentralizedBodies,
+    scope: &EffectiveConfig,
+    license: &VerifiedLicense,
+    adoption_date: UtcDate,
+    first_layout: &LayoutPolicy,
+) -> Result<(), MaterialsError> {
+    validate_license(scope, license)?;
+    let layout = LayoutPolicy::from_config(scope)?;
+    if !same_centralized_layout(scope, &layout, first_layout) {
+        return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
+    }
+    if scope.license().enabled() {
+        push_enabled_scope(bodies, scope, &layout, license, adoption_date);
+    }
+    Ok(())
+}
+
+fn same_centralized_layout(
+    scope: &EffectiveConfig,
+    layout: &LayoutPolicy,
+    first_layout: &LayoutPolicy,
+) -> bool {
+    scope.license().version() == AhclVersion::V1_2
+        && layout.materials_directory() == first_layout.materials_directory()
+}
+
+fn push_enabled_scope(
+    bodies: &mut CentralizedBodies,
+    scope: &EffectiveConfig,
+    layout: &LayoutPolicy,
+    license: &VerifiedLicense,
+    adoption_date: UtcDate,
+) {
+    bodies.include_official = true;
+    bodies
+        .licenses
+        .push(render::root_license(scope, layout, license));
+    bodies.notices.push(render::managed_block(
+        scope,
+        &render::project_notice(scope, layout, adoption_date),
+    ));
+    bodies
+        .sources
+        .push(render::managed_block(scope, &render::source(scope)));
+    bodies
+        .adoptions
+        .push(render::version_adoption(scope, adoption_date));
+}
+
+fn write_centralized_files(
+    view: &dyn ProjectView,
+    layout: &LayoutPolicy,
+    license: &VerifiedLicense,
+    bodies: CentralizedBodies,
+) -> Result<ChangePlan, MaterialsError> {
+    let mut desired = ChangePlan::new();
+    write_centralized_license_files(view, &mut desired, layout, &bodies)?;
+    write_centralized_source_files(view, &mut desired, layout, &bodies)?;
+    write_official_license(view, &mut desired, layout, license, bodies.include_official)?;
+    compare(desired, view)
+}
+
+fn write_centralized_license_files(
+    view: &dyn ProjectView,
+    desired: &mut ChangePlan,
+    layout: &LayoutPolicy,
+    bodies: &CentralizedBodies,
+) -> Result<(), MaterialsError> {
+    write_managed(
+        view,
+        desired,
+        repo_path("LICENSE")?,
+        &bodies.licenses,
+        ManagedFileKind::License,
+    )?;
+    write_managed(
+        view,
+        desired,
+        layout.project_notice_path()?,
+        &bodies.notices,
+        ManagedFileKind::Document,
+    )?;
+    Ok(())
+}
+
+fn write_centralized_source_files(
+    view: &dyn ProjectView,
+    desired: &mut ChangePlan,
+    layout: &LayoutPolicy,
+    bodies: &CentralizedBodies,
+) -> Result<(), MaterialsError> {
+    write_managed(
+        view,
+        desired,
+        layout.source_path()?,
+        &bodies.sources,
+        ManagedFileKind::Document,
+    )?;
+    write_managed(
+        view,
+        desired,
+        layout.version_adoption_path()?,
+        &bodies.adoptions,
+        ManagedFileKind::Adoption,
+    )?;
+    Ok(())
+}
+
+fn write_official_license(
+    view: &dyn ProjectView,
+    desired: &mut ChangePlan,
+    layout: &LayoutPolicy,
+    license: &VerifiedLicense,
+    include_official: bool,
+) -> Result<(), MaterialsError> {
+    if include_official {
+        write_managed(
+            view,
+            desired,
+            layout.official_license_path(&license.source_filename)?,
+            std::slice::from_ref(&license.body),
+            ManagedFileKind::Official,
+        )?;
+    }
+    Ok(())
+}
+
 fn add_project_files(
     view: &dyn ProjectView,
     plan: &mut ChangePlan,
@@ -376,52 +610,103 @@ fn add_project_files(
 ) -> Result<(), MaterialsError> {
     let layout = LayoutPolicy::from_config(config)?;
     if config.license().enabled() {
-        write_managed(
-            view,
-            plan,
-            repo_path("LICENSE")?,
-            &[render::root_license(config, &layout, license)],
-            ManagedFileKind::License,
-        )?;
-        write_managed(
-            view,
-            plan,
-            layout.official_license_path(&license.source_filename)?,
-            std::slice::from_ref(&license.body),
-            ManagedFileKind::Official,
-        )?;
-        write_managed(
-            view,
-            plan,
-            layout.project_notice_path()?,
-            &[document_body(
-                config,
-                render::project_notice(config, &layout, adoption_date),
-            )],
-            ManagedFileKind::Document,
-        )?;
-        write_managed(
-            view,
-            plan,
-            layout.version_adoption_path()?,
-            &[render::version_adoption(config, adoption_date)],
-            ManagedFileKind::Adoption,
-        )?;
-        write_managed(
-            view,
-            plan,
-            layout.source_path()?,
-            &[document_body(config, render::source(config))],
-            ManagedFileKind::Document,
-        )?;
+        add_licensed_project_files(view, plan, config, license, adoption_date, &layout)?;
     }
+    add_dependency_file(view, plan, config, &layout)?;
+    add_optional_project_files(view, plan, config, &layout)
+}
+
+fn add_licensed_project_files(
+    view: &dyn ProjectView,
+    plan: &mut ChangePlan,
+    config: &EffectiveConfig,
+    license: &VerifiedLicense,
+    adoption_date: UtcDate,
+    layout: &LayoutPolicy,
+) -> Result<(), MaterialsError> {
+    add_license_root_files(view, plan, config, license, layout)?;
+    add_project_document_files(view, plan, config, adoption_date, layout)
+}
+
+fn add_license_root_files(
+    view: &dyn ProjectView,
+    plan: &mut ChangePlan,
+    config: &EffectiveConfig,
+    license: &VerifiedLicense,
+    layout: &LayoutPolicy,
+) -> Result<(), MaterialsError> {
+    write_managed(
+        view,
+        plan,
+        repo_path("LICENSE")?,
+        &[render::root_license(config, layout, license)],
+        ManagedFileKind::License,
+    )?;
+    write_managed(
+        view,
+        plan,
+        layout.official_license_path(&license.source_filename)?,
+        std::slice::from_ref(&license.body),
+        ManagedFileKind::Official,
+    )?;
+    Ok(())
+}
+
+fn add_project_document_files(
+    view: &dyn ProjectView,
+    plan: &mut ChangePlan,
+    config: &EffectiveConfig,
+    adoption_date: UtcDate,
+    layout: &LayoutPolicy,
+) -> Result<(), MaterialsError> {
+    write_managed(
+        view,
+        plan,
+        layout.project_notice_path()?,
+        &[document_body(
+            config,
+            render::project_notice(config, layout, adoption_date),
+        )],
+        ManagedFileKind::Document,
+    )?;
+    write_managed(
+        view,
+        plan,
+        layout.version_adoption_path()?,
+        &[render::version_adoption(config, adoption_date)],
+        ManagedFileKind::Adoption,
+    )?;
+    write_managed(
+        view,
+        plan,
+        layout.source_path()?,
+        &[document_body(config, render::source(config))],
+        ManagedFileKind::Document,
+    )?;
+    Ok(())
+}
+
+fn add_dependency_file(
+    view: &dyn ProjectView,
+    plan: &mut ChangePlan,
+    config: &EffectiveConfig,
+    layout: &LayoutPolicy,
+) -> Result<(), MaterialsError> {
     write_managed(
         view,
         plan,
         layout.dependencies_path()?,
         &[render::empty_dependencies(config)],
         ManagedFileKind::Dependency,
-    )?;
+    )
+}
+
+fn add_optional_project_files(
+    view: &dyn ProjectView,
+    plan: &mut ChangePlan,
+    config: &EffectiveConfig,
+    layout: &LayoutPolicy,
+) -> Result<(), MaterialsError> {
     if layout.requires_empty_restrictions_index() {
         write_managed(
             view,
@@ -434,13 +719,7 @@ fn add_project_files(
             ManagedFileKind::Document,
         )?;
     }
-    if layout.requires_special_authorizations_placeholder()
-        || !config
-            .license()
-            .special_authorization_channel()
-            .trim()
-            .is_empty()
-    {
+    if requires_special_authorizations(layout, config) {
         write_managed(
             view,
             plan,
@@ -455,257 +734,21 @@ fn add_project_files(
     Ok(())
 }
 
+fn requires_special_authorizations(layout: &LayoutPolicy, config: &EffectiveConfig) -> bool {
+    layout.requires_special_authorizations_placeholder()
+        || !config
+            .license()
+            .special_authorization_channel()
+            .trim()
+            .is_empty()
+}
+
 fn document_body(config: &EffectiveConfig, body: String) -> String {
     if config.license().version() == AhclVersion::V1_2 {
         render::managed_block(config, &body)
     } else {
         body
     }
-}
-
-#[derive(Clone, Copy)]
-enum ManagedFileKind {
-    License,
-    Document,
-    Adoption,
-    Official,
-    Dependency,
-}
-
-#[derive(Clone, Debug)]
-struct ManagedRange {
-    start: usize,
-    end: usize,
-    key: String,
-}
-
-fn write_managed(
-    view: &dyn ProjectView,
-    plan: &mut ChangePlan,
-    path: RepoPath,
-    generated: &[String],
-    kind: ManagedFileKind,
-) -> Result<(), MaterialsError> {
-    if generated.is_empty() {
-        return Ok(());
-    }
-    let desired = generated.join("\n");
-    let existing = view
-        .entry(&path)
-        .map_err(|_| MaterialsError::new(MaterialsErrorCode::View))?;
-    let bytes = match existing {
-        ProjectEntry::Absent => desired.into_bytes(),
-        ProjectEntry::File(existing) => {
-            let existing = String::from_utf8(existing)
-                .map_err(|_| MaterialsError::new(MaterialsErrorCode::AmbiguousManagedContent))?;
-            let Some(merged) = merge_managed(&existing, &desired, kind)? else {
-                return Ok(());
-            };
-            merged.into_bytes()
-        }
-        ProjectEntry::Other => {
-            return Err(MaterialsError::new(MaterialsErrorCode::Plan));
-        }
-    };
-    write(plan, path, bytes)
-}
-
-fn merge_managed(
-    existing: &str,
-    desired: &str,
-    kind: ManagedFileKind,
-) -> Result<Option<String>, MaterialsError> {
-    if matches!(
-        kind,
-        ManagedFileKind::Official | ManagedFileKind::Dependency
-    ) {
-        return Ok(None);
-    }
-    let desired_ranges = managed_ranges(desired, kind)?;
-    if desired_ranges.is_empty() {
-        return Ok(None);
-    }
-    let ranges = managed_ranges(existing, kind)?;
-    if ranges.is_empty() {
-        let separator = if existing.ends_with('\n') {
-            "\n"
-        } else {
-            "\n\n"
-        };
-        return Ok(Some(format!("{existing}{separator}{desired}")));
-    }
-    let mut desired_by_key = BTreeMap::new();
-    for range in &desired_ranges {
-        let value = desired
-            .get(range.start..range.end)
-            .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::AmbiguousManagedContent))?;
-        if desired_by_key.insert(range.key.clone(), value).is_some() {
-            return Err(MaterialsError::new(
-                MaterialsErrorCode::AmbiguousManagedContent,
-            ));
-        }
-    }
-    let mut existing_keys = BTreeMap::new();
-    for range in &ranges {
-        if existing_keys.insert(range.key.clone(), range).is_some() {
-            return Err(MaterialsError::new(
-                MaterialsErrorCode::AmbiguousManagedContent,
-            ));
-        }
-    }
-    let mut output = String::with_capacity(existing.len() + desired.len());
-    let mut cursor = 0;
-    for range in &ranges {
-        output.push_str(&existing[cursor..range.start]);
-        let old = &existing[range.start..range.end];
-        if let Some(replacement) = desired_by_key.get(&range.key) {
-            if matches!(kind, ManagedFileKind::Adoption) && !old.contains("Effective Date:") {
-                let end_marker =
-                    old.rfind("<!-- END AHCL KIT MANAGED SCOPE:")
-                        .ok_or_else(|| {
-                            MaterialsError::new(MaterialsErrorCode::AmbiguousManagedContent)
-                        })?;
-                let desired_range = desired_ranges
-                    .iter()
-                    .find(|candidate| candidate.key == range.key)
-                    .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::Plan))?;
-                let desired_block = desired
-                    .get(desired_range.start..desired_range.end)
-                    .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::Plan))?;
-                let event_start = desired_block
-                    .find('\n')
-                    .map(|index| index + 1)
-                    .unwrap_or(desired_block.len());
-                let event_end = desired_block
-                    .rfind("<!-- END AHCL KIT MANAGED SCOPE:")
-                    .unwrap_or(desired_block.len());
-                let event = desired_block[event_start..event_end].trim();
-                output.push_str(&old[..end_marker]);
-                if !old.contains(event) {
-                    output.push('\n');
-                    output.push_str(event);
-                    output.push('\n');
-                }
-                output.push_str(&old[end_marker..]);
-            } else {
-                output.push_str(replacement);
-            }
-        } else {
-            output.push_str(old);
-        }
-        cursor = range.end;
-    }
-    output.push_str(&existing[cursor..]);
-    for range in &desired_ranges {
-        if !existing_keys.contains_key(&range.key) {
-            if !output.ends_with('\n') {
-                output.push('\n');
-            }
-            output.push('\n');
-            output.push_str(&desired[range.start..range.end]);
-        }
-    }
-    if output == existing {
-        Ok(None)
-    } else {
-        Ok(Some(output))
-    }
-}
-
-fn managed_ranges(
-    content: &str,
-    kind: ManagedFileKind,
-) -> Result<Vec<ManagedRange>, MaterialsError> {
-    let legal = matches!(kind, ManagedFileKind::License);
-    let mut ranges = Vec::new();
-    let mut active: Option<(usize, String)> = None;
-    let mut offset = 0;
-    for line in content.split_inclusive('\n') {
-        let text = line
-            .strip_suffix('\n')
-            .unwrap_or(line)
-            .trim_end_matches('\r');
-        let begin = if legal {
-            text == "----- BEGIN AHCL NOTICE -----"
-        } else {
-            text.starts_with("<!-- BEGIN AHCL KIT MANAGED SCOPE: ") && text.ends_with(" -->")
-        };
-        let end = if legal {
-            text == "----- END AHCL NOTICE -----"
-        } else {
-            text.starts_with("<!-- END AHCL KIT MANAGED SCOPE: ") && text.ends_with(" -->")
-        };
-        if begin {
-            if active.is_some() {
-                return Err(MaterialsError::new(
-                    MaterialsErrorCode::AmbiguousManagedContent,
-                ));
-            }
-            let key = if legal {
-                String::new()
-            } else {
-                text.trim_start_matches("<!-- BEGIN AHCL KIT MANAGED SCOPE: ")
-                    .trim_end_matches(" -->")
-                    .to_owned()
-            };
-            active = Some((offset, key));
-        } else if end {
-            let Some((start, mut key)) = active.take() else {
-                return Err(MaterialsError::new(
-                    MaterialsErrorCode::AmbiguousManagedContent,
-                ));
-            };
-            if legal {
-                let body = content.get(start..offset + line.len()).ok_or_else(|| {
-                    MaterialsError::new(MaterialsErrorCode::AmbiguousManagedContent)
-                })?;
-                let marker = "<!-- AHCL KIT MANAGED SCOPE:";
-                if body.matches(marker).count() > 1 {
-                    return Err(MaterialsError::new(
-                        MaterialsErrorCode::AmbiguousManagedContent,
-                    ));
-                }
-                let Some(marker_start) = body.find(marker) else {
-                    key = String::new();
-                    ranges.push(ManagedRange {
-                        start,
-                        end: offset + line.len(),
-                        key,
-                    });
-                    offset += line.len();
-                    continue;
-                };
-                let marker_line = body[marker_start..].lines().next().unwrap_or_default();
-                key = marker_line
-                    .trim_start_matches(marker)
-                    .trim()
-                    .trim_end_matches("-->")
-                    .trim()
-                    .to_owned();
-            } else {
-                let end_key = text
-                    .trim_start_matches("<!-- END AHCL KIT MANAGED SCOPE: ")
-                    .trim_end_matches(" -->");
-                if key != end_key {
-                    return Err(MaterialsError::new(
-                        MaterialsErrorCode::AmbiguousManagedContent,
-                    ));
-                }
-            }
-            ranges.push(ManagedRange {
-                start,
-                end: offset + line.len(),
-                key,
-            });
-        }
-        offset += line.len();
-    }
-    if active.is_some() {
-        return Err(MaterialsError::new(
-            MaterialsErrorCode::AmbiguousManagedContent,
-        ));
-    }
-    Ok(ranges)
 }
 
 fn render_config(
@@ -715,34 +758,45 @@ fn render_config(
 ) -> Result<ConfigDocument, MaterialsError> {
     let mut document = ConfigDocument::parse(&ConfigSkeleton::render_populated(identity))
         .map_err(map_config_error)?;
-    let (version, directory) = match version {
+    apply_init_scalars(&mut document, version, current_date)?;
+    EffectiveConfig::resolve(&document).map_err(map_config_error)?;
+    Ok(document)
+}
+
+fn apply_init_scalars(
+    document: &mut ConfigDocument,
+    version: AhclVersion,
+    current_date: UtcDate,
+) -> Result<(), MaterialsError> {
+    let (version, directory) = version_directory(version);
+    upsert_init_scalar(document, None, "materials-directory", directory)?;
+    upsert_init_scalar(document, Some("license"), "version", version)?;
+    upsert_init_scalar(
+        document,
+        Some("project"),
+        "adoption-date",
+        &current_date.to_string(),
+    )?;
+    Ok(())
+}
+
+fn version_directory(version: AhclVersion) -> (&'static str, &'static str) {
+    match version {
         AhclVersion::V1_0 => ("1.0", "AHCL"),
         AhclVersion::V1_1 => ("1.1", ".ahcl"),
         AhclVersion::V1_2 => ("1.2", ".ahcl"),
-    };
+    }
+}
+
+fn upsert_init_scalar(
+    document: &mut ConfigDocument,
+    section: Option<&str>,
+    key: &str,
+    value: &str,
+) -> Result<(), MaterialsError> {
     document
-        .upsert_scalar(
-            None,
-            "materials-directory",
-            ScalarValue::String(directory.to_owned()),
-        )
-        .map_err(map_config_error)?;
-    document
-        .upsert_scalar(
-            Some("license"),
-            "version",
-            ScalarValue::String(version.to_owned()),
-        )
-        .map_err(map_config_error)?;
-    document
-        .upsert_scalar(
-            Some("project"),
-            "adoption-date",
-            ScalarValue::String(current_date.to_string()),
-        )
-        .map_err(map_config_error)?;
-    EffectiveConfig::resolve(&document).map_err(map_config_error)?;
-    Ok(document)
+        .upsert_scalar(section, key, ScalarValue::String(value.to_owned()))
+        .map_err(map_config_error)
 }
 
 fn complete_identity(identity: &ProjectIdentity) -> bool {

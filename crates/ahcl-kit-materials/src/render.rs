@@ -35,81 +35,108 @@ pub(crate) fn root_license(
     layout: &LayoutPolicy,
     license: &VerifiedLicense,
 ) -> String {
-    let version = config.license().version().as_str();
-    let directory = layout.materials_directory().as_str();
-    let mut rendered = match config.license().version() {
-        AhclVersion::V1_0 => format!(
-            "This project is licensed under version 1.0 of the Aperip Heimdall Commons\n\
-             License (AHCL 1.0).\n\n\
-             Official AHCL English text, announcements, and public notices:\n\
-             https://ahcl.aperip.com\n\n\
-             Verbatim AHCL 1.0 copy in this repository:\n\
-             {directory}/{}\n",
-            license.source_filename
-        ),
-        AhclVersion::V1_1 => format!(
-            "This project is licensed under version 1.1 of the Aperip Heimdall Commons\n\
-             License (AHCL 1.1).\n\n\
-             Official AHCL text, announcements, and public notices:\n\
-             https://ahcl.aperip.com\n\n\
-             AHCL Materials Directory:\n\
-             {directory}/\n\n\
-             Official or recognized AHCL 1.1 copy in this repository:\n\
-             {directory}/{}\n",
-            license.source_filename
-        ),
-        AhclVersion::V1_2 => {
-            let scope = covered_scope(config);
-            let key = scope_key(config);
-            format!(
-                "----- BEGIN AHCL NOTICE -----\n\n\
-                 <!-- AHCL KIT MANAGED SCOPE: {key} -->\n\
-                 This license notice applies to:\n\
-                 {project}\n\n\
-                 AHCL-covered portions:\n\
-                 {scope}\n\n\
-                 The portions identified above are licensed under version 1.2 of the\n\
-                 Aperip Heimdall Commons License (AHCL 1.2), subject to its provisions\n\
-                 concerning migration to later official versions.\n\n\
-                 Official AHCL text, announcements, and public notices:\n\
-                 https://ahcl.aperip.com\n\n\
-                 AHCL Materials Directory (relative to the directory containing this LICENSE):\n\
-                 {directory}/\n\n\
-                 Official or recognized AHCL 1.2 copy:\n\
-                 {directory}/{}\n\n\
-                 ----- END AHCL NOTICE -----\n",
-                license.source_filename,
-                project = inline(config.project().name()),
-            )
-        }
-    };
-
-    let channel = inline(config.license().special_authorization_channel());
-    if !channel.is_empty() {
-        let mut section = String::from("\nChannels for Non-AHCL Special Authorizations:\n");
-        section.push_str(&channel);
-        section.push_str(
-            "\n\nThe channel above is solely for applying for or obtaining a separate\n\
-             Special Authorization. Channel information does not itself constitute a Special\n\
-             Authorization, does not modify AHCL ",
-        );
-        section.push_str(version);
-        section.push_str(
-            ", and does not waive or reduce any AHCL\n\
-             obligation not expressly covered by a valid written Special Authorization.\n",
-        );
-        if config.license().version() == AhclVersion::V1_2 {
-            let marker = "\n----- END AHCL NOTICE -----\n";
-            if let Some(index) = rendered.rfind(marker) {
-                rendered.insert_str(index, &section);
-            } else {
-                rendered.push_str(&section);
-            }
-        } else {
-            rendered.push_str(&section);
-        }
-    }
+    let mut rendered = license_notice(config, layout, license);
+    append_special_authorization_channel(&mut rendered, config);
     rendered
+}
+
+fn license_notice(
+    config: &EffectiveConfig,
+    layout: &LayoutPolicy,
+    license: &VerifiedLicense,
+) -> String {
+    let directory = layout.materials_directory().as_str();
+    match config.license().version() {
+        AhclVersion::V1_0 => v1_0_license_notice(directory, &license.source_filename),
+        AhclVersion::V1_1 => v1_1_license_notice(directory, &license.source_filename),
+        AhclVersion::V1_2 => v1_2_license_notice(config, directory, &license.source_filename),
+    }
+}
+
+fn v1_0_license_notice(directory: &str, filename: &str) -> String {
+    format!(
+        "This project is licensed under version 1.0 of the Aperip Heimdall Commons\n\
+         License (AHCL 1.0).\n\n\
+         Official AHCL English text, announcements, and public notices:\n\
+         https://ahcl.aperip.com\n\n\
+         Verbatim AHCL 1.0 copy in this repository:\n\
+         {directory}/{filename}\n"
+    )
+}
+
+fn v1_1_license_notice(directory: &str, filename: &str) -> String {
+    format!(
+        "This project is licensed under version 1.1 of the Aperip Heimdall Commons\n\
+         License (AHCL 1.1).\n\n\
+         Official AHCL text, announcements, and public notices:\n\
+         https://ahcl.aperip.com\n\n\
+         AHCL Materials Directory:\n\
+         {directory}/\n\n\
+         Official or recognized AHCL 1.1 copy in this repository:\n\
+         {directory}/{filename}\n"
+    )
+}
+
+fn v1_2_license_notice(config: &EffectiveConfig, directory: &str, filename: &str) -> String {
+    let scope = covered_scope(config);
+    let key = scope_key(config);
+    let project = inline(config.project().name());
+    format!(
+        "----- BEGIN AHCL NOTICE -----\n\n\
+         <!-- AHCL KIT MANAGED SCOPE: {key} -->\n\
+         This license notice applies to:\n\
+         {project}\n\n\
+         AHCL-covered portions:\n\
+         {scope}\n\n\
+         The portions identified above are licensed under version 1.2 of the\n\
+         Aperip Heimdall Commons License (AHCL 1.2), subject to its provisions\n\
+         concerning migration to later official versions.\n\n\
+         Official AHCL text, announcements, and public notices:\n\
+         https://ahcl.aperip.com\n\n\
+         AHCL Materials Directory (relative to the directory containing this LICENSE):\n\
+         {directory}/\n\n\
+         Official or recognized AHCL 1.2 copy:\n\
+         {directory}/{filename}\n\n\
+         ----- END AHCL NOTICE -----\n"
+    )
+}
+
+fn append_special_authorization_channel(rendered: &mut String, config: &EffectiveConfig) {
+    let channel = inline(config.license().special_authorization_channel());
+    if channel.is_empty() {
+        return;
+    }
+    let section = special_authorization_section(&channel, config.license().version().as_str());
+    if config.license().version() == AhclVersion::V1_2 {
+        insert_before_notice_end(rendered, &section);
+    } else {
+        rendered.push_str(&section);
+    }
+}
+
+fn special_authorization_section(channel: &str, version: &str) -> String {
+    let mut section = String::from("\nChannels for Non-AHCL Special Authorizations:\n");
+    section.push_str(channel);
+    section.push_str(
+        "\n\nThe channel above is solely for applying for or obtaining a separate\n\
+         Special Authorization. Channel information does not itself constitute a Special\n\
+         Authorization, does not modify AHCL ",
+    );
+    section.push_str(version);
+    section.push_str(
+        ", and does not waive or reduce any AHCL\n\
+         obligation not expressly covered by a valid written Special Authorization.\n",
+    );
+    section
+}
+
+fn insert_before_notice_end(rendered: &mut String, section: &str) {
+    let marker = "\n----- END AHCL NOTICE -----\n";
+    if let Some(index) = rendered.rfind(marker) {
+        rendered.insert_str(index, section);
+    } else {
+        rendered.push_str(section);
+    }
 }
 
 pub(crate) fn project_notice(
@@ -252,24 +279,32 @@ pub(crate) fn scope_key(config: &EffectiveConfig) -> String {
     if source.is_empty() {
         return "project".to_owned();
     }
+    normalize_scope_key(source)
+}
+
+fn normalize_scope_key(source: &str) -> String {
     let mut key = String::new();
     let mut separator = false;
     for character in source.chars() {
-        if character.is_ascii_alphanumeric() {
-            key.push(character.to_ascii_lowercase());
-            separator = false;
-        } else if !key.is_empty() {
-            separator = true;
-        }
-        if separator && !key.ends_with('-') {
-            key.push('-');
-        }
+        push_scope_character(&mut key, &mut separator, character);
     }
     let key = key.trim_matches('-').to_owned();
     if key.is_empty() {
         "project".to_owned()
     } else {
         key
+    }
+}
+
+fn push_scope_character(key: &mut String, separator: &mut bool, character: char) {
+    if character.is_ascii_alphanumeric() {
+        key.push(character.to_ascii_lowercase());
+        *separator = false;
+    } else if !key.is_empty() {
+        *separator = true;
+    }
+    if *separator && !key.ends_with('-') {
+        key.push('-');
     }
 }
 

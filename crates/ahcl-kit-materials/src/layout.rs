@@ -47,18 +47,7 @@ impl LayoutPolicy {
         version: AhclVersion,
         materials_directory: RepoPath,
     ) -> Result<Self, MaterialsError> {
-        let valid = match version {
-            AhclVersion::V1_0 => materials_directory.as_str() == "AHCL",
-            AhclVersion::V1_1 => matches!(
-                materials_directory.as_str(),
-                "AHCL" | "licenses/AHCL" | ".AHCL" | ".ahcl"
-            ),
-            AhclVersion::V1_2 => matches!(
-                materials_directory.as_str(),
-                "AHCL" | "licenses/AHCL" | ".AHCL" | ".ahcl"
-            ),
-        };
-        if !valid {
+        if !directory_matches(version, materials_directory.as_str()) {
             return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
         }
         Ok(Self {
@@ -118,4 +107,15 @@ impl LayoutPolicy {
         RepoPath::parse(format!("{}/{relative}", self.materials_directory.as_str()))
             .map_err(|_| MaterialsError::new(MaterialsErrorCode::InvalidLayout))
     }
+}
+
+fn directory_matches(version: AhclVersion, directory: &str) -> bool {
+    match version {
+        AhclVersion::V1_0 => directory == "AHCL",
+        AhclVersion::V1_1 | AhclVersion::V1_2 => legacy_materials_directory(directory),
+    }
+}
+
+fn legacy_materials_directory(directory: &str) -> bool {
+    matches!(directory, "AHCL" | "licenses/AHCL" | ".AHCL" | ".ahcl")
 }

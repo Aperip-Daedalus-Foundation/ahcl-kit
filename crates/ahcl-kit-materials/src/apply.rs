@@ -71,24 +71,41 @@ impl PlanApplier {
         if removals.is_empty() {
             return Ok(());
         }
-
-        let mut validated = Vec::with_capacity(removals.len());
-        for removal in removals {
-            validated.push(ValidatedManagedRemoval::from_removal(removal)?);
-        }
+        let validated = validate_removals(removals)?;
         managed.ensure_present()?;
+        remove_validated(managed, validated)
+    }
+}
 
-        for removal in validated {
-            match removal {
-                ValidatedManagedRemoval::Evidence(path, expected_sha256) => {
-                    managed.remove_evidence(&path, &expected_sha256)?;
-                }
-                ValidatedManagedRemoval::PackageDirectory(path) => {
-                    managed.remove_empty_package(&path)?;
-                }
-            }
+fn validate_removals(
+    removals: &[ManagedRemoval],
+) -> Result<Vec<ValidatedManagedRemoval>, MaterialsError> {
+    let mut validated = Vec::with_capacity(removals.len());
+    for removal in removals {
+        validated.push(ValidatedManagedRemoval::from_removal(removal)?);
+    }
+    Ok(validated)
+}
+
+fn remove_validated(
+    managed: &ManagedThirdPartyDir<'_>,
+    removals: Vec<ValidatedManagedRemoval>,
+) -> Result<(), MaterialsError> {
+    for removal in removals {
+        remove_one(managed, removal)?;
+    }
+    Ok(())
+}
+
+fn remove_one(
+    managed: &ManagedThirdPartyDir<'_>,
+    removal: ValidatedManagedRemoval,
+) -> Result<(), MaterialsError> {
+    match removal {
+        ValidatedManagedRemoval::Evidence(path, expected_sha256) => {
+            managed.remove_evidence(&path, &expected_sha256)
         }
-        Ok(())
+        ValidatedManagedRemoval::PackageDirectory(path) => managed.remove_empty_package(&path),
     }
 }
 
@@ -104,34 +121,51 @@ impl ValidatedManagedRemoval {
                 package_directory,
                 evidence_basename,
                 expected_sha256,
-            } => {
-                validate_package_directory(package_directory)?;
-                validate_evidence_basename(evidence_basename)?;
-                if !valid_sha256(expected_sha256) {
-                    return Err(managed_tree_error());
-                }
-                Ok(Self::Evidence(
-                    managed_path(&[package_directory, evidence_basename])?,
-                    expected_sha256.clone(),
-                ))
-            }
+            } => evidence_removal(package_directory, evidence_basename, expected_sha256),
             ManagedRemoval::PackageDirectory { package_directory } => {
-                validate_package_directory(package_directory)?;
-                Ok(Self::PackageDirectory(managed_path(&[package_directory])?))
+                package_directory_removal(package_directory)
             }
             ManagedRemoval::LegacyState { expected_sha256 } => {
-                if !valid_sha256(expected_sha256) {
-                    return Err(managed_tree_error());
-                }
-                let path =
-                    RepoPath::parse(MANAGED_STATE_BASENAME).map_err(|_| managed_tree_error())?;
-                Ok(Self::Evidence(
-                    SafeRelPath::from_repo_path(&path).map_err(|_| managed_tree_error())?,
-                    expected_sha256.clone(),
-                ))
+                legacy_state_removal(expected_sha256)
             }
         }
     }
+}
+
+fn evidence_removal(
+    package_directory: &str,
+    evidence_basename: &str,
+    expected_sha256: &str,
+) -> Result<ValidatedManagedRemoval, MaterialsError> {
+    validate_package_directory(package_directory)?;
+    validate_evidence_basename(evidence_basename)?;
+    if !valid_sha256(expected_sha256) {
+        return Err(managed_tree_error());
+    }
+    Ok(ValidatedManagedRemoval::Evidence(
+        managed_path(&[package_directory, evidence_basename])?,
+        expected_sha256.to_owned(),
+    ))
+}
+
+fn package_directory_removal(
+    package_directory: &str,
+) -> Result<ValidatedManagedRemoval, MaterialsError> {
+    validate_package_directory(package_directory)?;
+    Ok(ValidatedManagedRemoval::PackageDirectory(managed_path(&[
+        package_directory,
+    ])?))
+}
+
+fn legacy_state_removal(expected_sha256: &str) -> Result<ValidatedManagedRemoval, MaterialsError> {
+    if !valid_sha256(expected_sha256) {
+        return Err(managed_tree_error());
+    }
+    let path = RepoPath::parse(MANAGED_STATE_BASENAME).map_err(|_| managed_tree_error())?;
+    Ok(ValidatedManagedRemoval::Evidence(
+        SafeRelPath::from_repo_path(&path).map_err(|_| managed_tree_error())?,
+        expected_sha256.to_owned(),
+    ))
 }
 
 fn validate_package_directory(value: &str) -> Result<(), MaterialsError> {
