@@ -114,38 +114,40 @@ pub(crate) fn verify_response(
     response: LicenseResponse,
     response_limit: usize,
 ) -> Result<VerifiedLicense, LicenseError> {
+    // Reject redirect, status, type, and size before parsing. The body is not
+    // treated as a license document until those transport checks pass.
+    accept_origin(record, &response)?;
+    accept_payload(&response, response_limit)?;
+    verified_document(record, response)
+}
+
+fn accept_origin(record: &OfficialRecord, response: &LicenseResponse) -> Result<(), LicenseError> {
     if response.redirected() || !record.matches_endpoint(response.final_url()) {
         return failure(LicenseErrorCode::RedirectOrigin);
     }
     if response.status() != 200 {
         return failure(LicenseErrorCode::Status);
     }
+    Ok(())
+}
+
+fn accept_payload(response: &LicenseResponse, response_limit: usize) -> Result<(), LicenseError> {
     if !is_json_content_type(response.content_type()) {
         return failure(LicenseErrorCode::ContentType);
     }
     if response.body().len() > response_limit {
         return failure(LicenseErrorCode::ResponseSize);
     }
+    Ok(())
+}
 
-    let document: ResponseDocument = serde_json::from_slice(response.body())
-        .map_err(|_| LicenseError::new(LicenseErrorCode::JsonShape))?;
-    let license = document.license;
-    if license.slug != record.slug
-        || license.title != record.title
-        || license.source_filename != record.source_filename
-        || license.body_format != "markdown"
-    {
-        return failure(LicenseErrorCode::MetadataMismatch);
-    }
-    if !is_lowercase_sha256(&license.sha256) {
-        return failure(LicenseErrorCode::DigestMismatch);
-    }
-
-    let body_digest = sha256(license.body.as_bytes());
-    if body_digest != license.sha256 || body_digest != record.sha256 {
-        return failure(LicenseErrorCode::DigestMismatch);
-    }
-
+fn verified_document(
+    record: &OfficialRecord,
+    response: LicenseResponse,
+) -> Result<VerifiedLicense, LicenseError> {
+    let license = parse_document(response.body())?;
+    accept_metadata(record, &license)?;
+    accept_digest(record, &license)?;
     Ok(VerifiedLicense {
         version: record.version,
         slug: license.slug,
@@ -154,6 +156,33 @@ pub(crate) fn verify_response(
         body: license.body,
         sha256: license.sha256,
     })
+}
+
+fn parse_document(body: &[u8]) -> Result<ResponseLicense, LicenseError> {
+    let document: ResponseDocument =
+        serde_json::from_slice(body).map_err(|_| LicenseError::new(LicenseErrorCode::JsonShape))?;
+    Ok(document.license)
+}
+
+fn accept_metadata(record: &OfficialRecord, license: &ResponseLicense) -> Result<(), LicenseError> {
+    if license.slug != record.slug || license.title != record.title {
+        return failure(LicenseErrorCode::MetadataMismatch);
+    }
+    if license.source_filename != record.source_filename || license.body_format != "markdown" {
+        return failure(LicenseErrorCode::MetadataMismatch);
+    }
+    Ok(())
+}
+
+fn accept_digest(record: &OfficialRecord, license: &ResponseLicense) -> Result<(), LicenseError> {
+    if !is_lowercase_sha256(&license.sha256) {
+        return failure(LicenseErrorCode::DigestMismatch);
+    }
+    let body_digest = sha256(license.body.as_bytes());
+    if body_digest != license.sha256 || body_digest != record.sha256 {
+        return failure(LicenseErrorCode::DigestMismatch);
+    }
+    Ok(())
 }
 
 fn is_json_content_type(value: Option<&str>) -> bool {

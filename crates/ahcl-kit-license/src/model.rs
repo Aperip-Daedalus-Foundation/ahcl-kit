@@ -172,16 +172,43 @@ pub enum LicenseErrorCode {
 
 impl LicenseErrorCode {
     pub fn as_str(self) -> &'static str {
+        // Transport failures stay distinct from document failures. Every
+        // variant is named, so a new code cannot fall through.
         match self {
-            Self::Transport => "license.transport",
-            Self::RedirectOrigin => "license.redirect_origin",
-            Self::Status => "license.status",
-            Self::ContentType => "license.content_type",
-            Self::ResponseSize => "license.response_size",
-            Self::JsonShape => "license.json_shape",
-            Self::MetadataMismatch => "license.metadata_mismatch",
-            Self::DigestMismatch => "license.digest_mismatch",
+            Self::Transport | Self::RedirectOrigin | Self::Status | Self::ContentType => {
+                transport_code(self)
+            }
+            Self::ResponseSize
+            | Self::JsonShape
+            | Self::MetadataMismatch
+            | Self::DigestMismatch => document_code(self),
         }
+    }
+}
+
+fn transport_code(code: LicenseErrorCode) -> &'static str {
+    match code {
+        LicenseErrorCode::Transport => "license.transport",
+        LicenseErrorCode::RedirectOrigin => "license.redirect_origin",
+        LicenseErrorCode::Status => "license.status",
+        LicenseErrorCode::ContentType => "license.content_type",
+        LicenseErrorCode::ResponseSize
+        | LicenseErrorCode::JsonShape
+        | LicenseErrorCode::MetadataMismatch
+        | LicenseErrorCode::DigestMismatch => document_code(code),
+    }
+}
+
+fn document_code(code: LicenseErrorCode) -> &'static str {
+    match code {
+        LicenseErrorCode::ResponseSize => "license.response_size",
+        LicenseErrorCode::JsonShape => "license.json_shape",
+        LicenseErrorCode::MetadataMismatch => "license.metadata_mismatch",
+        LicenseErrorCode::DigestMismatch => "license.digest_mismatch",
+        LicenseErrorCode::Transport
+        | LicenseErrorCode::RedirectOrigin
+        | LicenseErrorCode::Status
+        | LicenseErrorCode::ContentType => transport_code(code),
     }
 }
 
@@ -202,23 +229,48 @@ impl LicenseError {
 
 impl fmt::Display for LicenseError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match self.code {
-            LicenseErrorCode::Transport => "official license transport failed",
-            LicenseErrorCode::RedirectOrigin => {
-                "official license response redirected or used an unexpected origin"
-            }
-            LicenseErrorCode::Status => "official license response returned an unexpected status",
-            LicenseErrorCode::ContentType => {
-                "official license response had an invalid content type"
-            }
-            LicenseErrorCode::ResponseSize => "official license response exceeded the size limit",
-            LicenseErrorCode::JsonShape => "official license response was not valid JSON",
-            LicenseErrorCode::MetadataMismatch => {
-                "official license response metadata did not match"
-            }
-            LicenseErrorCode::DigestMismatch => "official license response digest did not match",
-        };
-        formatter.write_str(message)
+        formatter.write_str(license_error_message(self.code))
+    }
+}
+
+fn license_error_message(code: LicenseErrorCode) -> &'static str {
+    match code {
+        LicenseErrorCode::Transport
+        | LicenseErrorCode::RedirectOrigin
+        | LicenseErrorCode::Status
+        | LicenseErrorCode::ContentType => transport_message(code),
+        LicenseErrorCode::ResponseSize
+        | LicenseErrorCode::JsonShape
+        | LicenseErrorCode::MetadataMismatch
+        | LicenseErrorCode::DigestMismatch => document_message(code),
+    }
+}
+
+fn transport_message(code: LicenseErrorCode) -> &'static str {
+    match code {
+        LicenseErrorCode::Transport => "official license transport failed",
+        LicenseErrorCode::RedirectOrigin => {
+            "official license response redirected or used an unexpected origin"
+        }
+        LicenseErrorCode::Status => "official license response returned an unexpected status",
+        LicenseErrorCode::ContentType => "official license response had an invalid content type",
+        LicenseErrorCode::ResponseSize
+        | LicenseErrorCode::JsonShape
+        | LicenseErrorCode::MetadataMismatch
+        | LicenseErrorCode::DigestMismatch => document_message(code),
+    }
+}
+
+fn document_message(code: LicenseErrorCode) -> &'static str {
+    match code {
+        LicenseErrorCode::ResponseSize => "official license response exceeded the size limit",
+        LicenseErrorCode::JsonShape => "official license response was not valid JSON",
+        LicenseErrorCode::MetadataMismatch => "official license response metadata did not match",
+        LicenseErrorCode::DigestMismatch => "official license response digest did not match",
+        LicenseErrorCode::Transport
+        | LicenseErrorCode::RedirectOrigin
+        | LicenseErrorCode::Status
+        | LicenseErrorCode::ContentType => transport_message(code),
     }
 }
 
