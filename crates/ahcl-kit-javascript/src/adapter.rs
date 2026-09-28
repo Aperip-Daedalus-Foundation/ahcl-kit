@@ -144,43 +144,70 @@ fn parse_one(
     manifest_text: &str,
     manager: JsPackageManager,
 ) -> Result<ParsedGraph, JavascriptError> {
-    let file_name = match manager {
-        JsPackageManager::Npm => "package-lock.json",
-        JsPackageManager::Pnpm => "pnpm-lock.yaml",
-        JsPackageManager::Yarn => "yarn.lock",
-        JsPackageManager::Bun => "bun.lock",
-    };
-    if manager == JsPackageManager::Bun && !lockfile_exists(request, manifest, file_name) {
-        let binary = sibling(manifest, "bun.lockb")?;
-        if lockfile_exists(request, manifest, "bun.lockb") {
-            return Err(JavascriptError::BinaryBunLockfile { path: binary });
-        }
-    }
+    let file_name = lockfile_name(manager);
+    reject_binary_bun(request, manifest, manager)?;
     let lock_path = sibling(manifest, file_name)?;
     let bytes = read_lockfile(request, &lock_path)?;
-    let text = String::from_utf8(bytes.clone()).map_err(|_| JavascriptError::LockfileParse {
+    let text = lockfile_text(&lock_path, &bytes)?;
+    let evidence = lock_evidence(&lock_path, &bytes);
+    let manifest_path = request.project_root().resolve(manifest);
+    parse_manager_lock(manager, manifest_text, &text, &manifest_path, evidence)
+        .map_err(|error| relocate_parse_error(error, lock_path))
+}
+
+fn reject_binary_bun(
+    request: &JavascriptResolveRequest,
+    manifest: &RepoPath,
+    manager: JsPackageManager,
+) -> Result<(), JavascriptError> {
+    if manager != JsPackageManager::Bun || lockfile_exists(request, manifest, "bun.lock") {
+        return Ok(());
+    }
+    let binary = sibling(manifest, "bun.lockb")?;
+    if lockfile_exists(request, manifest, "bun.lockb") {
+        return Err(JavascriptError::BinaryBunLockfile { path: binary });
+    }
+    Ok(())
+}
+
+fn lockfile_text(lock_path: &RepoPath, bytes: &[u8]) -> Result<String, JavascriptError> {
+    String::from_utf8(bytes.to_vec()).map_err(|_| JavascriptError::LockfileParse {
         path: lock_path.clone(),
         message: "lockfile is not UTF-8".to_owned(),
-    })?;
-    let evidence = LockfileEvidence {
+    })
+}
+
+fn lock_evidence(lock_path: &RepoPath, bytes: &[u8]) -> LockfileEvidence {
+    LockfileEvidence {
         path: lock_path.clone(),
-        sha256: model::sha256_hex(&bytes),
+        sha256: model::sha256_hex(bytes),
         byte_len: bytes.len() as u64,
-    };
-    let manifest_path = request.project_root().resolve(manifest);
-    match manager {
-        JsPackageManager::Npm => parse_npm(manifest_text, &text, &manifest_path, evidence),
-        JsPackageManager::Pnpm => parse_pnpm(manifest_text, &text, &manifest_path, evidence),
-        JsPackageManager::Yarn => parse_yarn(manifest_text, &text, &manifest_path, evidence),
-        JsPackageManager::Bun => parse_bun(manifest_text, &text, &manifest_path, evidence),
     }
-    .map_err(|error| match error {
+}
+
+fn parse_manager_lock(
+    manager: JsPackageManager,
+    manifest_text: &str,
+    text: &str,
+    manifest_path: &std::path::Path,
+    evidence: LockfileEvidence,
+) -> Result<ParsedGraph, JavascriptError> {
+    match manager {
+        JsPackageManager::Npm => parse_npm(manifest_text, text, manifest_path, evidence),
+        JsPackageManager::Pnpm => parse_pnpm(manifest_text, text, manifest_path, evidence),
+        JsPackageManager::Yarn => parse_yarn(manifest_text, text, manifest_path, evidence),
+        JsPackageManager::Bun => parse_bun(manifest_text, text, manifest_path, evidence),
+    }
+}
+
+fn relocate_parse_error(error: JavascriptError, lock_path: RepoPath) -> JavascriptError {
+    match error {
         JavascriptError::LockfileParse { message, .. } => JavascriptError::LockfileParse {
             path: lock_path,
             message,
         },
         other => other,
-    })
+    }
 }
 
 fn selected_managers(
@@ -189,44 +216,47 @@ fn selected_managers(
 ) -> Result<Vec<JsPackageManager>, JavascriptError> {
     let configured = request.settings.managers();
     if !configured.is_empty() {
-        for manager in configured {
-            let file_name = lockfile_name(*manager);
-            if !lockfile_exists(request, manifest, file_name) {
-                if *manager == JsPackageManager::Bun
-                    && lockfile_exists(request, manifest, "bun.lockb")
-                {
-                    return Err(JavascriptError::BinaryBunLockfile {
-                        path: sibling(manifest, "bun.lockb")?,
-                    });
-                }
-                return Err(JavascriptError::LockfileMissing {
-                    manifest: manifest.clone(),
-                });
-            }
-        }
-        return Ok(configured.to_vec());
+        return configured_managers(request, manifest, configured);
     }
+    discovered_managers(request, manifest)
+}
 
-    let mut found = Vec::new();
-    for manager in [
-        JsPackageManager::Npm,
-        JsPackageManager::Pnpm,
-        JsPackageManager::Yarn,
-        JsPackageManager::Bun,
-    ] {
-        if lockfile_exists(request, manifest, lockfile_name(manager)) {
-            found.push(manager);
-        }
+fn configured_managers(
+    request: &JavascriptResolveRequest,
+    manifest: &RepoPath,
+    configured: &[JsPackageManager],
+) -> Result<Vec<JsPackageManager>, JavascriptError> {
+    for manager in configured {
+        require_configured_lockfile(request, manifest, *manager)?;
     }
-    if found.is_empty() {
-        if lockfile_exists(request, manifest, "bun.lockb") {
-            return Err(JavascriptError::BinaryBunLockfile {
-                path: sibling(manifest, "bun.lockb")?,
-            });
-        }
-        return Err(JavascriptError::LockfileMissing {
-            manifest: manifest.clone(),
+    Ok(configured.to_vec())
+}
+
+fn require_configured_lockfile(
+    request: &JavascriptResolveRequest,
+    manifest: &RepoPath,
+    manager: JsPackageManager,
+) -> Result<(), JavascriptError> {
+    if lockfile_exists(request, manifest, lockfile_name(manager)) {
+        return Ok(());
+    }
+    if manager == JsPackageManager::Bun && lockfile_exists(request, manifest, "bun.lockb") {
+        return Err(JavascriptError::BinaryBunLockfile {
+            path: sibling(manifest, "bun.lockb")?,
         });
+    }
+    Err(JavascriptError::LockfileMissing {
+        manifest: manifest.clone(),
+    })
+}
+
+fn discovered_managers(
+    request: &JavascriptResolveRequest,
+    manifest: &RepoPath,
+) -> Result<Vec<JsPackageManager>, JavascriptError> {
+    let found = present_managers(request, manifest);
+    if found.is_empty() {
+        return missing_discovered_lockfile(request, manifest);
     }
     if found.len() > 1 {
         return Err(JavascriptError::LockfileAmbiguous {
@@ -239,6 +269,38 @@ fn selected_managers(
         });
     }
     Ok(found)
+}
+
+fn present_managers(
+    request: &JavascriptResolveRequest,
+    manifest: &RepoPath,
+) -> Vec<JsPackageManager> {
+    let mut found = Vec::new();
+    for manager in [
+        JsPackageManager::Npm,
+        JsPackageManager::Pnpm,
+        JsPackageManager::Yarn,
+        JsPackageManager::Bun,
+    ] {
+        if lockfile_exists(request, manifest, lockfile_name(manager)) {
+            found.push(manager);
+        }
+    }
+    found
+}
+
+fn missing_discovered_lockfile(
+    request: &JavascriptResolveRequest,
+    manifest: &RepoPath,
+) -> Result<Vec<JsPackageManager>, JavascriptError> {
+    if lockfile_exists(request, manifest, "bun.lockb") {
+        return Err(JavascriptError::BinaryBunLockfile {
+            path: sibling(manifest, "bun.lockb")?,
+        });
+    }
+    Err(JavascriptError::LockfileMissing {
+        manifest: manifest.clone(),
+    })
 }
 
 fn lockfile_name(manager: JsPackageManager) -> &'static str {

@@ -51,134 +51,296 @@ pub(crate) fn parse_bun(
     lockfile: LockfileEvidence,
 ) -> Result<ParsedGraph, JavascriptError> {
     let manifest = manifest_value(manifest_text).map_err(parse_error)?;
-    let lock: Value = serde_json::from_str(&strip_jsonc(lock_text))
-        .map_err(|error| parse_error(error.to_string()))?;
+    let lock = parsed_bun_lock(lock_text)?;
+    let nodes = bun_nodes(&lock)?;
+    let mut graph = ParsedGraph {
+        packages: Vec::new(),
+        edges: Vec::new(),
+    };
+    push_bun_workspaces(
+        &manifest,
+        &lock,
+        &nodes,
+        manifest_path,
+        &lockfile,
+        &mut graph,
+    )?;
+    ensure_bun_workspace(&graph)?;
+    push_bun_packages(&nodes, manifest_path, &lockfile, &mut graph)?;
+    Ok(graph)
+}
+
+fn parsed_bun_lock(lock_text: &str) -> Result<Value, JavascriptError> {
+    serde_json::from_str(&strip_jsonc(lock_text)).map_err(|error| parse_error(error.to_string()))
+}
+
+fn bun_nodes(lock: &Value) -> Result<BTreeMap<String, BunPackage>, JavascriptError> {
     let packages = lock
         .get("packages")
         .and_then(Value::as_object)
         .ok_or_else(|| parse_error("bun lockfile is missing packages".to_owned()))?;
     let mut nodes = BTreeMap::new();
     for (key, value) in packages {
-        let package = bun_package(key, value)?;
-        nodes.insert(key.clone(), package);
+        nodes.insert(key.clone(), bun_package(key, value)?);
     }
-    let workspaces = lock.get("workspaces").and_then(Value::as_object);
-    let mut parsed = Vec::new();
-    let mut edges = Vec::new();
-    if let Some(workspaces) = workspaces {
-        for (path, workspace) in workspaces {
-            let name = json_string(workspace, "name")
-                .or_else(|| {
-                    (path.is_empty())
-                        .then(|| json_string(&manifest, "name"))
-                        .flatten()
-                })
-                .unwrap_or_else(|| {
-                    if path.is_empty() {
-                        "workspace".to_owned()
-                    } else {
-                        path.clone()
-                    }
-                });
-            let version = json_string(workspace, "version")
-                .or_else(|| {
-                    path.is_empty()
-                        .then(|| json_string(&manifest, "version"))
-                        .flatten()
-                })
-                .unwrap_or_else(|| "0.0.0".to_owned());
-            let id = format!("bun:workspace:{path}:{name}@{version}");
-            for (key, kind, targets) in [
-                ("dependencies", DependencyKind::Normal, Vec::new()),
-                (
-                    "optionalDependencies",
-                    DependencyKind::Normal,
-                    vec!["optional".to_owned()],
-                ),
-                ("devDependencies", DependencyKind::Development, Vec::new()),
-            ] {
-                for (name, _) in string_map(workspace, key) {
-                    let Some(package) = nodes.get(&name) else {
-                        if key == "optionalDependencies" {
-                            continue;
-                        }
-                        return Err(parse_error(format!(
-                            "bun workspace {path} depends on unresolved {name}"
-                        )));
-                    };
-                    edges.push(ParsedEdge {
-                        from: id.clone(),
-                        to: package.id.clone(),
-                        kind,
-                        targets: targets.clone(),
-                    });
-                }
-            }
-            parsed.push(ParsedPackage {
-                id,
-                name,
-                version,
-                source: Some("workspace".to_owned()),
-                checksum: None,
-                declared_license: json_string(workspace, "license").or_else(|| {
-                    path.is_empty()
-                        .then(|| json_string(&manifest, "license"))
-                        .flatten()
-                }),
-                workspace_root: true,
-                manifest_path: manifest_path.to_path_buf(),
-                lockfiles: vec![lockfile.clone()],
-            });
-        }
+    Ok(nodes)
+}
+
+fn push_bun_workspaces(
+    manifest: &Value,
+    lock: &Value,
+    nodes: &BTreeMap<String, BunPackage>,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+    graph: &mut ParsedGraph,
+) -> Result<(), JavascriptError> {
+    let Some(workspaces) = lock.get("workspaces").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (path, workspace) in workspaces {
+        push_bun_workspace(
+            &BunEmit {
+                manifest,
+                nodes,
+                manifest_path,
+                lockfile,
+            },
+            path,
+            workspace,
+            graph,
+        )?;
     }
-    if !parsed.iter().any(|package| package.workspace_root) {
-        return Err(parse_error("bun lockfile has no workspace".to_owned()));
+    Ok(())
+}
+
+struct BunEmit<'a> {
+    manifest: &'a Value,
+    nodes: &'a BTreeMap<String, BunPackage>,
+    manifest_path: &'a Path,
+    lockfile: &'a LockfileEvidence,
+}
+
+fn push_bun_workspace(
+    emit: &BunEmit<'_>,
+    path: &str,
+    workspace: &Value,
+    graph: &mut ParsedGraph,
+) -> Result<(), JavascriptError> {
+    let name = bun_workspace_name(path, workspace, emit.manifest);
+    let version = bun_workspace_version(path, workspace, emit.manifest);
+    let id = format!("bun:workspace:{path}:{name}@{version}");
+    push_workspace_dependency_edges(&id, path, workspace, emit.nodes, &mut graph.edges)?;
+    graph.packages.push(ParsedPackage {
+        id,
+        name,
+        version,
+        source: Some("workspace".to_owned()),
+        checksum: None,
+        declared_license: bun_workspace_license(path, workspace, emit.manifest),
+        workspace_root: true,
+        manifest_path: emit.manifest_path.to_path_buf(),
+        lockfiles: vec![emit.lockfile.clone()],
+    });
+    Ok(())
+}
+
+fn bun_workspace_name(path: &str, workspace: &Value, manifest: &Value) -> String {
+    json_string(workspace, "name")
+        .or_else(|| empty_path_field(path, manifest, "name"))
+        .unwrap_or_else(|| fallback_workspace_name(path))
+}
+
+fn bun_workspace_version(path: &str, workspace: &Value, manifest: &Value) -> String {
+    json_string(workspace, "version")
+        .or_else(|| empty_path_field(path, manifest, "version"))
+        .unwrap_or_else(|| "0.0.0".to_owned())
+}
+
+fn bun_workspace_license(path: &str, workspace: &Value, manifest: &Value) -> Option<String> {
+    json_string(workspace, "license").or_else(|| empty_path_field(path, manifest, "license"))
+}
+
+fn empty_path_field(path: &str, manifest: &Value, key: &str) -> Option<String> {
+    path.is_empty()
+        .then(|| json_string(manifest, key))
+        .flatten()
+}
+
+fn fallback_workspace_name(path: &str) -> String {
+    if path.is_empty() {
+        "workspace".to_owned()
+    } else {
+        path.to_owned()
     }
+}
+
+fn push_workspace_dependency_edges(
+    id: &str,
+    path: &str,
+    workspace: &Value,
+    nodes: &BTreeMap<String, BunPackage>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    for (key, kind, targets) in workspace_dependency_groups() {
+        let edge = WorkspaceEdge {
+            id,
+            path,
+            key,
+            kind,
+            targets: &targets,
+            nodes,
+        };
+        push_workspace_group(&edge, workspace, edges)?;
+    }
+    Ok(())
+}
+
+struct WorkspaceEdge<'a> {
+    id: &'a str,
+    path: &'a str,
+    key: &'a str,
+    kind: DependencyKind,
+    targets: &'a [String],
+    nodes: &'a BTreeMap<String, BunPackage>,
+}
+
+fn workspace_dependency_groups() -> [(&'static str, DependencyKind, Vec<String>); 3] {
+    [
+        ("dependencies", DependencyKind::Normal, Vec::new()),
+        (
+            "optionalDependencies",
+            DependencyKind::Normal,
+            vec!["optional".to_owned()],
+        ),
+        ("devDependencies", DependencyKind::Development, Vec::new()),
+    ]
+}
+
+fn push_workspace_group(
+    edge: &WorkspaceEdge<'_>,
+    workspace: &Value,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    for (name, _) in string_map(workspace, edge.key) {
+        push_workspace_edge(edge, &name, edges)?;
+    }
+    Ok(())
+}
+
+fn push_workspace_edge(
+    edge: &WorkspaceEdge<'_>,
+    name: &str,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let Some(package) = edge.nodes.get(name) else {
+        return missing_workspace_dependency(edge, name);
+    };
+    edges.push(ParsedEdge {
+        from: edge.id.to_owned(),
+        to: package.id.clone(),
+        kind: edge.kind,
+        targets: edge.targets.to_vec(),
+    });
+    Ok(())
+}
+
+fn missing_workspace_dependency(
+    edge: &WorkspaceEdge<'_>,
+    name: &str,
+) -> Result<(), JavascriptError> {
+    if edge.key == "optionalDependencies" {
+        return Ok(());
+    }
+    Err(parse_error(format!(
+        "bun workspace {} depends on unresolved {name}",
+        edge.path
+    )))
+}
+
+fn ensure_bun_workspace(graph: &ParsedGraph) -> Result<(), JavascriptError> {
+    if graph.packages.iter().any(|package| package.workspace_root) {
+        Ok(())
+    } else {
+        Err(parse_error("bun lockfile has no workspace".to_owned()))
+    }
+}
+
+fn push_bun_packages(
+    nodes: &BTreeMap<String, BunPackage>,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+    graph: &mut ParsedGraph,
+) -> Result<(), JavascriptError> {
     for package in nodes.values() {
-        for name in package.dependencies.keys() {
-            let Some(target) = nodes.get(name) else {
-                return Err(parse_error(format!(
-                    "bun package {} depends on unresolved {name}",
-                    package.name
-                )));
-            };
-            edges.push(ParsedEdge {
-                from: package.id.clone(),
-                to: target.id.clone(),
-                kind: DependencyKind::Normal,
-                targets: Vec::new(),
-            });
-        }
-        for name in package.dev_dependencies.keys() {
-            let Some(target) = nodes.get(name) else {
-                return Err(parse_error(format!(
-                    "bun package {} depends on unresolved {name}",
-                    package.name
-                )));
-            };
-            edges.push(ParsedEdge {
-                from: package.id.clone(),
-                to: target.id.clone(),
-                kind: DependencyKind::Development,
-                targets: Vec::new(),
-            });
-        }
-        parsed.push(ParsedPackage {
-            id: package.id.clone(),
-            name: package.name.clone(),
-            version: package.version.clone(),
-            source: package.source.clone(),
-            checksum: package.checksum.clone(),
-            declared_license: None,
-            workspace_root: package.workspace,
-            manifest_path: manifest_path.to_path_buf(),
-            lockfiles: vec![lockfile.clone()],
+        push_bun_package_edges(package, nodes, &mut graph.edges)?;
+        graph
+            .packages
+            .push(parsed_bun_package(package, manifest_path, lockfile));
+    }
+    Ok(())
+}
+
+fn push_bun_package_edges(
+    package: &BunPackage,
+    nodes: &BTreeMap<String, BunPackage>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    push_named_edges(
+        package,
+        package.dependencies.keys(),
+        DependencyKind::Normal,
+        nodes,
+        edges,
+    )?;
+    push_named_edges(
+        package,
+        package.dev_dependencies.keys(),
+        DependencyKind::Development,
+        nodes,
+        edges,
+    )
+}
+
+fn push_named_edges<'a>(
+    package: &BunPackage,
+    names: impl Iterator<Item = &'a String>,
+    kind: DependencyKind,
+    nodes: &BTreeMap<String, BunPackage>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    for name in names {
+        let Some(target) = nodes.get(name) else {
+            return Err(parse_error(format!(
+                "bun package {} depends on unresolved {name}",
+                package.name
+            )));
+        };
+        edges.push(ParsedEdge {
+            from: package.id.clone(),
+            to: target.id.clone(),
+            kind,
+            targets: Vec::new(),
         });
     }
-    Ok(ParsedGraph {
-        packages: parsed,
-        edges,
-    })
+    Ok(())
+}
+
+fn parsed_bun_package(
+    package: &BunPackage,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+) -> ParsedPackage {
+    ParsedPackage {
+        id: package.id.clone(),
+        name: package.name.clone(),
+        version: package.version.clone(),
+        source: package.source.clone(),
+        checksum: package.checksum.clone(),
+        declared_license: None,
+        workspace_root: package.workspace,
+        manifest_path: manifest_path.to_path_buf(),
+        lockfiles: vec![lockfile.clone()],
+    }
 }
 
 fn bun_package(key: &str, value: &Value) -> Result<BunPackage, JavascriptError> {
@@ -215,92 +377,130 @@ fn bun_package(key: &str, value: &Value) -> Result<BunPackage, JavascriptError> 
 }
 
 fn strip_jsonc(text: &str) -> String {
+    // Comment markers inside JSON strings stay in the text. Only markers
+    // outside strings are comments.
     let chars = text.chars().collect::<Vec<_>>();
     let mut stripped = String::with_capacity(text.len());
     let mut index = 0;
-    let mut string = false;
-    let mut escaped = false;
+    let mut state = StringScan::default();
     while index < chars.len() {
-        let character = chars[index];
-        if string {
-            stripped.push(character);
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                string = false;
-            }
+        if state.string {
+            index = push_string_char(&chars, index, &mut stripped, &mut state);
+            continue;
+        }
+        if chars[index] == '"' {
+            state.string = true;
+            stripped.push('"');
             index += 1;
             continue;
         }
-        if character == '"' {
-            string = true;
-            stripped.push(character);
-            index += 1;
+        if starts_line_comment(&chars, index) {
+            index = skip_line_comment(&chars, index);
             continue;
         }
-        if character == '/' && chars.get(index + 1) == Some(&'/') {
-            index += 2;
-            while index < chars.len() && chars[index] != '\n' {
-                index += 1;
-            }
+        if starts_block_comment(&chars, index) {
+            index = skip_block_comment(&chars, index);
             continue;
         }
-        if character == '/' && chars.get(index + 1) == Some(&'*') {
-            index += 2;
-            while index + 1 < chars.len() && !(chars[index] == '*' && chars[index + 1] == '/') {
-                index += 1;
-            }
-            index = (index + 2).min(chars.len());
-            continue;
-        }
-        stripped.push(character);
+        stripped.push(chars[index]);
         index += 1;
     }
     strip_trailing_commas(&stripped)
+}
+
+#[derive(Default)]
+struct StringScan {
+    escaped: bool,
+    string: bool,
+}
+
+fn push_string_char(
+    chars: &[char],
+    index: usize,
+    stripped: &mut String,
+    state: &mut StringScan,
+) -> usize {
+    let character = chars[index];
+    stripped.push(character);
+    advance_string(state, character);
+    index + 1
+}
+
+fn advance_string(state: &mut StringScan, character: char) {
+    if state.escaped {
+        state.escaped = false;
+        return;
+    }
+    state.escaped = character == '\\';
+    if character == '"' {
+        state.string = false;
+    }
+}
+
+fn starts_line_comment(chars: &[char], index: usize) -> bool {
+    chars[index] == '/' && chars.get(index + 1) == Some(&'/')
+}
+
+fn skip_line_comment(chars: &[char], index: usize) -> usize {
+    let mut index = index + 2;
+    while index < chars.len() && chars[index] != '\n' {
+        index += 1;
+    }
+    index
+}
+
+fn starts_block_comment(chars: &[char], index: usize) -> bool {
+    chars[index] == '/' && chars.get(index + 1) == Some(&'*')
+}
+
+fn skip_block_comment(chars: &[char], index: usize) -> usize {
+    let mut index = index + 2;
+    while block_comment_continues(chars, index) {
+        index += 1;
+    }
+    (index + 2).min(chars.len())
+}
+
+fn block_comment_continues(chars: &[char], index: usize) -> bool {
+    index + 1 < chars.len() && !block_comment_ends(chars, index)
+}
+
+fn block_comment_ends(chars: &[char], index: usize) -> bool {
+    chars[index] == '*' && chars[index + 1] == '/'
 }
 
 fn strip_trailing_commas(text: &str) -> String {
     let chars = text.chars().collect::<Vec<_>>();
     let mut stripped = String::with_capacity(text.len());
     let mut index = 0;
-    let mut string = false;
-    let mut escaped = false;
+    let mut state = StringScan::default();
     while index < chars.len() {
-        let character = chars[index];
-        if string {
-            stripped.push(character);
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                string = false;
-            }
+        if state.string {
+            index = push_string_char(&chars, index, &mut stripped, &mut state);
+            continue;
+        }
+        if chars[index] == '"' {
+            state.string = true;
+            stripped.push('"');
             index += 1;
             continue;
         }
-        if character == '"' {
-            string = true;
-            stripped.push(character);
+        if chars[index] == ',' && next_nonspace_closes(&chars, index) {
             index += 1;
             continue;
         }
-        if character == ',' {
-            let mut look = index + 1;
-            while look < chars.len() && chars[look].is_whitespace() {
-                look += 1;
-            }
-            if matches!(chars.get(look), Some('}' | ']')) {
-                index += 1;
-                continue;
-            }
-        }
-        stripped.push(character);
+        stripped.push(chars[index]);
         index += 1;
     }
     stripped
+}
+
+fn next_nonspace_closes(chars: &[char], index: usize) -> bool {
+    let mut look = index + 1;
+    while look < chars.len() && chars[look].is_whitespace() {
+        look += 1;
+    }
+    matches!(chars.get(look), Some('}' | ']'))
 }
 
 fn parse_error(message: String) -> JavascriptError {

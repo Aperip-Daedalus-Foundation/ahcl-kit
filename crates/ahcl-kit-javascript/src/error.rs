@@ -48,82 +48,126 @@ pub enum JavascriptError {
 impl JavascriptError {
     pub fn code(&self) -> &'static str {
         match self {
-            Self::ManifestInvalid { .. } => "javascript.manifest_invalid",
-            Self::LockfileMissing { .. } => "javascript.lockfile_missing",
-            Self::LockfileAmbiguous { .. } => "javascript.lockfile_ambiguous",
-            Self::LockfileOutsideProject { .. } => "javascript.lockfile_outside_project",
-            Self::LockfileRead { .. } => "javascript.lockfile_read",
-            Self::LockfileTooLarge { .. } => "javascript.lockfile_too_large",
-            Self::LockfileParse { .. } => "javascript.lockfile_parse",
-            Self::BinaryBunLockfile { .. } => "javascript.bun_lockfile_binary",
-            Self::PackageSelection { .. } => "javascript.package_selection",
-            Self::DuplicatePackage { .. } => "javascript.package_duplicate",
-            Self::PathInvalid { .. } => "javascript.path_invalid",
+            Self::ManifestInvalid { .. }
+            | Self::LockfileMissing { .. }
+            | Self::LockfileAmbiguous { .. }
+            | Self::LockfileOutsideProject { .. }
+            | Self::LockfileRead { .. }
+            | Self::LockfileTooLarge { .. } => lockfile_group_code(self),
+            other => selection_group_code(other),
         }
+    }
+}
+
+fn lockfile_group_code(error: &JavascriptError) -> &'static str {
+    match error {
+        JavascriptError::ManifestInvalid { .. } => "javascript.manifest_invalid",
+        JavascriptError::LockfileMissing { .. } => "javascript.lockfile_missing",
+        JavascriptError::LockfileAmbiguous { .. } => "javascript.lockfile_ambiguous",
+        JavascriptError::LockfileOutsideProject { .. } => "javascript.lockfile_outside_project",
+        JavascriptError::LockfileRead { .. } => "javascript.lockfile_read",
+        JavascriptError::LockfileTooLarge { .. } => "javascript.lockfile_too_large",
+        // Exhaustive for variants routed to `selection_group_code`.
+        JavascriptError::LockfileParse { .. }
+        | JavascriptError::BinaryBunLockfile { .. }
+        | JavascriptError::PackageSelection { .. }
+        | JavascriptError::DuplicatePackage { .. }
+        | JavascriptError::PathInvalid { .. } => "javascript.lockfile_parse",
+    }
+}
+
+fn selection_group_code(error: &JavascriptError) -> &'static str {
+    match error {
+        JavascriptError::LockfileParse { .. } => "javascript.lockfile_parse",
+        JavascriptError::BinaryBunLockfile { .. } => "javascript.bun_lockfile_binary",
+        JavascriptError::PackageSelection { .. } => "javascript.package_selection",
+        JavascriptError::DuplicatePackage { .. } => "javascript.package_duplicate",
+        JavascriptError::PathInvalid { .. } => "javascript.path_invalid",
+        // Exhaustive for variants routed to `lockfile_group_code`.
+        JavascriptError::ManifestInvalid { .. }
+        | JavascriptError::LockfileMissing { .. }
+        | JavascriptError::LockfileAmbiguous { .. }
+        | JavascriptError::LockfileOutsideProject { .. }
+        | JavascriptError::LockfileRead { .. }
+        | JavascriptError::LockfileTooLarge { .. } => "javascript.manifest_invalid",
     }
 }
 
 impl fmt::Display for JavascriptError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ManifestInvalid { manifest } => {
-                write!(
-                    formatter,
-                    "JavaScript manifest is not a safe regular file: {manifest}"
-                )
-            }
-            Self::LockfileMissing { manifest } => {
-                write!(
-                    formatter,
-                    "JavaScript manifest {manifest} has no supported lockfile"
-                )
-            }
-            Self::LockfileAmbiguous { manifest, found } => {
-                write!(
-                    formatter,
-                    "JavaScript manifest {manifest} has multiple lockfiles ({found}); set javascript.managers"
-                )
-            }
-            Self::LockfileOutsideProject { .. } => {
-                formatter.write_str("JavaScript lockfile is outside the project root")
-            }
-            Self::LockfileRead { .. } => {
-                formatter.write_str("JavaScript lockfile could not be read")
-            }
-            Self::LockfileTooLarge { path } => {
-                write!(
-                    formatter,
-                    "JavaScript lockfile exceeds the size limit: {path}"
-                )
-            }
-            Self::LockfileParse { path, message } => {
-                write!(
-                    formatter,
-                    "JavaScript lockfile {path} could not be parsed: {message}"
-                )
-            }
-            Self::BinaryBunLockfile { path } => {
-                write!(
-                    formatter,
-                    "binary Bun lockfile {path} is not supported; generate text bun.lock"
-                )
-            }
-            Self::PackageSelection { package } => {
-                write!(
-                    formatter,
-                    "JavaScript package selection did not match a workspace root: {package}"
-                )
-            }
-            Self::DuplicatePackage { package_id } => {
-                write!(
-                    formatter,
-                    "JavaScript resolution produced a duplicate package id: {package_id}"
-                )
-            }
-            Self::PathInvalid { .. } => {
-                formatter.write_str("JavaScript path cannot be represented safely")
-            }
+            Self::ManifestInvalid { .. }
+            | Self::LockfileMissing { .. }
+            | Self::LockfileAmbiguous { .. }
+            | Self::LockfileOutsideProject { .. }
+            | Self::LockfileRead { .. }
+            | Self::LockfileTooLarge { .. } => fmt_lockfile_group(self, formatter),
+            other => fmt_selection_group(other, formatter),
         }
+    }
+}
+
+fn fmt_lockfile_group(error: &JavascriptError, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match error {
+        JavascriptError::ManifestInvalid { manifest } => write!(
+            formatter,
+            "JavaScript manifest is not a safe regular file: {manifest}"
+        ),
+        JavascriptError::LockfileMissing { manifest } => write!(
+            formatter,
+            "JavaScript manifest {manifest} has no supported lockfile"
+        ),
+        JavascriptError::LockfileAmbiguous { manifest, found } => write!(
+            formatter,
+            "JavaScript manifest {manifest} has multiple lockfiles ({found}); set javascript.managers"
+        ),
+        JavascriptError::LockfileOutsideProject { .. } => {
+            formatter.write_str("JavaScript lockfile is outside the project root")
+        }
+        JavascriptError::LockfileRead { .. } => {
+            formatter.write_str("JavaScript lockfile could not be read")
+        }
+        JavascriptError::LockfileTooLarge { path } => {
+            write!(
+                formatter,
+                "JavaScript lockfile exceeds the size limit: {path}"
+            )
+        }
+        JavascriptError::LockfileParse { .. }
+        | JavascriptError::BinaryBunLockfile { .. }
+        | JavascriptError::PackageSelection { .. }
+        | JavascriptError::DuplicatePackage { .. }
+        | JavascriptError::PathInvalid { .. } => Ok(()),
+    }
+}
+
+fn fmt_selection_group(error: &JavascriptError, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match error {
+        JavascriptError::LockfileParse { path, message } => write!(
+            formatter,
+            "JavaScript lockfile {path} could not be parsed: {message}"
+        ),
+        JavascriptError::BinaryBunLockfile { path } => write!(
+            formatter,
+            "binary Bun lockfile {path} is not supported; generate text bun.lock"
+        ),
+        JavascriptError::PackageSelection { package } => write!(
+            formatter,
+            "JavaScript package selection did not match a workspace root: {package}"
+        ),
+        JavascriptError::DuplicatePackage { package_id } => write!(
+            formatter,
+            "JavaScript resolution produced a duplicate package id: {package_id}"
+        ),
+        JavascriptError::PathInvalid { .. } => {
+            formatter.write_str("JavaScript path cannot be represented safely")
+        }
+        JavascriptError::ManifestInvalid { .. }
+        | JavascriptError::LockfileMissing { .. }
+        | JavascriptError::LockfileAmbiguous { .. }
+        | JavascriptError::LockfileOutsideProject { .. }
+        | JavascriptError::LockfileRead { .. }
+        | JavascriptError::LockfileTooLarge { .. } => Ok(()),
     }
 }
 

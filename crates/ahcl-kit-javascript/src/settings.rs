@@ -258,6 +258,21 @@ impl JavascriptSettings {
 }
 
 fn resolve_javascript(document: &ConfigDocument) -> Result<JavascriptSettings, ConfigError> {
+    let manifests = javascript_manifests(document)?;
+    let managers = javascript_managers(document)?;
+    let packages = document
+        .optional_string_list(Some("javascript"), "packages")?
+        .unwrap_or_default();
+    let rules = javascript_rules(document)?;
+    Ok(JavascriptSettings {
+        manifests,
+        managers,
+        packages,
+        rules,
+    })
+}
+
+fn javascript_manifests(document: &ConfigDocument) -> Result<Vec<RepoPath>, ConfigError> {
     let manifests = document
         .optional_string_list(Some("javascript"), "manifests")?
         .unwrap_or_else(|| vec!["package.json".to_owned()])
@@ -267,8 +282,13 @@ fn resolve_javascript(document: &ConfigDocument) -> Result<JavascriptSettings, C
     if manifests.is_empty() {
         return invalid("javascript.manifests", "must not be empty when configured");
     }
+    reject_duplicate_manifests(&manifests)?;
+    Ok(manifests)
+}
+
+fn reject_duplicate_manifests(manifests: &[RepoPath]) -> Result<(), ConfigError> {
     let mut portable_manifest_keys = BTreeSet::new();
-    for manifest in &manifests {
+    for manifest in manifests {
         if !portable_manifest_keys.insert(manifest.as_str().to_lowercase()) {
             return invalid(
                 "javascript.manifests",
@@ -276,34 +296,37 @@ fn resolve_javascript(document: &ConfigDocument) -> Result<JavascriptSettings, C
             );
         }
     }
+    Ok(())
+}
+
+fn javascript_managers(document: &ConfigDocument) -> Result<Vec<JsPackageManager>, ConfigError> {
     let managers = match document.optional_string_list(Some("javascript"), "managers")? {
         None => Vec::new(),
-        Some(values) if values.is_empty() => {
-            return invalid("javascript.managers", "must not be empty when configured");
-        }
-        Some(values) => values
-            .into_iter()
-            .map(|value| parse_manager(&value))
-            .collect::<Result<Vec<_>, _>>()?,
+        Some(values) => parse_managers(values)?,
     };
     if managers.iter().collect::<BTreeSet<_>>().len() != managers.len() {
         return invalid("javascript.managers", "duplicate package manager");
     }
-    let packages = document
-        .optional_string_list(Some("javascript"), "packages")?
-        .unwrap_or_default();
-    let rules = document
+    Ok(managers)
+}
+
+fn parse_managers(values: Vec<String>) -> Result<Vec<JsPackageManager>, ConfigError> {
+    if values.is_empty() {
+        return invalid("javascript.managers", "must not be empty when configured");
+    }
+    values
+        .into_iter()
+        .map(|value| parse_manager(&value))
+        .collect()
+}
+
+fn javascript_rules(document: &ConfigDocument) -> Result<Vec<PackageRule>, ConfigError> {
+    document
         .optional_object_list(Some("javascript"), "rules")?
         .unwrap_or_default()
         .into_iter()
         .map(|fields| PackageRule::parse("javascript.rules", true, fields))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(JavascriptSettings {
-        manifests,
-        managers,
-        packages,
-        rules,
-    })
+        .collect()
 }
 
 fn parse_manager(value: &str) -> Result<JsPackageManager, ConfigError> {

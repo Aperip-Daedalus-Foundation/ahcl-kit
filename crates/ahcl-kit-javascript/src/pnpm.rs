@@ -46,125 +46,304 @@ pub(crate) fn parse_pnpm(
 ) -> Result<ParsedGraph, JavascriptError> {
     let manifest = manifest_value(manifest_text).map_err(parse_error)?;
     let root = parse_yaml(lock_text).map_err(parse_error)?;
-    let lockfile_version = scalar(&root, "lockfileVersion")
+    let loaded = load_pnpm_lock(&root)?;
+    finish_pnpm_graph(&loaded, &manifest, manifest_path, lockfile)
+}
+
+struct PnpmLock {
+    version_nine: bool,
+    packages: BTreeMap<String, Yaml>,
+    snapshots: BTreeMap<String, Yaml>,
+    importers: BTreeMap<String, Yaml>,
+}
+
+struct PnpmGraph {
+    packages: Vec<ParsedPackage>,
+    edges: Vec<ParsedEdge>,
+    importer_ids: BTreeMap<String, String>,
+}
+
+fn load_pnpm_lock(root: &BTreeMap<String, Yaml>) -> Result<PnpmLock, JavascriptError> {
+    let lockfile_version = pnpm_lock_version(root);
+    require_pnpm_version(&lockfile_version)?;
+    Ok(PnpmLock {
+        version_nine: lockfile_version.starts_with('9'),
+        packages: map(root, "packages").cloned().unwrap_or_default(),
+        snapshots: map(root, "snapshots").cloned().unwrap_or_default(),
+        importers: pnpm_importers(root),
+    })
+}
+
+fn pnpm_lock_version(root: &BTreeMap<String, Yaml>) -> String {
+    scalar(root, "lockfileVersion")
         .unwrap_or_default()
         .trim_matches(['\'', '"'])
-        .to_owned();
-    if !lockfile_version.starts_with('6') && !lockfile_version.starts_with('9') {
-        return Err(parse_error(format!(
-            "unsupported pnpm lockfileVersion {lockfile_version}; require 6 or 9"
-        )));
+        .to_owned()
+}
+
+fn require_pnpm_version(lockfile_version: &str) -> Result<(), JavascriptError> {
+    if lockfile_version.starts_with('6') || lockfile_version.starts_with('9') {
+        return Ok(());
     }
-    let packages = map(&root, "packages").cloned().unwrap_or_default();
-    let snapshots = map(&root, "snapshots").cloned().unwrap_or_default();
-    let version_nine = lockfile_version.starts_with('9');
-    let importers = if let Some(importers) = map(&root, "importers") {
-        importers.clone()
-    } else {
-        let mut synthetic = BTreeMap::new();
-        let mut importer = BTreeMap::new();
-        for key in [
-            "dependencies",
-            "devDependencies",
-            "optionalDependencies",
-            "peerDependencies",
-        ] {
-            if let Some(value) = root.get(key) {
-                importer.insert(key.to_owned(), value.clone());
-            }
+    Err(parse_error(format!(
+        "unsupported pnpm lockfileVersion {lockfile_version}; require 6 or 9"
+    )))
+}
+
+fn pnpm_importers(root: &BTreeMap<String, Yaml>) -> BTreeMap<String, Yaml> {
+    if let Some(importers) = map(root, "importers") {
+        return importers.clone();
+    }
+    let mut synthetic = BTreeMap::new();
+    synthetic.insert(".".to_owned(), Yaml::Map(synthetic_importer(root)));
+    synthetic
+}
+
+fn synthetic_importer(root: &BTreeMap<String, Yaml>) -> BTreeMap<String, Yaml> {
+    let mut importer = BTreeMap::new();
+    for key in [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies",
+    ] {
+        if let Some(value) = root.get(key) {
+            importer.insert(key.to_owned(), value.clone());
         }
-        synthetic.insert(".".to_owned(), Yaml::Map(importer));
-        synthetic
+    }
+    importer
+}
+
+fn importer_packages(
+    importers: &BTreeMap<String, Yaml>,
+    manifest: &serde_json::Value,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+) -> Result<PnpmGraph, JavascriptError> {
+    let mut graph = PnpmGraph {
+        packages: Vec::new(),
+        edges: Vec::new(),
+        importer_ids: BTreeMap::new(),
     };
-
-    let root_name = json_string(&manifest, "name").unwrap_or_else(|| "workspace".to_owned());
-    let root_version = json_string(&manifest, "version").unwrap_or_else(|| "0.0.0".to_owned());
-    let root_license = json_string(&manifest, "license");
-    let mut parsed = Vec::new();
-    let mut edges = Vec::new();
-    let mut importer_ids = BTreeMap::new();
-
-    for (importer_path, importer) in &importers {
-        let Yaml::Map(_) = importer else {
-            return Err(parse_error(format!(
-                "pnpm importer {importer_path} is invalid"
-            )));
-        };
-        let (name, version, license) = if importer_path == "." {
-            (
-                root_name.clone(),
-                root_version.clone(),
-                root_license.clone(),
-            )
-        } else {
-            (importer_path.clone(), "0.0.0".to_owned(), None)
-        };
-        let id = format!("pnpm:importer:{importer_path}:{name}@{version}");
-        importer_ids.insert(importer_path.clone(), id.clone());
-        parsed.push(ParsedPackage {
-            id,
-            name,
-            version,
-            source: Some("workspace".to_owned()),
-            checksum: None,
-            declared_license: license,
-            workspace_root: true,
-            manifest_path: manifest_path.to_path_buf(),
-            lockfiles: vec![lockfile.clone()],
-        });
+    for (importer_path, importer) in importers {
+        push_importer_package(
+            &mut graph,
+            importer_path,
+            importer,
+            &PnpmEmit {
+                manifest,
+                manifest_path,
+                lockfile,
+            },
+        )?;
     }
+    Ok(graph)
+}
 
-    for (key, value) in &packages {
-        let Yaml::Map(fields) = value else {
-            continue;
-        };
-        let (name, version) = package_identity(key)
-            .ok_or_else(|| parse_error(format!("pnpm package key is invalid: {key}")))?;
-        let resolution = map_from(fields, "resolution");
-        let integrity =
-            resolution.and_then(|resolution| scalar(resolution, "integrity").map(str::to_owned));
-        let tarball =
-            resolution.and_then(|resolution| scalar(resolution, "tarball").map(str::to_owned));
-        let id = format!("pnpm:{}", strip_peer(key));
-        if !version_nine {
-            add_dependency_edges(&id, fields, &packages, &importer_ids, &mut edges)?;
-        }
-        parsed.push(ParsedPackage {
-            id,
-            name,
-            version,
-            source: tarball.or_else(|| Some("registry".to_owned())),
-            checksum: integrity,
-            declared_license: None,
-            workspace_root: false,
-            manifest_path: manifest_path.to_path_buf(),
-            lockfiles: vec![lockfile.clone()],
-        });
-    }
+struct PnpmEmit<'a> {
+    manifest: &'a serde_json::Value,
+    manifest_path: &'a Path,
+    lockfile: &'a LockfileEvidence,
+}
 
-    for (importer_path, importer) in &importers {
-        let Yaml::Map(fields) = importer else {
-            continue;
-        };
-        let Some(id) = importer_ids.get(importer_path) else {
-            continue;
-        };
-        add_importer_edges(id, fields, &packages, &importer_ids, &mut edges)?;
-    }
-    if version_nine {
-        for (key, value) in &snapshots {
-            let Yaml::Map(fields) = value else {
-                continue;
-            };
-            let id = format!("pnpm:{}", strip_peer(key));
-            add_dependency_edges(&id, fields, &packages, &importer_ids, &mut edges)?;
-        }
-    }
-
+fn finish_pnpm_graph(
+    loaded: &PnpmLock,
+    manifest: &serde_json::Value,
+    manifest_path: &Path,
+    lockfile: LockfileEvidence,
+) -> Result<ParsedGraph, JavascriptError> {
+    let mut graph = importer_packages(&loaded.importers, manifest, manifest_path, &lockfile)?;
+    push_pnpm_packages(loaded, manifest_path, &lockfile, &mut graph)?;
+    push_recorded_edges(loaded, &mut graph)?;
     Ok(ParsedGraph {
-        packages: parsed,
-        edges,
+        packages: graph.packages,
+        edges: graph.edges,
     })
+}
+
+fn push_recorded_edges(loaded: &PnpmLock, graph: &mut PnpmGraph) -> Result<(), JavascriptError> {
+    push_importer_package_edges(loaded, &graph.importer_ids, &mut graph.edges)?;
+    if loaded.version_nine {
+        push_snapshot_edges(loaded, &graph.importer_ids, &mut graph.edges)?;
+    }
+    Ok(())
+}
+
+fn push_importer_package(
+    graph: &mut PnpmGraph,
+    importer_path: &str,
+    importer: &Yaml,
+    emit: &PnpmEmit<'_>,
+) -> Result<(), JavascriptError> {
+    let Yaml::Map(_) = importer else {
+        return Err(parse_error(format!(
+            "pnpm importer {importer_path} is invalid"
+        )));
+    };
+    let (name, version, license) = importer_identity(importer_path, emit.manifest);
+    let id = format!("pnpm:importer:{importer_path}:{name}@{version}");
+    graph
+        .importer_ids
+        .insert(importer_path.to_owned(), id.clone());
+    graph.packages.push(ParsedPackage {
+        id,
+        name,
+        version,
+        source: Some("workspace".to_owned()),
+        checksum: None,
+        declared_license: license,
+        workspace_root: true,
+        manifest_path: emit.manifest_path.to_path_buf(),
+        lockfiles: vec![emit.lockfile.clone()],
+    });
+    Ok(())
+}
+
+fn importer_identity(
+    importer_path: &str,
+    manifest: &serde_json::Value,
+) -> (String, String, Option<String>) {
+    if importer_path == "." {
+        return (
+            json_string(manifest, "name").unwrap_or_else(|| "workspace".to_owned()),
+            json_string(manifest, "version").unwrap_or_else(|| "0.0.0".to_owned()),
+            json_string(manifest, "license"),
+        );
+    }
+    (importer_path.to_owned(), "0.0.0".to_owned(), None)
+}
+
+fn push_pnpm_packages(
+    loaded: &PnpmLock,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+    graph: &mut PnpmGraph,
+) -> Result<(), JavascriptError> {
+    for (key, value) in &loaded.packages {
+        push_pnpm_package(loaded, key, value, manifest_path, lockfile, graph)?;
+    }
+    Ok(())
+}
+
+fn push_pnpm_package(
+    loaded: &PnpmLock,
+    key: &str,
+    value: &Yaml,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+    graph: &mut PnpmGraph,
+) -> Result<(), JavascriptError> {
+    let Yaml::Map(fields) = value else {
+        return Ok(());
+    };
+    let (name, version) = package_identity(key)
+        .ok_or_else(|| parse_error(format!("pnpm package key is invalid: {key}")))?;
+    let id = format!("pnpm:{}", strip_peer(key));
+    if !loaded.version_nine {
+        add_dependency_edges(
+            &id,
+            fields,
+            &loaded.packages,
+            &graph.importer_ids,
+            &mut graph.edges,
+        )?;
+    }
+    graph.packages.push(parsed_pnpm_package(
+        fields,
+        manifest_path,
+        lockfile,
+        id,
+        name,
+        version,
+    ));
+    Ok(())
+}
+
+fn parsed_pnpm_package(
+    fields: &BTreeMap<String, Yaml>,
+    manifest_path: &Path,
+    lockfile: &LockfileEvidence,
+    id: String,
+    name: String,
+    version: String,
+) -> ParsedPackage {
+    let resolution = map_from(fields, "resolution");
+    ParsedPackage {
+        id,
+        name,
+        version,
+        source: pnpm_source(resolution),
+        checksum: resolution
+            .and_then(|resolution| scalar(resolution, "integrity").map(str::to_owned)),
+        declared_license: None,
+        workspace_root: false,
+        manifest_path: manifest_path.to_path_buf(),
+        lockfiles: vec![lockfile.clone()],
+    }
+}
+
+fn pnpm_source(resolution: Option<&BTreeMap<String, Yaml>>) -> Option<String> {
+    resolution
+        .and_then(|resolution| scalar(resolution, "tarball").map(str::to_owned))
+        .or_else(|| Some("registry".to_owned()))
+}
+
+fn push_importer_package_edges(
+    loaded: &PnpmLock,
+    importer_ids: &BTreeMap<String, String>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    for (importer_path, importer) in &loaded.importers {
+        push_one_importer_edges(
+            importer_path,
+            importer,
+            &loaded.packages,
+            importer_ids,
+            edges,
+        )?;
+    }
+    Ok(())
+}
+
+fn push_one_importer_edges(
+    importer_path: &str,
+    importer: &Yaml,
+    packages: &BTreeMap<String, Yaml>,
+    importer_ids: &BTreeMap<String, String>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let Yaml::Map(fields) = importer else {
+        return Ok(());
+    };
+    let Some(id) = importer_ids.get(importer_path) else {
+        return Ok(());
+    };
+    add_importer_edges(id, fields, packages, importer_ids, edges)
+}
+
+fn push_snapshot_edges(
+    loaded: &PnpmLock,
+    importer_ids: &BTreeMap<String, String>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    for (key, value) in &loaded.snapshots {
+        push_one_snapshot(key, value, &loaded.packages, importer_ids, edges)?;
+    }
+    Ok(())
+}
+
+fn push_one_snapshot(
+    key: &str,
+    value: &Yaml,
+    packages: &BTreeMap<String, Yaml>,
+    importer_ids: &BTreeMap<String, String>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let Yaml::Map(fields) = value else {
+        return Ok(());
+    };
+    let id = format!("pnpm:{}", strip_peer(key));
+    add_dependency_edges(&id, fields, packages, importer_ids, edges)
 }
 
 fn add_importer_edges(
@@ -184,33 +363,76 @@ fn add_importer_edges(
         ("peerDependencies", DependencyKind::Normal, Some("peer")),
         ("devDependencies", DependencyKind::Development, None),
     ] {
-        let Some(Yaml::Map(dependencies)) = fields.get(key) else {
-            continue;
+        let edge = ImporterEdge {
+            from,
+            packages,
+            importers,
+            key,
+            kind,
+            target,
         };
-        for (name, value) in dependencies {
-            let version = dependency_version(value)
-                .ok_or_else(|| parse_error(format!("pnpm dependency {name} has no version")))?;
-            let Some(to) = resolve_pnpm_target(packages, importers, name, version) else {
-                if version.starts_with("link:")
-                    || matches!(key, "optionalDependencies" | "peerDependencies")
-                {
-                    continue;
-                }
-                return Err(parse_error(format!(
-                    "pnpm dependency {name}@{version} was not found"
-                )));
-            };
-            edges.push(ParsedEdge {
-                from: from.to_owned(),
-                to,
-                kind,
-                targets: target
-                    .map(|value| vec![value.to_owned()])
-                    .unwrap_or_default(),
-            });
-        }
+        add_importer_group(&edge, fields, edges)?;
     }
     Ok(())
+}
+
+struct ImporterEdge<'a> {
+    from: &'a str,
+    packages: &'a BTreeMap<String, Yaml>,
+    importers: &'a BTreeMap<String, String>,
+    key: &'a str,
+    kind: DependencyKind,
+    target: Option<&'static str>,
+}
+
+fn add_importer_group(
+    edge: &ImporterEdge<'_>,
+    fields: &BTreeMap<String, Yaml>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let Some(Yaml::Map(dependencies)) = fields.get(edge.key) else {
+        return Ok(());
+    };
+    for (name, value) in dependencies {
+        push_importer_dependency(edge, name, value, edges)?;
+    }
+    Ok(())
+}
+
+fn push_importer_dependency(
+    edge: &ImporterEdge<'_>,
+    name: &str,
+    value: &Yaml,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let version = dependency_version(value)
+        .ok_or_else(|| parse_error(format!("pnpm dependency {name} has no version")))?;
+    let Some(to) = resolve_pnpm_target(edge.packages, edge.importers, name, version) else {
+        return missing_importer_target(edge.key, name, version);
+    };
+    edges.push(ParsedEdge {
+        from: edge.from.to_owned(),
+        to,
+        kind: edge.kind,
+        targets: edge
+            .target
+            .map(|value| vec![value.to_owned()])
+            .unwrap_or_default(),
+    });
+    Ok(())
+}
+
+fn missing_importer_target(key: &str, name: &str, version: &str) -> Result<(), JavascriptError> {
+    if version.starts_with("link:") || optional_importer_key(key) {
+        return Ok(());
+    }
+    Err(parse_error(format!(
+        "pnpm dependency {name}@{version} was not found"
+    )))
+}
+
+fn optional_importer_key(key: &str) -> bool {
+    matches!(key, "optionalDependencies" | "peerDependencies")
 }
 
 fn add_dependency_edges(
@@ -221,39 +443,86 @@ fn add_dependency_edges(
     edges: &mut Vec<ParsedEdge>,
 ) -> Result<(), JavascriptError> {
     for key in ["dependencies", "optionalDependencies"] {
-        let Some(Yaml::Map(dependencies)) = fields.get(key) else {
-            continue;
-        };
-        for (name, value) in dependencies {
-            let Some(version) = dependency_version(value) else {
-                if key == "optionalDependencies" {
-                    continue;
-                }
-                return Err(parse_error(format!(
-                    "pnpm dependency {name} has no version"
-                )));
-            };
-            let Some(to) = resolve_pnpm_target(packages, importers, name, version) else {
-                if key == "optionalDependencies" || version.starts_with("link:") {
-                    continue;
-                }
-                return Err(parse_error(format!(
-                    "pnpm dependency {name}@{version} was not found"
-                )));
-            };
-            let mut targets = Vec::new();
-            if key == "optionalDependencies" {
-                targets.push("optional".to_owned());
-            }
-            edges.push(ParsedEdge {
-                from: from.to_owned(),
-                to,
-                kind: DependencyKind::Normal,
-                targets,
-            });
-        }
+        add_dependency_group(
+            &DependencyEdge {
+                from,
+                packages,
+                importers,
+                key,
+            },
+            fields,
+            edges,
+        )?;
     }
     Ok(())
+}
+
+struct DependencyEdge<'a> {
+    from: &'a str,
+    packages: &'a BTreeMap<String, Yaml>,
+    importers: &'a BTreeMap<String, String>,
+    key: &'a str,
+}
+
+fn add_dependency_group(
+    edge: &DependencyEdge<'_>,
+    fields: &BTreeMap<String, Yaml>,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let Some(Yaml::Map(dependencies)) = fields.get(edge.key) else {
+        return Ok(());
+    };
+    for (name, value) in dependencies {
+        push_dependency(edge, name, value, edges)?;
+    }
+    Ok(())
+}
+
+fn push_dependency(
+    edge: &DependencyEdge<'_>,
+    name: &str,
+    value: &Yaml,
+    edges: &mut Vec<ParsedEdge>,
+) -> Result<(), JavascriptError> {
+    let Some(version) = dependency_version(value) else {
+        return missing_dependency_version(edge.key, name);
+    };
+    let Some(to) = resolve_pnpm_target(edge.packages, edge.importers, name, version) else {
+        return missing_dependency_target(edge.key, name, version);
+    };
+    edges.push(ParsedEdge {
+        from: edge.from.to_owned(),
+        to,
+        kind: DependencyKind::Normal,
+        targets: dependency_targets(edge.key),
+    });
+    Ok(())
+}
+
+fn missing_dependency_version(key: &str, name: &str) -> Result<(), JavascriptError> {
+    if key == "optionalDependencies" {
+        return Ok(());
+    }
+    Err(parse_error(format!(
+        "pnpm dependency {name} has no version"
+    )))
+}
+
+fn missing_dependency_target(key: &str, name: &str, version: &str) -> Result<(), JavascriptError> {
+    if key == "optionalDependencies" || version.starts_with("link:") {
+        return Ok(());
+    }
+    Err(parse_error(format!(
+        "pnpm dependency {name}@{version} was not found"
+    )))
+}
+
+fn dependency_targets(key: &str) -> Vec<String> {
+    if key == "optionalDependencies" {
+        vec!["optional".to_owned()]
+    } else {
+        Vec::new()
+    }
 }
 
 fn resolve_pnpm_target(
@@ -351,102 +620,214 @@ fn parse_block(
 ) -> Result<BTreeMap<String, Yaml>, String> {
     let mut map = BTreeMap::new();
     while *index < lines.len() {
-        let line = lines[*index];
-        if line.contains('\t') {
-            return Err("pnpm lockfile cannot contain tabs".to_owned());
-        }
-        let current = line.len() - line.trim_start_matches(' ').len();
-        if current < indent {
+        if !parse_block_line(lines, index, indent, &mut map)? {
             break;
         }
-        if current != indent {
-            return Err(format!("unexpected indentation in pnpm lockfile: {line}"));
-        }
-        let trimmed = line.trim_start_matches(' ');
-        if trimmed.starts_with("- ") {
-            return Err("pnpm lockfile lists are not supported".to_owned());
-        }
-        let (key, value) = split_entry(trimmed)?;
-        *index += 1;
-        let parsed = if let Some(value) = value {
-            parse_scalar_or_inline(value)?
-        } else if *index < lines.len() {
-            let next = lines[*index];
-            let next_indent = next.len() - next.trim_start_matches(' ').len();
-            if next_indent > indent {
-                Yaml::Map(parse_block(lines, index, next_indent)?)
-            } else {
-                Yaml::Map(BTreeMap::new())
-            }
-        } else {
-            Yaml::Map(BTreeMap::new())
-        };
-        map.insert(key, parsed);
     }
     Ok(map)
+}
+
+fn parse_block_line(
+    lines: &[&str],
+    index: &mut usize,
+    indent: usize,
+    map: &mut BTreeMap<String, Yaml>,
+) -> Result<bool, String> {
+    let line = lines[*index];
+    reject_pnpm_tabs(line)?;
+    if !indent_continues(indentation(line), indent, line)? {
+        return Ok(false);
+    }
+    insert_block_entry(lines, index, indent, map)?;
+    Ok(true)
+}
+
+fn reject_pnpm_tabs(line: &str) -> Result<(), String> {
+    if line.contains('\t') {
+        return Err("pnpm lockfile cannot contain tabs".to_owned());
+    }
+    Ok(())
+}
+
+fn indentation(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+fn indent_continues(current: usize, indent: usize, line: &str) -> Result<bool, String> {
+    if current < indent {
+        return Ok(false);
+    }
+    if current != indent {
+        return Err(format!("unexpected indentation in pnpm lockfile: {line}"));
+    }
+    Ok(true)
+}
+
+fn insert_block_entry(
+    lines: &[&str],
+    index: &mut usize,
+    indent: usize,
+    map: &mut BTreeMap<String, Yaml>,
+) -> Result<(), String> {
+    let trimmed = lines[*index].trim_start_matches(' ');
+    reject_pnpm_list(trimmed)?;
+    let (key, value) = split_entry(trimmed)?;
+    *index += 1;
+    map.insert(key, parse_block_value(lines, index, indent, value)?);
+    Ok(())
+}
+
+fn reject_pnpm_list(trimmed: &str) -> Result<(), String> {
+    if trimmed.starts_with("- ") {
+        return Err("pnpm lockfile lists are not supported".to_owned());
+    }
+    Ok(())
+}
+
+fn parse_block_value(
+    lines: &[&str],
+    index: &mut usize,
+    indent: usize,
+    value: Option<&str>,
+) -> Result<Yaml, String> {
+    if let Some(value) = value {
+        return parse_scalar_or_inline(value);
+    }
+    nested_block(lines, index, indent)
+}
+
+fn nested_block(lines: &[&str], index: &mut usize, indent: usize) -> Result<Yaml, String> {
+    if *index >= lines.len() {
+        return Ok(Yaml::Map(BTreeMap::new()));
+    }
+    let next_indent = indentation(lines[*index]);
+    if next_indent > indent {
+        return Ok(Yaml::Map(parse_block(lines, index, next_indent)?));
+    }
+    Ok(Yaml::Map(BTreeMap::new()))
 }
 
 fn split_entry(line: &str) -> Result<(String, Option<&str>), String> {
     let mut quoted = None;
     for (index, character) in line.char_indices() {
-        match (quoted, character) {
-            (None, '\'' | '"') => quoted = Some(character),
-            (Some(quote), character) if character == quote => quoted = None,
-            (None, ':') => {
-                let key = unquote(line[..index].trim())?;
-                let value = line[index + 1..].trim();
-                return Ok((key, if value.is_empty() { None } else { Some(value) }));
-            }
-            _ => {}
+        if let Some(split) = split_entry_at(line, index, character, &mut quoted)? {
+            return Ok(split);
         }
     }
     Err(format!("pnpm lockfile entry has no key: {line}"))
 }
 
+fn split_entry_at<'a>(
+    line: &'a str,
+    index: usize,
+    character: char,
+    quoted: &mut Option<char>,
+) -> Result<Option<(String, Option<&'a str>)>, String> {
+    match (*quoted, character) {
+        (None, '\'' | '"') => {
+            *quoted = Some(character);
+            Ok(None)
+        }
+        (Some(quote), character) if character == quote => {
+            *quoted = None;
+            Ok(None)
+        }
+        (None, ':') => Ok(Some(split_key_value(line, index)?)),
+        _ => Ok(None),
+    }
+}
+
+fn split_key_value(line: &str, index: usize) -> Result<(String, Option<&str>), String> {
+    let key = unquote(line[..index].trim())?;
+    let value = line[index + 1..].trim();
+    if value.is_empty() {
+        Ok((key, None))
+    } else {
+        Ok((key, Some(value)))
+    }
+}
+
 fn parse_scalar_or_inline(value: &str) -> Result<Yaml, String> {
     let value = value.trim();
-    if let Some(inner) = value
-        .strip_prefix('{')
-        .and_then(|value| value.strip_suffix('}'))
-    {
-        let mut map = BTreeMap::new();
-        if !inner.trim().is_empty() {
-            for part in split_inline(inner)? {
-                let (key, raw) = split_entry(part.trim())?;
-                let Some(raw) = raw else {
-                    return Err(format!("inline pnpm value is incomplete: {part}"));
-                };
-                map.insert(key, Yaml::Scalar(unquote(raw)?));
-            }
-        }
-        return Ok(Yaml::Map(map));
+    if let Some(inner) = inline_map_body(value) {
+        return parse_inline_map(inner);
     }
     Ok(Yaml::Scalar(unquote(value)?))
 }
 
+fn inline_map_body(value: &str) -> Option<&str> {
+    value
+        .strip_prefix('{')
+        .and_then(|value| value.strip_suffix('}'))
+}
+
+fn parse_inline_map(inner: &str) -> Result<Yaml, String> {
+    let mut map = BTreeMap::new();
+    if inner.trim().is_empty() {
+        return Ok(Yaml::Map(map));
+    }
+    for part in split_inline(inner)? {
+        insert_inline_part(&mut map, part)?;
+    }
+    Ok(Yaml::Map(map))
+}
+
+fn insert_inline_part(map: &mut BTreeMap<String, Yaml>, part: &str) -> Result<(), String> {
+    let (key, raw) = split_entry(part.trim())?;
+    let Some(raw) = raw else {
+        return Err(format!("inline pnpm value is incomplete: {part}"));
+    };
+    map.insert(key, Yaml::Scalar(unquote(raw)?));
+    Ok(())
+}
+
 fn split_inline(value: &str) -> Result<Vec<&str>, String> {
     let mut parts = Vec::new();
-    let mut start = 0;
-    let mut quoted = None;
-    let mut depth = 0;
+    let mut cursor = InlineCursor::default();
     for (index, character) in value.char_indices() {
-        match (quoted, character) {
-            (None, '\'' | '"') => quoted = Some(character),
-            (Some(quote), character) if character == quote => quoted = None,
-            (None, '{') => depth += 1,
-            (None, '}') => depth -= 1,
-            (None, ',') if depth == 0 => {
-                parts.push(value[start..index].trim());
-                start = index + 1;
-            }
-            _ => {}
-        }
+        take_inline_char(value, index, character, &mut cursor, &mut parts);
     }
-    let tail = value[start..].trim();
+    let tail = value[cursor.start..].trim();
     if !tail.is_empty() {
         parts.push(tail);
     }
     Ok(parts)
+}
+
+#[derive(Default)]
+struct InlineCursor {
+    start: usize,
+    quoted: Option<char>,
+    depth: i32,
+}
+
+fn take_inline_char<'a>(
+    value: &'a str,
+    index: usize,
+    character: char,
+    cursor: &mut InlineCursor,
+    parts: &mut Vec<&'a str>,
+) {
+    if inline_separator(cursor, character) {
+        parts.push(value[cursor.start..index].trim());
+        cursor.start = index + 1;
+        return;
+    }
+    update_inline_quote(cursor, character);
+}
+
+fn inline_separator(cursor: &InlineCursor, character: char) -> bool {
+    cursor.quoted.is_none() && character == ',' && cursor.depth == 0
+}
+
+fn update_inline_quote(cursor: &mut InlineCursor, character: char) {
+    match (cursor.quoted, character) {
+        (None, '\'' | '"') => cursor.quoted = Some(character),
+        (Some(quote), character) if character == quote => cursor.quoted = None,
+        (None, '{') => cursor.depth += 1,
+        (None, '}') => cursor.depth -= 1,
+        _ => {}
+    }
 }
 
 fn unquote(value: &str) -> Result<String, String> {
