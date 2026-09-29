@@ -194,7 +194,7 @@ than one lockfile is present, set `managers` explicitly.
 The repository pins its Rust toolchain. Build the executable with:
 
 ```console
-cargo build --locked --release --package ahcl-kit --bin ahcl
+cargo build-release
 ```
 
 ## License

@@ -164,7 +164,7 @@ AHCL プロジェクトマテリアルのコマンドは実行できますが、
 ## ソースからのビルド
 
 ```console
-cargo build --locked --release --package ahcl-kit --bin ahcl
+cargo build-release
 ```
 
 ## ライセンス

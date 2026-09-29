@@ -18,8 +18,8 @@ it under the project's applicable AHCL terms and notices.
 Install the Rust toolchain selected by `rust-toolchain.toml`, then run:
 
 ```console
-cargo build --locked --workspace
-cargo test --locked --workspace --all-targets
+cargo build-workspace
+cargo test-all
 ```
 
 The CLI should continue to build on Windows, macOS, and Linux. Filesystem code
@@ -31,11 +31,11 @@ them with ambient path operations.
 Before requesting review, run:
 
 ```console
-cargo fmt --all -- --check
-cargo check --locked --workspace --all-targets
-cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-cargo test --locked --workspace --all-targets
-cargo build --locked --package ahcl-kit --bin ahcl
+cargo fmt-check
+cargo check-all
+cargo clippy-all
+cargo test-all
+cargo build-ahcl
 target/debug/ahcl project generate --dry-run
 target/debug/ahcl project check
 ```
