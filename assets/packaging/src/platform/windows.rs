@@ -33,6 +33,7 @@ use crate::command;
 use crate::fsutil::{self, TempDir};
 use crate::metadata::ProductMetadata;
 use std::error::Error;
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -74,15 +75,83 @@ fn compile_windows(
         Command::new("rustup").args(["target", "add", target]),
         "install Windows Rust target",
     )?;
+    let resources = TempDir::new("ahcl-kit-windows-resources")?;
+    let resource = super::windows_resources::compile_resources(root, product, resources.path())?;
+    link_windows_executable(root, product, target, &resource)?;
+    require_embedded_metadata(
+        &windows_release_binary(root, target, &product.binary_name),
+        product,
+        root,
+    )
+}
+
+// Extra rustc arguments are ignored when Cargo considers the package fresh.
+fn link_windows_executable(
+    root: &Path,
+    product: &ProductMetadata,
+    target: &str,
+    resource: &Path,
+) -> Result<(), Box<dyn Error>> {
+    command::run(
+        Command::new("cargo").current_dir(root).args([
+            "clean",
+            "--release",
+            "--target",
+            target,
+            "--package",
+            "ahcl-kit",
+        ]),
+        "reset Windows executable link",
+    )?;
     command::run(
         Command::new("cargo")
             .current_dir(root)
-            .args(["build", "--locked", "--release", "--target", target])
+            .args(["rustc", "--locked", "--release", "--target", target])
             .args(["--package", "ahcl-kit", "--bin"])
-            .arg(&product.binary_name),
+            .arg(&product.binary_name)
+            .arg("--")
+            .arg("-C")
+            .arg(format!("link-arg={}", resource.display())),
         "build Windows executable",
+    )
+}
+
+fn require_embedded_metadata(
+    binary: &Path,
+    product: &ProductMetadata,
+    root: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let bytes = fs::read(binary)?;
+    require_utf16(&bytes, &product.product_name, "product name")?;
+    require_utf16(&bytes, &product.copyright, "copyright")?;
+    require_utf16(&bytes, &product.version, "version")?;
+    require_utf16(
+        &bytes,
+        &format!("{}.exe", product.binary_name),
+        "original filename",
     )?;
-    Ok(())
+    require_bytes(&bytes, b"longPathAware", "long path manifest")?;
+    let icon = root.join("assets/branding/ahcl-kit.ico");
+    require_bytes(
+        &bytes,
+        &super::windows_resources::icon_sample(&icon)?,
+        "icon",
+    )
+}
+
+fn require_utf16(bytes: &[u8], text: &str, label: &str) -> Result<(), Box<dyn Error>> {
+    let encoded = text
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    require_bytes(bytes, &encoded, label)
+}
+
+fn require_bytes(bytes: &[u8], needle: &[u8], label: &str) -> Result<(), Box<dyn Error>> {
+    if !needle.is_empty() && bytes.windows(needle.len()).any(|window| window == needle) {
+        return Ok(());
+    }
+    Err(io::Error::other(format!("Windows executable is missing {label} metadata")).into())
 }
 
 fn package_windows(
