@@ -44,17 +44,24 @@
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="$(var.ProductName)">
-        <Component Id="ProductFiles" Guid="*" Bitness="always64">
+        <!-- Each file is its own component because ahcl.exe has no Windows version resource. -->
+        <Component Id="AhclExecutableComponent" Guid="*" Bitness="always64">
           <File Id="AhclExecutable" Source="$(var.BinaryPath)" Name="ahcl.exe" KeyPath="yes" />
-          <File Id="ProjectLicense" Source="$(var.LicensePath)" Name="LICENSE" />
-          <File Id="AhclMaterials" Source="$(var.MaterialsArchivePath)" Name="AHCL-MATERIALS.zip" />
           <Environment Id="SystemPathEntry" Name="PATH" Value="[INSTALLFOLDER]" Action="set" Part="last" System="yes" />
+        </Component>
+        <Component Id="ProjectLicenseComponent" Guid="*" Bitness="always64">
+          <File Id="ProjectLicense" Source="$(var.LicensePath)" Name="LICENSE" KeyPath="yes" />
+        </Component>
+        <Component Id="AhclMaterialsComponent" Guid="*" Bitness="always64">
+          <File Id="AhclMaterials" Source="$(var.MaterialsArchivePath)" Name="AHCL-MATERIALS.zip" KeyPath="yes" />
         </Component>
       </Directory>
     </StandardDirectory>
 
     <Feature Id="ProductFeature" Title="$(var.ProductName)" Level="1">
-      <ComponentRef Id="ProductFiles" />
+      <ComponentRef Id="AhclExecutableComponent" />
+      <ComponentRef Id="ProjectLicenseComponent" />
+      <ComponentRef Id="AhclMaterialsComponent" />
     </Feature>
     <Icon Id="ProductIcon" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
