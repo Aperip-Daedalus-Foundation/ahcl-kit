@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ahcl-kit"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-cargo",
  "ahcl-kit-cli",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-cargo"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-config"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-core",
  "url",
@@ -51,14 +51,14 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
 name = "ahcl-kit-dist"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap",
  "serde_json",
@@ -66,7 +66,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-fs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "getrandom",
  "rustix",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-javascript"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-license"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-config",
  "mime",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "ahcl-kit-materials"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ahcl-kit-config",
  "ahcl-kit-core",
