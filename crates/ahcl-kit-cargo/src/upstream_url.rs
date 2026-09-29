@@ -295,7 +295,7 @@ fn repository_path_parts(parsed: &Url) -> Option<Vec<String>> {
         .map(str::to_owned)
         .collect::<Vec<_>>();
     strip_git_suffix(&mut parts);
-    if parts.len() < 2 || parts.iter().any(path_part_rejected) {
+    if parts.len() < 2 || parts.iter().any(|part| path_part_rejected(part)) {
         return None;
     }
     Some(parts)
@@ -309,7 +309,7 @@ fn strip_git_suffix(parts: &mut [String]) {
     }
 }
 
-fn path_part_rejected(part: &String) -> bool {
+fn path_part_rejected(part: &str) -> bool {
     part.is_empty() || part.contains('%')
 }
 

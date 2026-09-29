@@ -468,12 +468,12 @@ fn reject_duplicate_manifests(manifests: &[RepoPath]) -> Result<(), ConfigError>
 }
 
 fn cargo_rules(document: &ConfigDocument) -> Result<Vec<PackageRule>, ConfigError> {
-    Ok(document
+    document
         .optional_object_list(Some("rust.cargo"), "rules")?
         .unwrap_or_default()
         .into_iter()
         .map(|fields| PackageRule::parse("rust.cargo.rules", false, fields))
-        .collect::<Result<Vec<_>, _>>()?)
+        .collect::<Result<Vec<_>, _>>()
 }
 
 fn cargo_lock_mode(document: &ConfigDocument) -> Result<CargoLockMode, ConfigError> {

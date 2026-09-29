@@ -111,18 +111,17 @@ fn metadata_from_document(document: &Value) -> Result<ProductMetadata, Box<dyn E
     let package = ahcl_kit_package(document)?;
     let product = product_metadata_table(document)?;
     let (version, description, homepage) = package_fields(package)?;
-    let (product_name, binary_name, publisher, copyright, identifier, language) =
-        product_fields(product)?;
+    let identity = product_fields(product)?;
     Ok(ProductMetadata {
         version,
         description,
         homepage,
-        product_name,
-        binary_name,
-        publisher,
-        copyright,
-        identifier,
-        language,
+        product_name: identity.product_name,
+        binary_name: identity.binary_name,
+        publisher: identity.publisher,
+        copyright: identity.copyright,
+        identifier: identity.identifier,
+        language: identity.language,
     })
 }
 
@@ -155,15 +154,25 @@ fn package_fields(package: &Value) -> Result<(String, String, String), Box<dyn E
 
 fn product_fields(
     product: &serde_json::Map<String, Value>,
-) -> Result<(String, String, String, String, String, String), Box<dyn Error>> {
-    Ok((
-        required_object(product, "product-name")?,
-        required_object(product, "binary-name")?,
-        required_object(product, "publisher")?,
-        required_object(product, "copyright")?,
-        required_object(product, "identifier")?,
-        required_object(product, "language")?,
-    ))
+) -> Result<ProductIdentity, Box<dyn Error>> {
+    Ok(ProductIdentity {
+        product_name: required_object(product, "product-name")?,
+        binary_name: required_object(product, "binary-name")?,
+        publisher: required_object(product, "publisher")?,
+        copyright: required_object(product, "copyright")?,
+        identifier: required_object(product, "identifier")?,
+        language: required_object(product, "language")?,
+    })
+}
+
+// Named so the workspace product record is not a six-string tuple.
+struct ProductIdentity {
+    product_name: String,
+    binary_name: String,
+    publisher: String,
+    copyright: String,
+    identifier: String,
+    language: String,
 }
 
 fn require_neutral_language(metadata: ProductMetadata) -> Result<ProductMetadata, Box<dyn Error>> {

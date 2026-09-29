@@ -252,7 +252,7 @@ impl InvocationRegistry {
         Ok(argv)
     }
 
-    fn accept_argv0(&self, argv: &mut Vec<OsString>) -> Result<(), InvocationError> {
+    fn accept_argv0(&self, argv: &mut [OsString]) -> Result<(), InvocationError> {
         let Some(observed) = argv.first() else {
             return Err(InvocationError::MissingArgv0);
         };

@@ -131,8 +131,7 @@ impl RootInventory {
         let limit = MAX_MANAGED_EVIDENCE_PER_PACKAGE.min(self.remaining_total);
         let evidence_entries = collect_names(directory, limit)?;
         self.remaining_total -= evidence_entries.len();
-        let mut evidence = Vec::new();
-        evidence.reserve(evidence_entries.len());
+        let mut evidence = Vec::with_capacity(evidence_entries.len());
         for (basename, os_basename) in evidence_entries {
             let (entry_kind, _) = inspect_entry(directory, &os_basename)?;
             evidence.push(ManagedEvidenceInventory::new(basename, entry_kind));

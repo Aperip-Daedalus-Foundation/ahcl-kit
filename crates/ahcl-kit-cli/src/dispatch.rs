@@ -46,14 +46,14 @@ use std::path::Path;
 pub fn run(invocation: &ParsedInvocation, runtime: &mut dyn CommandRuntime) -> CommandReport {
     match dispatched(invocation, runtime) {
         Ok(report) => report,
-        Err(report) => report,
+        Err(report) => *report,
     }
 }
 
 fn dispatched(
     invocation: &ParsedInvocation,
     runtime: &mut dyn CommandRuntime,
-) -> Result<CommandReport, CommandReport> {
+) -> Result<CommandReport, Box<CommandReport>> {
     let projects = resolved_projects(invocation)?;
     let identity = resolved_identity(invocation)?;
     let current_date = init_date(invocation, runtime)?;
@@ -78,29 +78,29 @@ fn dispatched(
 
 fn resolved_projects(
     invocation: &ParsedInvocation,
-) -> Result<Vec<std::path::PathBuf>, CommandReport> {
+) -> Result<Vec<std::path::PathBuf>, Box<CommandReport>> {
     invocation
         .resolve_projects()
-        .map_err(|error| command_error(invocation, error.code(), error.to_string()))
+        .map_err(|error| Box::new(command_error(invocation, error.code(), error.to_string())))
 }
 
 fn resolved_identity(
     invocation: &ParsedInvocation,
-) -> Result<Option<ProjectIdentity>, CommandReport> {
+) -> Result<Option<ProjectIdentity>, Box<CommandReport>> {
     project_identity(invocation)
-        .map_err(|error| command_error(invocation, error.code(), error.to_string()))
+        .map_err(|error| Box::new(command_error(invocation, error.code(), error.to_string())))
 }
 
 fn init_date(
     invocation: &ParsedInvocation,
     runtime: &mut dyn CommandRuntime,
-) -> Result<Option<UtcDate>, CommandReport> {
+) -> Result<Option<UtcDate>, Box<CommandReport>> {
     if invocation.command_id() != CommandId::ProjectInit {
         return Ok(None);
     }
     match runtime.current_utc_date() {
         Ok(date) => Ok(Some(date)),
-        Err(error) => Err(command_runtime_error(invocation, &error)),
+        Err(error) => Err(Box::new(command_runtime_error(invocation, &error))),
     }
 }
 
