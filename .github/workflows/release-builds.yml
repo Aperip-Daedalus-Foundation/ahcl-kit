@@ -14,6 +14,162 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_NOTES_PROGRAM: |
+    import json
+    import re
+    import subprocess
+    import sys
+
+    REPOSITORY = sys.argv[1]
+    TAG = sys.argv[2]
+    TARGET = sys.argv[3] if len(sys.argv) > 3 else ""
+    COAUTHOR = re.compile(r"^Co-authored-by:\s*.*?\s*<([^>]+)>\s*$", re.MULTILINE)
+    NOREPLY = re.compile(r"^(?:\d+\+)?([A-Za-z0-9-]+)@users\.noreply\.github\.com$")
+    INTRO = "AHCL Kit initializes, generates, and maintains AHCL materials for projects."
+    ASSETS = (
+        "- Windows x64 and ARM64: MSI packages",
+        "- macOS Intel and Apple Silicon: Universal PKG",
+        "- Debian/Ubuntu x86-64 and ARM64: DEB packages",
+        "- RPM-based Linux x86-64 and ARM64: RPM packages",
+        "- File digests: `SHA256SUMS`",
+    )
+
+
+    def main():
+        target = TARGET or git("rev-parse", TAG + "^{commit}").strip()
+        previous = previous_tag(TAG)
+        records = commit_records(previous, target)
+        logins = commit_logins(target, records)
+        sys.stdout.write(render(previous, records, logins))
+
+
+    def previous_tag(tag):
+        tags = [line for line in git("tag", "--sort=version:refname").splitlines() if line]
+        if tag not in tags:
+            return tags[-1] if tags else ""
+        index = tags.index(tag)
+        return tags[index - 1] if index else ""
+
+
+    def commit_records(previous, target):
+        revision = f"{previous}..{target}" if previous else target
+        records = []
+        for line in git("log", "--reverse", "--format=%H%x1f%an%x1f%s", revision).splitlines():
+            sha, separator, rest = line.partition("\x1f")
+            author, second, subject = rest.partition("\x1f")
+            if separator and second:
+                records.append((sha, author, subject))
+        return records
+
+
+    def commit_logins(target, records):
+        needed = {sha for sha, _author, _subject in records}
+        if not needed:
+            return {}
+        payload = json.loads(run(("gh", "api", "--paginate", f"repos/{REPOSITORY}/commits?sha={target}&per_page=100")))
+        if not isinstance(payload, list):
+            raise SystemExit("GitHub commit list was not an array")
+        mapping = email_index(payload)
+        logins = {}
+        for commit in payload:
+            sha = commit.get("sha", "")
+            if sha in needed:
+                logins[sha] = participants(commit, mapping)
+        if needed.difference(logins):
+            raise SystemExit("GitHub did not return every commit in the release range")
+        return logins
+
+
+    def email_index(commits):
+        mapping = {}
+        for commit in commits:
+            remember(mapping, nested(commit, "commit", "author", "email"), user_login(commit.get("author")))
+            remember(mapping, nested(commit, "commit", "committer", "email"), user_login(commit.get("committer")))
+        return mapping
+
+
+    def participants(commit, mapping):
+        logins = []
+        add(logins, resolved(commit, "author", mapping))
+        for email in COAUTHOR.findall(nested(commit, "commit", "message")):
+            add(logins, email_login(email, mapping))
+        add(logins, resolved(commit, "committer", mapping))
+        return logins
+
+
+    def resolved(commit, role, mapping):
+        login = user_login(commit.get(role))
+        if login:
+            return login
+        return email_login(nested(commit, "commit", role, "email"), mapping)
+
+
+    def user_login(user):
+        if isinstance(user, dict) and isinstance(user.get("login"), str):
+            return user["login"]
+        return ""
+
+
+    def remember(mapping, email, login):
+        if email and login:
+            mapping.setdefault(email.lower(), login)
+
+
+    def email_login(email, mapping):
+        if not email:
+            return ""
+        known = mapping.get(email.lower())
+        if known:
+            return known
+        match = NOREPLY.fullmatch(email.strip())
+        return match.group(1) if match else ""
+
+
+    def add(logins, login):
+        if login and login not in logins:
+            logins.append(login)
+
+
+    def render(previous, records, logins):
+        lines = [INTRO, "", "## Installation assets", "", *ASSETS, "", "## What's Changed"]
+        for sha, author, subject in records:
+            lines.append(change_line(sha, author, subject, logins.get(sha, [])))
+        lines.extend(["", changelog(previous), ""])
+        return "\n".join(lines)
+
+
+    def change_line(sha, author, subject, logins):
+        who = ", ".join(f"@{login}" for login in logins) if logins else (author or "unknown")
+        title = subject.replace("\\", "\\\\").replace("*", "\\*").replace("`", "\\`")
+        url = f"https://github.com/{REPOSITORY}/commit/{sha}"
+        return f"* **{title}** by {who} ([`{sha[:7]}`]({url}))"
+
+
+    def changelog(previous):
+        base = f"https://github.com/{REPOSITORY}"
+        if previous:
+            return f"**Full Changelog**: {base}/compare/{previous}...{TAG}"
+        return f"**Full Changelog**: {base}/commits/{TAG}"
+
+
+    def nested(value, *keys):
+        current = value
+        for key in keys:
+            if not isinstance(current, dict):
+                return ""
+            current = current.get(key) or ""
+        return current if isinstance(current, str) else ""
+
+
+    def git(*args):
+        return run(("git", "-c", "core.quotepath=false", "-c", "i18n.logOutputEncoding=utf-8", *args))
+
+
+    def run(command):
+        return subprocess.check_output(command, encoding="utf-8")
+
+
+    main()
 
 jobs:
   version:
@@ -49,6 +205,45 @@ jobs:
             echo "tag=$tag"
             echo "release_needed=$release_needed"
           } >> "$GITHUB_OUTPUT"
+
+  cleanup-release-notes:
+    name: Clean nonconforming release notes
+    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clean nonconforming release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          list_file="$(mktemp)"
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName' > "$list_file"
+          while IFS= read -r release_tag; do
+            [ -n "$release_tag" ] || continue
+            body_file="$(mktemp)"
+            expected_file="$(mktemp)"
+            gh release view "$release_tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json body \
+              --jq '.body' > "$body_file"
+            python3 - "$GITHUB_REPOSITORY" "$release_tag" "" <<<"$RELEASE_NOTES_PROGRAM" > "$expected_file"
+            changed="$(python3 -c 'from pathlib import Path; import sys; actual = Path(sys.argv[1]).read_text(encoding="utf-8").rstrip("\n"); expected = Path(sys.argv[2]).read_text(encoding="utf-8").rstrip("\n"); print("yes" if actual != expected else "no")' "$body_file" "$expected_file")"
+            if [ "$changed" = "yes" ]; then
+              gh release edit "$release_tag" \
+                --repo "$GITHUB_REPOSITORY" \
+                --notes-file "$expected_file"
+            fi
+            rm -f "$body_file" "$expected_file"
+          done < "$list_file"
+          rm -f "$list_file"
 
   quality:
     needs: version
@@ -172,24 +367,7 @@ jobs:
           sha256sum ./* | sort -k2 > SHA256SUMS
           cd ..
 
-          previous_tag="$(git tag --sort=-version:refname | head -n 1)"
-          args=(--method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f "tag_name=$TAG" -f "target_commitish=$GITHUB_SHA")
-          if [[ -n "$previous_tag" ]]; then args+=(-f "previous_tag_name=$previous_tag"); fi
-          generated_notes="$(gh api "${args[@]}" --jq .body)"
-
-          cat > release-notes.md <<EOF
-          AHCL Kit initializes, generates, and maintains AHCL materials for projects.
-
-          ## Installation assets
-
-          - Windows x64 and ARM64: MSI packages
-          - macOS Intel and Apple Silicon: Universal PKG
-          - Debian/Ubuntu x86-64 and ARM64: DEB packages
-          - RPM-based Linux x86-64 and ARM64: RPM packages
-          - File digests: \`SHA256SUMS\`
-
-          $generated_notes
-          EOF
+          python3 - "$GITHUB_REPOSITORY" "$TAG" "$GITHUB_SHA" <<<"$RELEASE_NOTES_PROGRAM" > release-notes.md
       - name: Publish tag and release
         shell: bash
         run: |
