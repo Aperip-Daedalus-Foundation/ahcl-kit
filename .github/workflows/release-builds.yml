@@ -278,7 +278,7 @@ jobs:
           --architecture '${{ matrix.architecture }}'
           --target '${{ matrix.target }}'
       - name: Upload MSI
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-${{ matrix.architecture }}
           path: dist/*.msi
@@ -294,7 +294,7 @@ jobs:
       - name: Build Universal PKG
         run: cargo run --locked --package ahcl-kit-dist -- macos
       - name: Upload PKG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-universal-apple-darwin
           path: dist/*.pkg
@@ -331,7 +331,7 @@ jobs:
           --deb-architecture '${{ matrix.deb_architecture }}'
           --rpm-architecture '${{ matrix.rpm_architecture }}'
       - name: Upload Linux packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.artifact }}
           path: |
