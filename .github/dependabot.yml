@@ -1,0 +1,74 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    target-branch: master
+    open-pull-requests-limit: 5
+    # Hosted Dependabot accepts only "auto" or "lockfile-only" for Cargo.
+    # "auto" selects the engine default, increase-if-necessary: a satisfied
+    # range stays unchanged while Cargo.lock advances, and an exact "=x.y.z"
+    # pin is rewritten in place.
+    versioning-strategy: auto
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 4
+      semver-patch-days: 4
+      semver-minor-days: 7
+      semver-major-days: 14
+    groups:
+      cargo-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    target-branch: master
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    # GitHub Actions cooldown supports default-days only, not SemVer-bump days.
+    cooldown:
+      default-days: 4
+    groups:
+      actions-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    target-branch: master
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 4
+      semver-patch-days: 4
+      semver-minor-days: 7
+      semver-major-days: 14
