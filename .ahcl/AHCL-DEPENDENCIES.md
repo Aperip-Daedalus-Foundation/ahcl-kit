@@ -41,11 +41,35 @@ Retained evidence:
   - SHA-256: `0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f`
   - Bytes: 1081
 
+## Upstream: `https://github.com/RustCrypto/formats`
+
+### `const-oid` 0.10.2
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#const-oid@0.10.2`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: All targets.
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `Apache-2.0 OR MIT`
+- Authors: RustCrypto Developers
+- Repository: `https://github.com/RustCrypto/formats`
+- Homepage: `https://github.com/RustCrypto/formats/tree/master/const-oid`
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/const-oid-0.10.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/const-oid-0.10.2/LICENSE-APACHE)
+  - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
+  - Bytes: 10849
+- [`.ahcl/THIRD-PARTY-LICENSES/const-oid-0.10.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/const-oid-0.10.2/LICENSE-MIT)
+  - SHA-256: `73b9dc2e79c7308998dd30296e073aefaefb944a68fb89aa412c23c0edcabcaa`
+  - Bytes: 1082
+
 ## Upstream: `https://github.com/RustCrypto/hashes`
 
-### `sha2` 0.10.9
+### `sha2` 0.11.0
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#sha2@0.10.9`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#sha2@0.11.0`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -58,18 +82,42 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-APACHE`](THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/sha2-0.11.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/sha2-0.11.0/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-- [`.ahcl/THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-MIT`](THIRD-PARTY-LICENSES/sha2-0.10.9/LICENSE-MIT)
-  - SHA-256: `b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1`
-  - Bytes: 1138
+- [`.ahcl/THIRD-PARTY-LICENSES/sha2-0.11.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/sha2-0.11.0/LICENSE-MIT)
+  - SHA-256: `831e0f43ad0bf014c1c4fec5767aae470434c1d66d6e671be2d823e729063e25`
+  - Bytes: 1196
+
+## Upstream: `https://github.com/RustCrypto/hybrid-array`
+
+### `hybrid-array` 0.4.15
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#hybrid-array@0.4.15`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: All targets.
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `MIT OR Apache-2.0`
+- Authors: RustCrypto Developers
+- Repository: `https://github.com/RustCrypto/hybrid-array`
+- Homepage: None.
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/hybrid-array-0.4.15/LICENSE-APACHE`](THIRD-PARTY-LICENSES/hybrid-array-0.4.15/LICENSE-APACHE)
+  - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
+  - Bytes: 10849
+- [`.ahcl/THIRD-PARTY-LICENSES/hybrid-array-0.4.15/LICENSE-MIT`](THIRD-PARTY-LICENSES/hybrid-array-0.4.15/LICENSE-MIT)
+  - SHA-256: `70c9d40f1f9545c3f133b8a67206e89da850f6468eed072281bb3701514114a9`
+  - Bytes: 1082
 
 ## Upstream: `https://github.com/RustCrypto/traits`
 
-### `crypto-common` 0.1.7
+### `crypto-common` 0.2.2
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#crypto-common@0.1.7`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#crypto-common@0.2.2`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -82,16 +130,16 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/crypto-common-0.2.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/crypto-common-0.2.2/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-- [`.ahcl/THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/crypto-common-0.1.7/LICENSE-MIT)
-  - SHA-256: `3521672491a3479422d5fe1aca6645dd2984090f85da6e5205abfb18fb7a6897`
-  - Bytes: 1065
+- [`.ahcl/THIRD-PARTY-LICENSES/crypto-common-0.2.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/crypto-common-0.2.2/LICENSE-MIT)
+  - SHA-256: `d2e7ec5355c96eeade56b09187ceb48a6a30299da3ce7531a66d3d11405ab963`
+  - Bytes: 1070
 
-### `digest` 0.10.7
+### `digest` 0.11.3
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#digest@0.10.7`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#digest@0.11.3`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -104,18 +152,18 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-APACHE`](THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/digest-0.11.3/LICENSE-APACHE`](THIRD-PARTY-LICENSES/digest-0.11.3/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-- [`.ahcl/THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/digest-0.10.7/LICENSE-MIT)
-  - SHA-256: `9e0dfd2dd4173a530e238cb6adb37aa78c34c6bc7444e0e10c1ab5d8881f63ba`
-  - Bytes: 1057
+- [`.ahcl/THIRD-PARTY-LICENSES/digest-0.11.3/LICENSE-MIT`](THIRD-PARTY-LICENSES/digest-0.11.3/LICENSE-MIT)
+  - SHA-256: `af59cea35d7f5e2777a713b8d155d65efa2c339eb43f3c14e868c6ac8506edad`
+  - Bytes: 1103
 
 ## Upstream: `https://github.com/RustCrypto/utils`
 
-### `block-buffer` 0.10.4
+### `block-buffer` 0.12.1
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#block-buffer@0.10.4`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#block-buffer@0.12.1`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -128,16 +176,16 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-APACHE`](THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/block-buffer-0.12.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/block-buffer-0.12.1/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-- [`.ahcl/THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-MIT`](THIRD-PARTY-LICENSES/block-buffer-0.10.4/LICENSE-MIT)
-  - SHA-256: `d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef`
+- [`.ahcl/THIRD-PARTY-LICENSES/block-buffer-0.12.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/block-buffer-0.12.1/LICENSE-MIT)
+  - SHA-256: `98181e7249d0c01737645ec982499ce99a0f07eb8f7d625b8840d799d10dbc01`
   - Bytes: 1082
 
-### `cpufeatures` 0.2.17
+### `cpufeatures` 0.3.1
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#cpufeatures@0.2.17`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#cpufeatures@0.3.1`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: `cfg(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86"))`
@@ -150,11 +198,11 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/cpufeatures-0.3.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/cpufeatures-0.3.1/LICENSE-APACHE)
   - SHA-256: `a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5`
   - Bytes: 10849
-- [`.ahcl/THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-MIT`](THIRD-PARTY-LICENSES/cpufeatures-0.2.17/LICENSE-MIT)
-  - SHA-256: `ae9baa7beea910273c2f384c2a6b721fb7bd02bda3436074a1072e4ee689f985`
+- [`.ahcl/THIRD-PARTY-LICENSES/cpufeatures-0.3.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/cpufeatures-0.3.1/LICENSE-MIT)
+  - SHA-256: `73b9dc2e79c7308998dd30296e073aefaefb944a68fb89aa412c23c0edcabcaa`
   - Bytes: 1082
 
 ### `zeroize` 1.9.0
@@ -178,30 +226,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zeroize-1.9.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/zeroize-1.9.0/LICENSE-MIT)
   - SHA-256: `8c7516d4b27b1e495be5e38b612298b63de48d05f49cdac94f70f3cd70f8864b`
   - Bytes: 1082
-
-## Upstream: `https://github.com/SergioBenitez/version_check`
-
-### `version_check` 0.9.5
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#version_check@0.9.5`
-- Role: Transitive
-- Dependency kinds: Build
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT/Apache-2.0`
-- Authors: Sergio Benitez <sb@sergio.bz>
-- Repository: `https://github.com/SergioBenitez/version_check`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-APACHE)
-  - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
-  - Bytes: 10847
-- [`.ahcl/THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/version_check-0.9.5/LICENSE-MIT)
-  - SHA-256: `b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e`
-  - Bytes: 1085
 
 ## Upstream: `https://github.com/alacritty/vte`
 
@@ -983,27 +1007,6 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/zmij-1.0.23/LICENSE-MIT`](THIRD-PARTY-LICENSES/zmij-1.0.23/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
-
-## Upstream: `https://github.com/fizyk20/generic-array`
-
-### `generic-array` 0.14.7
-
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#generic-array@0.14.7`
-- Role: Transitive
-- Dependency kinds: Normal
-- Target conditions: All targets.
-- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
-- Checksum: None.
-- Declared license: `MIT`
-- Authors: Bartłomiej Kamiński <fizyk20@gmail.com>; Aaron Trent <novacrazy@gmail.com>
-- Repository: `https://github.com/fizyk20/generic-array.git`
-- Homepage: None.
-- Contributing lockfiles: `Cargo.lock`
-
-Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/generic-array-0.14.7/LICENSE`](THIRD-PARTY-LICENSES/generic-array-0.14.7/LICENSE)
-  - SHA-256: `c09aae9d3c77b531f56351a9947bc7446511d6b025b3255312d3e3442a9a7583`
-  - Bytes: 1107
 
 ## Upstream: `https://github.com/hsivonen/idna_adapter`
 
@@ -2002,7 +2005,7 @@ Retained evidence:
 - Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#libc@0.2.189`
 - Role: Transitive
 - Dependency kinds: Normal
-- Target conditions: `aarch64-linux-android`, `cfg(all(all(target_arch = "aarch64", target_endian = "little"), target_vendor = "apple", any(target_os = "ios", target_os = "macos", target_os = "tvos", target_os = "visionos", target_os = "watchos")))`, `cfg(all(any(all(target_arch = "aarch64", target_endian = "little"), all(target_arch = "arm", target_endian = "little")), any(target_os = "android", target_os = "linux")))`, `cfg(all(not(rustix_use_libc), not(miri), target_os = "linux", any(target_endian = "little", any(target_arch = "s390x", target_arch = "powerpc")), any(target_arch = "arm", all(target_arch = "aarch64", target_pointer_width = "64"), target_arch = "riscv64", all(rustix_use_experimental_asm, target_arch = "powerpc"), all(rustix_use_experimental_asm, target_arch = "powerpc64"), all(rustix_use_experimental_asm, target_arch = "s390x"), all(rustix_use_experimental_asm, target_arch = "mips"), all(rustix_use_experimental_asm, target_arch = "mips32r6"), all(rustix_use_experimental_asm, target_arch = "mips64"), all(rustix_use_experimental_asm, target_arch = "mips64r6"), target_arch = "x86", all(target_arch = "x86_64", target_pointer_width = "64"))))`, `cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = "linux", any(target_endian = "little", any(target_arch = "s390x", target_arch = "powerpc")), any(target_arch = "arm", all(target_arch = "aarch64", target_pointer_width = "64"), target_arch = "riscv64", all(rustix_use_experimental_asm, target_arch = "powerpc"), all(rustix_use_experimental_asm, target_arch = "powerpc64"), all(rustix_use_experimental_asm, target_arch = "s390x"), all(rustix_use_experimental_asm, target_arch = "mips"), all(rustix_use_experimental_asm, target_arch = "mips32r6"), all(rustix_use_experimental_asm, target_arch = "mips64"), all(rustix_use_experimental_asm, target_arch = "mips64r6"), target_arch = "x86", all(target_arch = "x86_64", target_pointer_width = "64")))))))`, `cfg(all(target_arch = "aarch64", target_os = "linux"))`, `cfg(all(target_arch = "aarch64", target_vendor = "apple"))`, `cfg(all(target_arch = "loongarch64", target_os = "linux"))`, `cfg(target_os = "hermit")`, `cfg(target_os = "wasi")`, `cfg(unix)`
+- Target conditions: `cfg(all(all(target_arch = "aarch64", target_endian = "little"), target_vendor = "apple", any(target_os = "ios", target_os = "macos", target_os = "tvos", target_os = "visionos", target_os = "watchos")))`, `cfg(all(any(all(target_arch = "aarch64", target_endian = "little"), all(target_arch = "arm", target_endian = "little")), any(target_os = "android", target_os = "linux")))`, `cfg(all(not(rustix_use_libc), not(miri), target_os = "linux", any(target_endian = "little", any(target_arch = "s390x", target_arch = "powerpc")), any(target_arch = "arm", all(target_arch = "aarch64", target_pointer_width = "64"), target_arch = "riscv64", all(rustix_use_experimental_asm, target_arch = "powerpc"), all(rustix_use_experimental_asm, target_arch = "powerpc64"), all(rustix_use_experimental_asm, target_arch = "s390x"), all(rustix_use_experimental_asm, target_arch = "mips"), all(rustix_use_experimental_asm, target_arch = "mips32r6"), all(rustix_use_experimental_asm, target_arch = "mips64"), all(rustix_use_experimental_asm, target_arch = "mips64r6"), target_arch = "x86", all(target_arch = "x86_64", target_pointer_width = "64"))))`, `cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = "linux", any(target_endian = "little", any(target_arch = "s390x", target_arch = "powerpc")), any(target_arch = "arm", all(target_arch = "aarch64", target_pointer_width = "64"), target_arch = "riscv64", all(rustix_use_experimental_asm, target_arch = "powerpc"), all(rustix_use_experimental_asm, target_arch = "powerpc64"), all(rustix_use_experimental_asm, target_arch = "s390x"), all(rustix_use_experimental_asm, target_arch = "mips"), all(rustix_use_experimental_asm, target_arch = "mips32r6"), all(rustix_use_experimental_asm, target_arch = "mips64"), all(rustix_use_experimental_asm, target_arch = "mips64r6"), target_arch = "x86", all(target_arch = "x86_64", target_pointer_width = "64")))))))`, `cfg(all(target_arch = "aarch64", target_os = "android"))`, `cfg(all(target_arch = "aarch64", target_os = "linux"))`, `cfg(all(target_arch = "aarch64", target_vendor = "apple"))`, `cfg(all(target_arch = "loongarch64", target_os = "linux"))`, `cfg(target_os = "hermit")`, `cfg(target_os = "wasi")`, `cfg(unix)`
 - Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
 - Checksum: None.
 - Declared license: `MIT OR Apache-2.0`
