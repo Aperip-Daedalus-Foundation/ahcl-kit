@@ -50,6 +50,6 @@ ahcl-kit-core = { path = "../ahcl-kit-core" }
 ahcl-kit-fs = { path = "../ahcl-kit-fs" }
 cargo_metadata = "=0.20.0"
 serde_json = "=1.0.151"
-toml = "=0.8.23"
+toml = "=1.1.6"
 url = "=2.5.8"
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
