@@ -1,0 +1,142 @@
+name: Dependabot materials
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+# The default token stays read-only. Only the publish job, which never builds
+# or executes the checked-out project, receives write and workflow scopes.
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-materials-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Generate materials
+    runs-on: ubuntu-24.04
+    if: >-
+      github.actor == 'dependabot[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'dependabot/')
+    permissions:
+      contents: read
+    steps:
+      - name: Check out Dependabot head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Build ahcl
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: always
+          GITHUB_TOKEN: ""
+          GH_TOKEN: ""
+        run: cargo build --locked --package ahcl-kit --bin ahcl
+
+      - name: Verify lockfile
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: always
+          GITHUB_TOKEN: ""
+          GH_TOKEN: ""
+        run: cargo metadata --locked --format-version 1 >/dev/null
+
+      - name: Generate dependency and license materials
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: always
+          GITHUB_TOKEN: ""
+          GH_TOKEN: ""
+        run: |
+          set -euo pipefail
+          target/debug/ahcl dependency generate
+          target/debug/ahcl third-party generate
+          git reset
+          git add -A -- .ahcl/AHCL-DEPENDENCIES.md .ahcl/THIRD-PARTY-LICENSES
+          status=0
+          git diff --cached --exit-code --binary -- \
+            .ahcl/AHCL-DEPENDENCIES.md \
+            .ahcl/THIRD-PARTY-LICENSES > materials.patch || status=$?
+          if [ "$status" -gt 1 ]; then
+            exit "$status"
+          fi
+          if [ "$status" -eq 0 ]; then
+            printf 'UNCHANGED\n' > materials.patch
+          fi
+
+      - name: Upload material patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependabot-materials
+          path: materials.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Commit materials and run CI
+    needs: generate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Check out Dependabot head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Download material patch
+        uses: actions/download-artifact@v4
+        with:
+          name: dependabot-materials
+          path: material-patch
+
+      - name: Commit materials and dispatch CI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          case "$HEAD_REF" in
+            dependabot/*) ;;
+            *)
+              printf 'Refusing to update %s\n' "$HEAD_REF" >&2
+              exit 1
+              ;;
+          esac
+          patch_file="material-patch/materials.patch"
+          if cmp -s <(printf 'UNCHANGED\n') "$patch_file"; then
+            printf 'Materials already match the lockfile.\n'
+          else
+            git apply --check --binary "$patch_file"
+            git apply --cached --binary "$patch_file"
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                .ahcl/AHCL-DEPENDENCIES.md|.ahcl/THIRD-PARTY-LICENSES|.ahcl/THIRD-PARTY-LICENSES/*)
+                  ;;
+                *)
+                  printf 'Refusing to commit %s\n' "$path" >&2
+                  exit 1
+                  ;;
+              esac
+            done < <(git diff --cached --name-only -z)
+            if git diff --cached --quiet; then
+              printf 'Material patch produced no changes.\n' >&2
+              exit 1
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit \
+              -m "chore(materials): regenerate dependency and license evidence" \
+              -m "Regenerate dependency and third-party license materials from the updated lockfile so later CI can check a consistent tree."
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              "HEAD:refs/heads/${HEAD_REF}"
+          fi
+          gh workflow run ci.yml --ref "$HEAD_REF"

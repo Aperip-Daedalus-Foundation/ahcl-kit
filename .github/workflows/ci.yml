@@ -5,6 +5,7 @@ on:
     branches: [master]
   pull_request:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,6 +16,10 @@ env:
 jobs:
   workspace:
     name: ${{ matrix.os }}
+    # A Dependabot pull_request sees stale materials and fails project check.
+    # Skip only that event. Push, workflow_call, and workflow_dispatch still
+    # run; the materials workflow dispatches the last one after regeneration.
+    if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
