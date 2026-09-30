@@ -92,7 +92,7 @@ pub(crate) fn read_file_with_limit(
         return Err(PackageFsError::FileTooLarge(advertised_len));
     }
 
-    let capacity = usize::try_from(advertised_len).map_or(0, |length| length);
+    let capacity = usize::try_from(advertised_len).unwrap_or(0);
     let mut bytes = Vec::with_capacity(capacity);
     file.take(limit.saturating_add(1))
         .read_to_end(&mut bytes)
