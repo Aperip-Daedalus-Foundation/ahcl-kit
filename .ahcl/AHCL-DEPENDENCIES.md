@@ -2470,9 +2470,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/time-rs/time`
 
-### `time` 0.3.44
+### `time` 0.3.45
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#time@0.3.44`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#time@0.3.45`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2485,16 +2485,16 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-Apache`](THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-Apache)
+- [`.ahcl/THIRD-PARTY-LICENSES/time-0.3.45/LICENSE-Apache`](THIRD-PARTY-LICENSES/time-0.3.45/LICENSE-Apache)
   - SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`
   - Bytes: 10174
-- [`.ahcl/THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-MIT`](THIRD-PARTY-LICENSES/time-0.3.44/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/time-0.3.45/LICENSE-MIT`](THIRD-PARTY-LICENSES/time-0.3.45/LICENSE-MIT)
   - SHA-256: `2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc`
   - Bytes: 1057
 
-### `time-core` 0.1.6
+### `time-core` 0.1.7
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#time-core@0.1.6`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#time-core@0.1.7`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2507,10 +2507,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-Apache`](THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-Apache)
+- [`.ahcl/THIRD-PARTY-LICENSES/time-core-0.1.7/LICENSE-Apache`](THIRD-PARTY-LICENSES/time-core-0.1.7/LICENSE-Apache)
   - SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`
   - Bytes: 10174
-- [`.ahcl/THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-MIT`](THIRD-PARTY-LICENSES/time-core-0.1.6/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/time-core-0.1.7/LICENSE-MIT`](THIRD-PARTY-LICENSES/time-core-0.1.7/LICENSE-MIT)
   - SHA-256: `2537228d9a1b44a5dc595241349cae7090b326c8de165aaf89bfddef4a00d0fc`
   - Bytes: 1057
 
