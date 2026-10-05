@@ -38,6 +38,15 @@ use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+macro_rules! copyright_notice {
+    () => {
+        concat!(
+            "Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.\n",
+            env!("CARGO_PKG_REPOSITORY")
+        )
+    };
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 pub enum OutputFormat {
     #[default]
@@ -128,12 +137,9 @@ struct ProjectReadArgs {
 #[derive(Clone, Debug, Parser)]
 #[command(
     name = "ahcl",
-    version = env!("CARGO_PKG_VERSION"),
+    version = concat!(env!("CARGO_PKG_VERSION"), "\n\n", copyright_notice!()),
     about = env!("CARGO_PKG_DESCRIPTION"),
-    after_help = concat!(
-        "Copyright (C) 2026 Aperip Daedalus Foundation. All rights reserved.\n",
-        env!("CARGO_PKG_REPOSITORY")
-    ),
+    after_help = copyright_notice!(),
     arg_required_else_help = true
 )]
 struct Cli {
