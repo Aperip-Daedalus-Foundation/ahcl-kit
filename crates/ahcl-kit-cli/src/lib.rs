@@ -41,7 +41,8 @@ mod runtime;
 mod runtime_impl;
 
 pub use args::{
-    InvocationError, InvocationRegistry, OutputFormat, ParsedInvocation, ProjectIdentityArgs,
+    InvocationError, InvocationRegistry, OutputFormat, ParsedInvocation, ParsedRequest,
+    ProjectIdentityArgs, executable_location,
 };
 pub use batch::{BatchExecution, BatchItem, BatchStatus, BatchValue, execute_batch};
 pub use discovery::{DiscoveryError, DiscoveryMode};

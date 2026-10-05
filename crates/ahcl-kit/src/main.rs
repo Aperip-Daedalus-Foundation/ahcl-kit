@@ -32,11 +32,13 @@
 
 use ahcl_kit_cli::{
     CommandReport, ConcreteRuntime, InvocationError, InvocationRegistry, OutputFormat,
-    ParsedInvocation, render_json, render_text, run, system_utc_date,
+    ParsedInvocation, ParsedRequest, executable_location, render_json, render_text, run,
+    system_utc_date,
 };
 use ahcl_kit_config::{LanguageContributor, LanguageHost, LanguageInstallation};
 use ahcl_kit_core::{CommandId, UtcDate};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 static CONTRIBUTORS: [&dyn LanguageContributor; 2] = [
@@ -54,26 +56,39 @@ fn main() -> ExitCode {
     // The composition root only sequences invocation, the installed language
     // registry, and output. Ecosystem behavior stays in the registered hosts.
     match startup() {
-        Ok(startup) => render_report(&startup.invocation, startup.current_date),
+        Ok(Prepared::Report(startup)) => render_report(&startup.invocation, startup.current_date),
+        Ok(Prepared::Where(path)) => write_path(&path),
         Err(code) => code,
     }
 }
 
-fn startup() -> Result<Startup, ExitCode> {
+fn startup() -> Result<Prepared, ExitCode> {
     let initial_cwd = std::env::current_dir().map_err(|_| {
         write_error(
             "cli.initial_cwd",
             "initial current directory is unavailable",
         )
     })?;
-    let invocation = InvocationRegistry::installed()
+    let parsed = InvocationRegistry::installed()
         .parse_from(std::env::args_os(), initial_cwd)
         .map_err(exit_for_invocation)?;
-    let current_date = invocation_date(&invocation)?;
-    Ok(Startup {
-        invocation,
-        current_date,
-    })
+    match parsed {
+        ParsedRequest::Where => executable_location()
+            .map(Prepared::Where)
+            .map_err(|error| write_error(error.code(), &error.to_string())),
+        ParsedRequest::Invocation(invocation) => {
+            let current_date = invocation_date(&invocation)?;
+            Ok(Prepared::Report(Startup {
+                invocation,
+                current_date,
+            }))
+        }
+    }
+}
+
+enum Prepared {
+    Report(Startup),
+    Where(PathBuf),
 }
 
 fn exit_for_invocation(error: InvocationError) -> ExitCode {
@@ -123,4 +138,12 @@ fn write_error(code: &str, message: &str) -> ExitCode {
     let rendered = format!("[error] {code}: {message}\n");
     let _ = std::io::stderr().write_all(rendered.as_bytes());
     ExitCode::from(1)
+}
+
+fn write_path(path: &Path) -> ExitCode {
+    let rendered = format!("{}\n", path.display());
+    if std::io::stdout().write_all(rendered.as_bytes()).is_err() {
+        return ExitCode::from(1);
+    }
+    ExitCode::SUCCESS
 }

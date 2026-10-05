@@ -69,6 +69,7 @@ ahcl project check
 | `ahcl license sync` | 下载并验证所选的官方 AHCL 许可证。 |
 | `ahcl dependency generate` | 生成 `[materials-directory]/AHCL-DEPENDENCIES.md`。 |
 | `ahcl third-party generate` | 在 `[materials-directory]/THIRD-PARTY-LICENSES/` 下生成逐依赖许可证证据。 |
+| `ahcl where` | 打印当前 ahcl 可执行文件的绝对路径。 |
 
 写入类命令支持 `--dry-run`。使用 `ahcl <command> --help` 查看可用参数和输出格式。
 

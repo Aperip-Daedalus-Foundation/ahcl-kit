@@ -91,6 +91,7 @@ project paths and project-list files for batch operation.
 | `ahcl license sync` | Download and verify the selected official AHCL license. |
 | `ahcl dependency generate` | Generate `[materials-directory]/AHCL-DEPENDENCIES.md`. |
 | `ahcl third-party generate` | Generate per-package evidence under `[materials-directory]/THIRD-PARTY-LICENSES/`. |
+| `ahcl where` | Print the absolute path of this executable. |
 
 Writing commands support `--dry-run`. All project commands support batch input;
 run `ahcl <command> --help` for the accepted flags and output formats.

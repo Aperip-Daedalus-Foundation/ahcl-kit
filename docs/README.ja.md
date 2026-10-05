@@ -73,6 +73,7 @@ ahcl project check
 | `ahcl license sync` | 選択した公式 AHCL ライセンスを取得して検証します。 |
 | `ahcl dependency generate` | `[materials-directory]/AHCL-DEPENDENCIES.md` を生成します。 |
 | `ahcl third-party generate` | `[materials-directory]/THIRD-PARTY-LICENSES/` に依存項目ごとのライセンス証拠を生成します。 |
+| `ahcl where` | この実行ファイルの絶対パスを表示します。 |
 
 書き込みを行うコマンドは `--dry-run` に対応します。使用できるオプションと出力形式は
 `ahcl <command> --help` で確認できます。

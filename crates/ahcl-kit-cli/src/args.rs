@@ -36,6 +36,7 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 macro_rules! copyright_notice {
@@ -169,6 +170,8 @@ enum TopCommand {
         #[command(subcommand)]
         command: ThirdPartyCommand,
     },
+    /// Print the absolute path of this executable.
+    Where,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -200,6 +203,21 @@ enum ThirdPartyCommand {
     Generate(ProjectWriteArgs),
 }
 
+#[derive(Clone, Debug)]
+enum ProjectCommandTree {
+    Config(ConfigCommand),
+    Project(ProjectCommand),
+    License(LicenseCommand),
+    Dependency(DependencyCommand),
+    ThirdParty(ThirdPartyCommand),
+}
+
+#[derive(Clone, Debug)]
+pub enum ParsedRequest {
+    Invocation(ParsedInvocation),
+    Where,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct InvocationRegistry {
     canonical_name: &'static str,
@@ -228,7 +246,7 @@ impl InvocationRegistry {
         &self,
         argv: I,
         initial_cwd: PathBuf,
-    ) -> Result<ParsedInvocation, InvocationError>
+    ) -> Result<ParsedRequest, InvocationError>
     where
         I: IntoIterator<Item = T>,
         T: Into<OsString> + Clone,
@@ -236,11 +254,14 @@ impl InvocationRegistry {
         let argv = self.invocation_argv(argv, &initial_cwd)?;
         let invocation_name = self.canonical_name.to_owned();
         let cli = Cli::try_parse_from(argv).map_err(InvocationError::Arguments)?;
-        Ok(ParsedInvocation {
+        let Some(command) = project_command(cli.command) else {
+            return Ok(ParsedRequest::Where);
+        };
+        Ok(ParsedRequest::Invocation(ParsedInvocation {
             invocation_name,
             initial_cwd,
-            cli,
-        })
+            command,
+        }))
     }
 
     fn invocation_argv<I, T>(
@@ -285,7 +306,7 @@ impl InvocationRegistry {
 pub struct ParsedInvocation {
     invocation_name: String,
     initial_cwd: PathBuf,
-    cli: Cli,
+    command: ProjectCommandTree,
 }
 
 impl ParsedInvocation {
@@ -298,12 +319,12 @@ impl ParsedInvocation {
     }
 
     pub fn command_id(&self) -> CommandId {
-        match &self.cli.command {
-            TopCommand::Config { command } => config_command_id(command),
-            TopCommand::Project { command } => project_command_id(command),
-            TopCommand::License { .. } => CommandId::LicenseSync,
-            TopCommand::Dependency { .. } => CommandId::DependencyGenerate,
-            TopCommand::ThirdParty { .. } => CommandId::ThirdPartyGenerate,
+        match &self.command {
+            ProjectCommandTree::Config(command) => config_command_id(command),
+            ProjectCommandTree::Project(command) => project_command_id(command),
+            ProjectCommandTree::License(_) => CommandId::LicenseSync,
+            ProjectCommandTree::Dependency(_) => CommandId::DependencyGenerate,
+            ProjectCommandTree::ThirdParty(_) => CommandId::ThirdPartyGenerate,
         }
     }
 
@@ -324,43 +345,29 @@ impl ParsedInvocation {
     }
 
     pub fn dry_run(&self) -> bool {
-        match &self.cli.command {
-            TopCommand::Config {
-                command: ConfigCommand::Init(args),
-            } => args.write.dry_run,
-            TopCommand::Project {
-                command: ProjectCommand::Init(args),
-            } => args.write.dry_run,
-            TopCommand::Project {
-                command: ProjectCommand::Generate(args),
+        match &self.command {
+            ProjectCommandTree::Config(ConfigCommand::Init(args)) => args.write.dry_run,
+            ProjectCommandTree::Project(ProjectCommand::Init(args)) => args.write.dry_run,
+            ProjectCommandTree::Project(ProjectCommand::Generate(args))
+            | ProjectCommandTree::License(LicenseCommand::Sync(args))
+            | ProjectCommandTree::Dependency(DependencyCommand::Generate(args))
+            | ProjectCommandTree::ThirdParty(ThirdPartyCommand::Generate(args)) => {
+                args.write.dry_run
             }
-            | TopCommand::License {
-                command: LicenseCommand::Sync(args),
-            }
-            | TopCommand::Dependency {
-                command: DependencyCommand::Generate(args),
-            }
-            | TopCommand::ThirdParty {
-                command: ThirdPartyCommand::Generate(args),
-            } => args.write.dry_run,
-            _ => false,
+            ProjectCommandTree::Config(_) | ProjectCommandTree::Project(_) => false,
         }
     }
 
     pub fn force(&self) -> bool {
         matches!(
-            &self.cli.command,
-            TopCommand::Config {
-                command: ConfigCommand::Init(ConfigInitArgs { force: true, .. })
-            }
+            &self.command,
+            ProjectCommandTree::Config(ConfigCommand::Init(ConfigInitArgs { force: true, .. }))
         )
     }
 
     pub fn project_identity(&self) -> Option<ProjectIdentityArgs> {
-        match &self.cli.command {
-            TopCommand::Project {
-                command: ProjectCommand::Init(args),
-            } => Some(ProjectIdentityArgs {
+        match &self.command {
+            ProjectCommandTree::Project(ProjectCommand::Init(args)) => Some(ProjectIdentityArgs {
                 name: args.name.clone(),
                 repository: args.repository.clone(),
                 right_holders: args.right_holders.clone(),
@@ -386,18 +393,12 @@ impl ParsedInvocation {
     }
 
     fn project_args(&self) -> &ProjectArgs {
-        match &self.cli.command {
-            TopCommand::Config { command } => config_project_args(command),
-            TopCommand::Project { command } => project_command_args(command),
-            TopCommand::License {
-                command: LicenseCommand::Sync(args),
-            }
-            | TopCommand::Dependency {
-                command: DependencyCommand::Generate(args),
-            }
-            | TopCommand::ThirdParty {
-                command: ThirdPartyCommand::Generate(args),
-            } => &args.project,
+        match &self.command {
+            ProjectCommandTree::Config(command) => config_project_args(command),
+            ProjectCommandTree::Project(command) => project_command_args(command),
+            ProjectCommandTree::License(LicenseCommand::Sync(args))
+            | ProjectCommandTree::Dependency(DependencyCommand::Generate(args))
+            | ProjectCommandTree::ThirdParty(ThirdPartyCommand::Generate(args)) => &args.project,
         }
     }
 }
@@ -408,6 +409,43 @@ fn absolute_initial_cwd(initial_cwd: &Path) -> Result<(), InvocationError> {
     } else {
         Err(InvocationError::InitialCwdNotAbsolute)
     }
+}
+
+fn project_command(command: TopCommand) -> Option<ProjectCommandTree> {
+    match command {
+        TopCommand::Where => None,
+        TopCommand::Config { command } => Some(ProjectCommandTree::Config(command)),
+        TopCommand::Project { command } => Some(ProjectCommandTree::Project(command)),
+        TopCommand::License { command } => Some(ProjectCommandTree::License(command)),
+        TopCommand::Dependency { command } => Some(ProjectCommandTree::Dependency(command)),
+        TopCommand::ThirdParty { command } => Some(ProjectCommandTree::ThirdParty(command)),
+    }
+}
+
+pub fn executable_location() -> Result<PathBuf, InvocationError> {
+    let current = std::env::current_exe().map_err(|_| InvocationError::ExecutableUnavailable)?;
+    absolute_executable(current)
+}
+
+fn absolute_executable(path: PathBuf) -> Result<PathBuf, InvocationError> {
+    if let Ok(canonical) = fs::canonicalize(&path) {
+        return Ok(plain_absolute(canonical));
+    }
+    if path.is_absolute() {
+        return Ok(path);
+    }
+    Err(InvocationError::ExecutableUnavailable)
+}
+
+fn plain_absolute(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{unc}"));
+    }
+    if let Some(disk) = text.strip_prefix(r"\\?\") {
+        return PathBuf::from(disk);
+    }
+    path
 }
 
 fn config_command_id(command: &ConfigCommand) -> CommandId {
@@ -447,6 +485,7 @@ pub enum InvocationError {
     MissingArgv0,
     UnknownInvocation { observed: String },
     InitialCwdNotAbsolute,
+    ExecutableUnavailable,
     Arguments(clap::Error),
 }
 
@@ -456,6 +495,7 @@ impl InvocationError {
             Self::MissingArgv0 => "cli.missing_argv0",
             Self::UnknownInvocation { .. } => "cli.unknown_invocation",
             Self::InitialCwdNotAbsolute => "cli.initial_cwd",
+            Self::ExecutableUnavailable => "cli.executable",
             Self::Arguments(_) => "cli.arguments",
         }
     }
@@ -471,6 +511,7 @@ impl fmt::Display for InvocationError {
             Self::InitialCwdNotAbsolute => {
                 formatter.write_str("initial current directory must be absolute")
             }
+            Self::ExecutableUnavailable => formatter.write_str("executable path is unavailable"),
             Self::Arguments(error) => error.fmt(formatter),
         }
     }
