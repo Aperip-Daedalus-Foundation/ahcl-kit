@@ -190,6 +190,29 @@ both accepted. Binary `bun.lockb` is rejected. The JavaScript adapter does not
 install dependencies, traverse `node_modules`, or contact a registry. When more
 than one lockfile is present, set `managers` explicitly.
 
+</div>
+
+For long AHCL 1.2 coverage descriptions, use a literal text block:
+
+```text
+[license]
+version = "1.2"
+covered-scope: |
+  The source code in src/ and the build scripts maintained by this project,
+  including changes made to these files.
+
+  Third-party dependencies retain their own licenses.
+```
+
+Indent each content line by two spaces. These two spaces are removed; additional
+indentation, line breaks, and internal blank lines are preserved in `LICENSE`.
+Leading and trailing blank lines are omitted. Quotes, backslashes, and `#` are
+literal text, not escapes or comments. The block ends at the next non-empty,
+unindented line. The existing `covered-scope = "..."` syntax remains supported,
+including `\n` escapes. Component `covered-scope` uses the same syntax.
+
+<div align="center">
+
 ## Build From Source
 
 The repository pins its Rust toolchain. Build the executable with:
