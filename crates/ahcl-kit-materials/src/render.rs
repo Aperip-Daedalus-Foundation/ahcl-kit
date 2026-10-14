@@ -83,12 +83,10 @@ fn v1_1_license_notice(directory: &str, filename: &str) -> String {
 }
 
 fn v1_2_license_notice(config: &EffectiveConfig, directory: &str, filename: &str) -> String {
-    let scope = covered_scope(config);
-    let key = scope_key(config);
+    let scope = license_covered_scope(config);
     let project = inline(config.project().name());
     format!(
         "----- BEGIN AHCL NOTICE -----\n\n\
-         <!-- AHCL KIT MANAGED SCOPE: {key} -->\n\
          This license notice applies to:\n\
          {project}\n\n\
          AHCL-covered portions:\n\
@@ -279,6 +277,15 @@ pub(crate) fn covered_scope(config: &EffectiveConfig) -> String {
     }
 }
 
+fn license_covered_scope(config: &EffectiveConfig) -> String {
+    let scope = config.license().covered_scope().trim_matches(['\r', '\n']);
+    if scope.trim().is_empty() {
+        "the project as a whole".to_owned()
+    } else {
+        scope.to_owned()
+    }
+}
+
 pub(crate) fn scope_key(config: &EffectiveConfig) -> String {
     let source = config.license().covered_scope().trim();
     if source.is_empty() {
@@ -287,7 +294,7 @@ pub(crate) fn scope_key(config: &EffectiveConfig) -> String {
     normalize_scope_key(source)
 }
 
-fn normalize_scope_key(source: &str) -> String {
+pub(crate) fn normalize_scope_key(source: &str) -> String {
     let mut key = String::new();
     let mut separator = false;
     for character in source.chars() {

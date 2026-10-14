@@ -31,6 +31,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
 use super::{MaterialsError, MaterialsErrorCode};
+use crate::render;
 use ahcl_kit_core::{ChangePlan, ProjectEntry, ProjectView, RepoPath};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -316,7 +317,8 @@ fn append_missing_range(output: &mut String, desired: &str, range: &ManagedRange
 }
 
 // Managed blocks are recognized only by their exact begin and end lines.
-// A license notice may carry its scope key on an inner marker line.
+// License scope keys come from the visible covered portions, with a legacy
+// marker fallback for older notices that do not identify their portions.
 fn managed_ranges(
     content: &str,
     kind: ManagedFileKind,
@@ -440,20 +442,56 @@ fn license_scope_key(scan: &ScopeScan<'_>, start: usize) -> Result<String, Mater
     if body.matches(marker).count() > 1 {
         return Err(ambiguous());
     }
+    if let Some(key) = license_covered_scope_key(body)? {
+        return Ok(key);
+    }
     let Some(marker_start) = body.find(marker) else {
         return Ok(String::new());
     };
     Ok(marker_key(&body[marker_start..]))
 }
 
+fn license_covered_scope_key(body: &str) -> Result<Option<String>, MaterialsError> {
+    let mut lines = body
+        .lines()
+        .skip_while(|line| *line != "This license notice applies to:")
+        .skip(3);
+    if lines.next() != Some("AHCL-covered portions:") {
+        return Ok(None);
+    }
+    let scope_lines: Vec<_> = lines.collect();
+    let end = scope_lines
+        .iter()
+        .position(|line| {
+            *line == "The portions identified above are licensed under version 1.2 of the"
+        })
+        .unwrap_or(1);
+    let scope = scope_lines.get(..end).ok_or_else(ambiguous)?.join("\n");
+    if scope.trim().is_empty() {
+        return Err(ambiguous());
+    }
+    Ok(Some(canonical_license_scope_key(
+        render::normalize_scope_key(scope.trim()),
+    )))
+}
+
 fn marker_key(tail: &str) -> String {
     let marker_line = tail.lines().next().unwrap_or_default();
-    marker_line
+    let key = marker_line
         .trim_start_matches("<!-- AHCL KIT MANAGED SCOPE:")
         .trim()
         .trim_end_matches("-->")
         .trim()
-        .to_owned()
+        .to_owned();
+    canonical_license_scope_key(key)
+}
+
+fn canonical_license_scope_key(key: String) -> String {
+    if key == "the-project-as-a-whole" {
+        "project".to_owned()
+    } else {
+        key
+    }
 }
 
 fn ambiguous() -> MaterialsError {
