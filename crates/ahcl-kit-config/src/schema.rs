@@ -433,9 +433,11 @@ impl EffectiveConfig {
             .collect()
     }
 
+    /// Configuration summary lines for enabled ecosystem adapters only.
     pub fn adapter_summary_lines(&self) -> Vec<String> {
         self.bindings
             .iter()
+            .filter(|binding| binding.is_enabled())
             .flat_map(|binding| binding.summary_lines())
             .collect()
     }
