@@ -51,9 +51,20 @@ pub(super) fn parse(
         ));
     }
     Ok((
-        Value::Scalar(ScalarValue::String(text.trim_matches('\n').to_owned())),
+        Value::Scalar(ScalarValue::String(trim_outer_blank_lines(&text))),
         next_index,
     ))
+}
+
+fn trim_outer_blank_lines(text: &str) -> String {
+    let mut lines: Vec<_> = text
+        .lines()
+        .skip_while(|line| line.trim().is_empty())
+        .collect();
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    lines.join("\n")
 }
 
 fn read_body(lines: &[Line<'_>], mut index: usize) -> (String, usize) {
@@ -70,9 +81,11 @@ fn read_body(lines: &[Line<'_>], mut index: usize) -> (String, usize) {
 }
 
 fn body_line(content: &str) -> Option<&str> {
-    if content.trim().is_empty() {
+    if let Some(content) = content.strip_prefix("  ") {
+        Some(content)
+    } else if content.trim().is_empty() {
         Some("")
     } else {
-        content.strip_prefix("  ")
+        None
     }
 }
