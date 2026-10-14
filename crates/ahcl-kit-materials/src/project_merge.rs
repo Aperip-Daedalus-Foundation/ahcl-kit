@@ -465,7 +465,7 @@ fn license_covered_scope_key(body: &str) -> Result<Option<String>, MaterialsErro
         .position(|line| {
             *line == "The portions identified above are licensed under version 1.2 of the"
         })
-        .unwrap_or(1);
+        .ok_or_else(ambiguous)?;
     let scope = scope_lines.get(..end).ok_or_else(ambiguous)?.join("\n");
     if scope.trim().is_empty() {
         return Err(ambiguous());
