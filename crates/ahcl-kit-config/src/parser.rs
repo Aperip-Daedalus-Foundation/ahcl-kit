@@ -30,10 +30,13 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
-use crate::ast::{Assignment, DocumentAst, ScalarValue, Section, Value};
+use crate::ast::{Assignment, AssignmentForm, DocumentAst, ScalarValue, Section, Value};
 use crate::binding::LanguageContributor;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+#[path = "parser/scope_block.rs"]
+mod scope_block;
 
 const MAX_CONFIG_BYTES: usize = 1_048_576;
 
@@ -106,6 +109,9 @@ impl ConfigDocument {
         match self.scalar_edit(section, key) {
             ScalarEdit::Rejected(error) => Err(error),
             ScalarEdit::Replace(range) => self.replace_rendered_range(range, &value.render()),
+            ScalarEdit::ReplaceBlock(range) => {
+                self.replace_rendered_range(range, &format!("{key} = {}", value.render()))
+            }
             ScalarEdit::Insert => self.insert_scalar(section, key, &value),
         }
     }
@@ -117,6 +123,9 @@ impl ConfigDocument {
                     section: section.map(str::to_owned),
                     key: key.to_owned(),
                 })
+            }
+            Some(assignment) if assignment.form == AssignmentForm::Block => {
+                ScalarEdit::ReplaceBlock(assignment.value_start..assignment.value_end)
             }
             Some(assignment) => ScalarEdit::Replace(assignment.value_start..assignment.value_end),
             None => ScalarEdit::Insert,
@@ -376,6 +385,7 @@ fn insertion_prefix<'a>(source: &'a str, offset: usize, line_ending: &'a str) ->
 
 enum ScalarEdit {
     Replace(std::ops::Range<usize>),
+    ReplaceBlock(std::ops::Range<usize>),
     Insert,
     Rejected(ConfigError),
 }
@@ -490,6 +500,7 @@ fn parse_document_entry(
                 section: state.current_section.clone(),
                 key,
                 value,
+                form: AssignmentForm::Value,
                 value_start,
                 value_end,
             },
@@ -507,8 +518,12 @@ fn parse_document_block(
     ast: &mut DocumentAst,
     state: &mut ParseState,
 ) -> Result<(), ConfigError> {
-    let key = parse_block_key(content, line.number)?;
-    let (value, next_index) = parse_block(lines, state.index + 1)?;
+    let key = parse_block_key(content.strip_suffix(" |").unwrap_or(content), line.number)?;
+    let (value, next_index) = if content.ends_with(": |") {
+        scope_block::parse(lines, state.index, &key)?
+    } else {
+        parse_block(lines, state.index + 1)?
+    };
     push_assignment(
         ast,
         &mut state.keys,
@@ -516,12 +531,21 @@ fn parse_document_block(
             section: state.current_section.clone(),
             key,
             value,
+            form: AssignmentForm::Block,
             value_start: line.start,
-            value_end: line.start + line.content.len(),
+            value_end: block_value_end(lines, next_index, line),
         },
     )?;
     state.index = next_index;
     Ok(())
+}
+
+fn block_value_end(lines: &[Line<'_>], next_index: usize, header: Line<'_>) -> usize {
+    let last = lines
+        .get(next_index.saturating_sub(1))
+        .copied()
+        .unwrap_or(header);
+    last.start + last.content.len()
 }
 
 fn lines(source: &str) -> Vec<Line<'_>> {
