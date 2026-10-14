@@ -866,13 +866,38 @@ pub fn parse_version(value: &str, path: &str) -> Result<AhclVersion, ConfigError
 }
 
 pub fn validate_scope(path: &str, value: String) -> Result<String, ConfigError> {
-    if value.is_empty() || value.contains(['\n', '\r']) {
+    let value = value.replace("\r\n", "\n").replace('\r', "\n");
+    if value.trim().is_empty() {
         return invalid(
             path.to_owned(),
-            "must be a non-empty single-line string when configured".to_owned(),
+            "must be a non-empty string when configured".to_owned(),
+        );
+    }
+    if value
+        .chars()
+        .any(|character| character.is_control() && character != '\n')
+    {
+        return invalid(
+            path,
+            "cannot contain control characters other than newlines".to_owned(),
+        );
+    }
+    if value.lines().any(reserved_scope_line) {
+        return invalid(
+            path,
+            "cannot contain AHCL notice delimiters or reserved notice text".to_owned(),
         );
     }
     Ok(value)
+}
+
+fn reserved_scope_line(line: &str) -> bool {
+    matches!(
+        line.trim(),
+        "----- BEGIN AHCL NOTICE -----"
+            | "----- END AHCL NOTICE -----"
+            | "The portions identified above are licensed under version 1.2 of the"
+    ) || line.contains("<!-- AHCL KIT MANAGED SCOPE:")
 }
 
 pub fn parse_date_at(value: &str, path: &str) -> Result<UtcDate, ConfigError> {

@@ -79,10 +79,17 @@ impl Value {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum AssignmentForm {
+    Value,
+    Block,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Assignment {
     pub(crate) section: Option<String>,
     pub(crate) key: String,
     pub(crate) value: Value,
+    pub(crate) form: AssignmentForm,
     pub(crate) value_start: usize,
     pub(crate) value_end: usize,
 }
