@@ -897,7 +897,13 @@ fn reserved_scope_line(line: &str) -> bool {
         "----- BEGIN AHCL NOTICE -----"
             | "----- END AHCL NOTICE -----"
             | "The portions identified above are licensed under version 1.2 of the"
-    ) || line.contains("<!-- AHCL KIT MANAGED SCOPE:")
+    ) || [
+        "<!-- AHCL KIT MANAGED SCOPE:",
+        "<!-- BEGIN AHCL KIT MANAGED SCOPE:",
+        "<!-- END AHCL KIT MANAGED SCOPE:",
+    ]
+    .iter()
+    .any(|marker| line.contains(marker))
 }
 
 pub fn parse_date_at(value: &str, path: &str) -> Result<UtcDate, ConfigError> {
