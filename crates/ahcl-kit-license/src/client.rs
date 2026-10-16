@@ -30,12 +30,16 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
-use crate::model::{LicenseError, LicenseErrorCode, LicenseRequest, LicenseResponse};
+use crate::model::{
+    LicenseError, LicenseErrorCode, LicenseRequest, LicenseResponse, OFFICIAL_CONNECT_TIMEOUT,
+    OFFICIAL_TOTAL_TIMEOUT,
+};
 use crate::verify::{official_record, verify_response};
 use crate::{LicenseTransportError, VerifiedLicense};
 use ahcl_kit_config::AhclVersion;
-use std::time::Duration;
 use ureq::ResponseExt;
+
+const OFFICIAL_RETRIES: usize = 2;
 
 pub trait LicenseTransport: Send + Sync {
     fn execute(&self, request: &LicenseRequest) -> Result<LicenseResponse, LicenseTransportError>;
@@ -62,11 +66,20 @@ impl OfficialLicenseClient {
     pub fn fetch(&self, version: AhclVersion) -> Result<VerifiedLicense, LicenseError> {
         let record = official_record(version);
         let request = LicenseRequest::official(record.endpoint_url().to_string());
-        let response = self
-            .transport
-            .execute(&request)
-            .map_err(map_transport_error)?;
+        let response = self.execute(&request).map_err(map_transport_error)?;
         verify_response(&record, response, request.response_limit())
+    }
+
+    fn execute(&self, request: &LicenseRequest) -> Result<LicenseResponse, LicenseTransportError> {
+        let mut retries_remaining = OFFICIAL_RETRIES;
+        loop {
+            match self.transport.execute(request) {
+                Err(error) if retries_remaining > 0 && retryable(error) => {
+                    retries_remaining -= 1;
+                }
+                result => return result,
+            }
+        }
     }
 }
 
@@ -79,9 +92,23 @@ impl Default for OfficialLicenseClient {
 fn map_transport_error(error: LicenseTransportError) -> LicenseError {
     let code = match error {
         LicenseTransportError::RequestFailed => LicenseErrorCode::Transport,
+        LicenseTransportError::ConnectTimeout => LicenseErrorCode::ConnectTimeout,
+        LicenseTransportError::RequestTimeout => LicenseErrorCode::Timeout,
+        LicenseTransportError::TlsFailed => LicenseErrorCode::Tls,
+        LicenseTransportError::ResponseReadFailed => LicenseErrorCode::ResponseRead,
         LicenseTransportError::ResponseTooLarge => LicenseErrorCode::ResponseSize,
     };
     LicenseError::new(code)
+}
+
+fn retryable(error: LicenseTransportError) -> bool {
+    matches!(
+        error,
+        LicenseTransportError::RequestFailed
+            | LicenseTransportError::ConnectTimeout
+            | LicenseTransportError::RequestTimeout
+            | LicenseTransportError::ResponseReadFailed
+    )
 }
 
 struct UreqLicenseTransport {
@@ -95,8 +122,9 @@ impl UreqLicenseTransport {
             .proxy(None)
             .max_redirects(0)
             .http_status_as_error(false)
-            .timeout_connect(Some(Duration::from_secs(5)))
-            .timeout_global(Some(Duration::from_secs(30)))
+            .accept_encoding("gzip")
+            .timeout_connect(Some(OFFICIAL_CONNECT_TIMEOUT))
+            .timeout_global(Some(OFFICIAL_TOTAL_TIMEOUT))
             .build();
         Self {
             agent: ureq::Agent::new_with_config(config),
@@ -111,7 +139,7 @@ impl LicenseTransport for UreqLicenseTransport {
             .get(request.url())
             .header("Accept", request.accept())
             .call()
-            .map_err(|_| LicenseTransportError::RequestFailed)?;
+            .map_err(map_call_error)?;
         let status = response.status().as_u16();
         let final_url = response.get_uri().to_string();
         let content_type = response
@@ -140,9 +168,26 @@ impl LicenseTransport for UreqLicenseTransport {
     }
 }
 
+fn map_call_error(error: ureq::Error) -> LicenseTransportError {
+    match error {
+        ureq::Error::Timeout(ureq::Timeout::Resolve | ureq::Timeout::Connect) => {
+            LicenseTransportError::ConnectTimeout
+        }
+        ureq::Error::Timeout(_) => LicenseTransportError::RequestTimeout,
+        ureq::Error::Tls(_) | ureq::Error::Pem(_) | ureq::Error::Rustls(_) => {
+            LicenseTransportError::TlsFailed
+        }
+        _ => LicenseTransportError::RequestFailed,
+    }
+}
+
 fn map_body_error(error: ureq::Error) -> LicenseTransportError {
     match error {
         ureq::Error::BodyExceedsLimit(_) => LicenseTransportError::ResponseTooLarge,
-        _ => LicenseTransportError::RequestFailed,
+        ureq::Error::Timeout(_) => LicenseTransportError::RequestTimeout,
+        ureq::Error::Tls(_) | ureq::Error::Pem(_) | ureq::Error::Rustls(_) => {
+            LicenseTransportError::TlsFailed
+        }
+        _ => LicenseTransportError::ResponseReadFailed,
     }
 }
