@@ -34,6 +34,9 @@ use ahcl_kit_config::AhclVersion;
 use std::fmt;
 use std::time::Duration;
 
+pub(crate) const OFFICIAL_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+pub(crate) const OFFICIAL_TOTAL_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LicenseRequest {
     url: String,
@@ -50,8 +53,8 @@ impl LicenseRequest {
             url,
             accept: "application/json",
             allow_redirects: false,
-            connect_timeout: Duration::from_secs(5),
-            total_timeout: Duration::from_secs(30),
+            connect_timeout: OFFICIAL_CONNECT_TIMEOUT,
+            total_timeout: OFFICIAL_TOTAL_TIMEOUT,
             response_limit: 1_048_576,
         }
     }
@@ -147,6 +150,10 @@ impl LicenseResponse {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LicenseTransportError {
     RequestFailed,
+    ConnectTimeout,
+    RequestTimeout,
+    TlsFailed,
+    ResponseReadFailed,
     ResponseTooLarge,
 }
 
@@ -154,6 +161,12 @@ impl fmt::Display for LicenseTransportError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RequestFailed => formatter.write_str("official license transport failed"),
+            Self::ConnectTimeout => formatter.write_str("official license connection timed out"),
+            Self::RequestTimeout => formatter.write_str("official license request timed out"),
+            Self::TlsFailed => formatter.write_str("official license TLS validation failed"),
+            Self::ResponseReadFailed => {
+                formatter.write_str("official license response could not be read")
+            }
             Self::ResponseTooLarge => {
                 formatter.write_str("official license response exceeded the size limit")
             }
@@ -166,6 +179,10 @@ impl std::error::Error for LicenseTransportError {}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LicenseErrorCode {
     Transport,
+    ConnectTimeout,
+    Timeout,
+    Tls,
+    ResponseRead,
     RedirectOrigin,
     Status,
     ContentType,
@@ -180,9 +197,14 @@ impl LicenseErrorCode {
         // Transport failures stay distinct from document failures. Every
         // variant is named, so a new code cannot fall through.
         match self {
-            Self::Transport | Self::RedirectOrigin | Self::Status | Self::ContentType => {
-                transport_code(self)
-            }
+            Self::Transport
+            | Self::ConnectTimeout
+            | Self::Timeout
+            | Self::Tls
+            | Self::ResponseRead
+            | Self::RedirectOrigin
+            | Self::Status
+            | Self::ContentType => transport_code(self),
             Self::ResponseSize
             | Self::JsonShape
             | Self::MetadataMismatch
@@ -194,6 +216,16 @@ impl LicenseErrorCode {
 fn transport_code(code: LicenseErrorCode) -> &'static str {
     match code {
         LicenseErrorCode::Transport => "license.transport",
+        LicenseErrorCode::ConnectTimeout => "license.connect_timeout",
+        LicenseErrorCode::Timeout => "license.timeout",
+        LicenseErrorCode::Tls => "license.tls",
+        LicenseErrorCode::ResponseRead => "license.response_read",
+        _ => response_transport_code(code),
+    }
+}
+
+fn response_transport_code(code: LicenseErrorCode) -> &'static str {
+    match code {
         LicenseErrorCode::RedirectOrigin => "license.redirect_origin",
         LicenseErrorCode::Status => "license.status",
         LicenseErrorCode::ContentType => "license.content_type",
@@ -201,6 +233,11 @@ fn transport_code(code: LicenseErrorCode) -> &'static str {
         | LicenseErrorCode::JsonShape
         | LicenseErrorCode::MetadataMismatch
         | LicenseErrorCode::DigestMismatch => document_code(code),
+        LicenseErrorCode::Transport
+        | LicenseErrorCode::ConnectTimeout
+        | LicenseErrorCode::Timeout
+        | LicenseErrorCode::Tls
+        | LicenseErrorCode::ResponseRead => transport_code(code),
     }
 }
 
@@ -211,6 +248,10 @@ fn document_code(code: LicenseErrorCode) -> &'static str {
         LicenseErrorCode::MetadataMismatch => "license.metadata_mismatch",
         LicenseErrorCode::DigestMismatch => "license.digest_mismatch",
         LicenseErrorCode::Transport
+        | LicenseErrorCode::ConnectTimeout
+        | LicenseErrorCode::Timeout
+        | LicenseErrorCode::Tls
+        | LicenseErrorCode::ResponseRead
         | LicenseErrorCode::RedirectOrigin
         | LicenseErrorCode::Status
         | LicenseErrorCode::ContentType => transport_code(code),
@@ -241,6 +282,10 @@ impl fmt::Display for LicenseError {
 fn license_error_message(code: LicenseErrorCode) -> &'static str {
     match code {
         LicenseErrorCode::Transport
+        | LicenseErrorCode::ConnectTimeout
+        | LicenseErrorCode::Timeout
+        | LicenseErrorCode::Tls
+        | LicenseErrorCode::ResponseRead
         | LicenseErrorCode::RedirectOrigin
         | LicenseErrorCode::Status
         | LicenseErrorCode::ContentType => transport_message(code),
@@ -254,6 +299,16 @@ fn license_error_message(code: LicenseErrorCode) -> &'static str {
 fn transport_message(code: LicenseErrorCode) -> &'static str {
     match code {
         LicenseErrorCode::Transport => "official license transport failed",
+        LicenseErrorCode::ConnectTimeout => "official license connection timed out",
+        LicenseErrorCode::Timeout => "official license request timed out",
+        LicenseErrorCode::Tls => "official license TLS validation failed",
+        LicenseErrorCode::ResponseRead => "official license response could not be read",
+        _ => response_transport_message(code),
+    }
+}
+
+fn response_transport_message(code: LicenseErrorCode) -> &'static str {
+    match code {
         LicenseErrorCode::RedirectOrigin => {
             "official license response redirected or used an unexpected origin"
         }
@@ -263,6 +318,11 @@ fn transport_message(code: LicenseErrorCode) -> &'static str {
         | LicenseErrorCode::JsonShape
         | LicenseErrorCode::MetadataMismatch
         | LicenseErrorCode::DigestMismatch => document_message(code),
+        LicenseErrorCode::Transport
+        | LicenseErrorCode::ConnectTimeout
+        | LicenseErrorCode::Timeout
+        | LicenseErrorCode::Tls
+        | LicenseErrorCode::ResponseRead => transport_message(code),
     }
 }
 
@@ -273,6 +333,10 @@ fn document_message(code: LicenseErrorCode) -> &'static str {
         LicenseErrorCode::MetadataMismatch => "official license response metadata did not match",
         LicenseErrorCode::DigestMismatch => "official license response digest did not match",
         LicenseErrorCode::Transport
+        | LicenseErrorCode::ConnectTimeout
+        | LicenseErrorCode::Timeout
+        | LicenseErrorCode::Tls
+        | LicenseErrorCode::ResponseRead
         | LicenseErrorCode::RedirectOrigin
         | LicenseErrorCode::Status
         | LicenseErrorCode::ContentType => transport_message(code),

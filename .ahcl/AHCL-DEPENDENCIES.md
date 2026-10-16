@@ -41,6 +41,36 @@ Retained evidence:
   - SHA-256: `0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f`
   - Bytes: 1081
 
+## Upstream: `https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide`
+
+### `miniz_oxide` 0.8.9
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#miniz_oxide@0.8.9`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: `cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))`
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `MIT OR Zlib OR Apache-2.0`
+- Authors: Frommi <daniil.liferenko@gmail.com>; oyvindln <oyvindln@users.noreply.github.com>; Rich Geldreich richgel99@gmail.com
+- Repository: `https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide`
+- Homepage: `https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide`
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE`](THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE)
+  - SHA-256: `4108245a1f2df9d4e94df8abed5b4ba0759bb2f9b40a6b939f1be141077ae50b`
+  - Bytes: 1213
+- [`.ahcl/THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE-APACHE.md`](THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE-APACHE.md)
+  - SHA-256: `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594`
+  - Bytes: 10174
+- [`.ahcl/THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE-MIT.md`](THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE-MIT.md)
+  - SHA-256: `799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d`
+  - Bytes: 1212
+- [`.ahcl/THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE-ZLIB.md`](THIRD-PARTY-LICENSES/miniz_oxide-0.8.9/LICENSE-ZLIB.md)
+  - SHA-256: `0a54e647fe54104658b5e563c04c6f9edf251710e47bce692e0bd990a4ddaa39`
+  - Bytes: 984
+
 ## Upstream: `https://github.com/RustCrypto/formats`
 
 ### `const-oid` 0.10.2
@@ -1299,6 +1329,27 @@ Retained evidence:
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
 
+## Upstream: `https://github.com/mcountryman/simd-adler32`
+
+### `simd-adler32` 0.3.10
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#simd-adler32@0.3.10`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: All targets.
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `MIT`
+- Authors: Marvin Countryman <me@maar.vin>
+- Repository: `https://github.com/mcountryman/simd-adler32`
+- Homepage: None.
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/simd-adler32-0.3.10/LICENSE.md`](THIRD-PARTY-LICENSES/simd-adler32-0.3.10/LICENSE.md)
+  - SHA-256: `42a35170233e83e18856792e748de4c1ce4a63b2afce9a370c89ef3fe23f9f2d`
+  - Bytes: 1078
+
 ## Upstream: `https://github.com/microsoft/windows-rs`
 
 ### `windows-link` 0.2.1
@@ -1604,6 +1655,33 @@ Retained evidence:
 
 Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cargo_metadata-0.20.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/cargo_metadata-0.20.0/LICENSE-MIT)
+  - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
+  - Bytes: 1023
+
+## Upstream: `https://github.com/oyvindln/adler2`
+
+### `adler2` 2.0.1
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#adler2@2.0.1`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: All targets.
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `0BSD OR MIT OR Apache-2.0`
+- Authors: Jonas Schievink <jonasschievink@gmail.com>; oyvindln <oyvindln@users.noreply.github.com>
+- Repository: `https://github.com/oyvindln/adler2`
+- Homepage: None.
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/adler2-2.0.1/LICENSE-0BSD`](THIRD-PARTY-LICENSES/adler2-2.0.1/LICENSE-0BSD)
+  - SHA-256: `861399f8c21c042b110517e76dc6b63a2b334276c8cf17412fc3c8908ca8dc17`
+  - Bytes: 665
+- [`.ahcl/THIRD-PARTY-LICENSES/adler2-2.0.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/adler2-2.0.1/LICENSE-APACHE)
+  - SHA-256: `8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb`
+  - Bytes: 10860
+- [`.ahcl/THIRD-PARTY-LICENSES/adler2-2.0.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/adler2-2.0.1/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
 
@@ -1973,6 +2051,30 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/cfg-if-1.0.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/cfg-if-1.0.5/LICENSE-MIT)
   - SHA-256: `378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397`
   - Bytes: 1057
+
+## Upstream: `https://github.com/rust-lang/flate2-rs`
+
+### `flate2` 1.1.9
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#flate2@1.1.9`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: All targets.
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `MIT OR Apache-2.0`
+- Authors: Alex Crichton <alex@alexcrichton.com>; Josh Triplett <josh@joshtriplett.org>
+- Repository: `https://github.com/rust-lang/flate2-rs`
+- Homepage: `https://github.com/rust-lang/flate2-rs`
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/flate2-1.1.9/LICENSE-APACHE`](THIRD-PARTY-LICENSES/flate2-1.1.9/LICENSE-APACHE)
+  - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
+  - Bytes: 10847
+- [`.ahcl/THIRD-PARTY-LICENSES/flate2-1.1.9/LICENSE-MIT`](THIRD-PARTY-LICENSES/flate2-1.1.9/LICENSE-MIT)
+  - SHA-256: `025436edff4cfcdde17a5811fdea78892d8482efd1abdec5a17872d07a4f2112`
+  - Bytes: 1062
 
 ## Upstream: `https://github.com/rust-lang/hashbrown`
 
@@ -2416,6 +2518,30 @@ Retained evidence:
 - [`.ahcl/THIRD-PARTY-LICENSES/url-2.5.8/LICENSE-MIT`](THIRD-PARTY-LICENSES/url-2.5.8/LICENSE-MIT)
   - SHA-256: `b38f11f6096706e6de553dabe2a7ed142d59b6fa8c97e290c67496154745cdd5`
   - Bytes: 1072
+
+## Upstream: `https://github.com/srijs/rust-crc32fast`
+
+### `crc32fast` 1.5.2
+
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#crc32fast@1.5.2`
+- Role: Transitive
+- Dependency kinds: Normal
+- Target conditions: All targets.
+- Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
+- Checksum: None.
+- Declared license: `MIT OR Apache-2.0`
+- Authors: Sam Rijs <srijs@airpost.net>; Alex Crichton <alex@alexcrichton.com>
+- Repository: `https://github.com/srijs/rust-crc32fast`
+- Homepage: None.
+- Contributing lockfiles: `Cargo.lock`
+
+Retained evidence:
+- [`.ahcl/THIRD-PARTY-LICENSES/crc32fast-1.5.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/crc32fast-1.5.2/LICENSE-APACHE)
+  - SHA-256: `c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08`
+  - Bytes: 11358
+- [`.ahcl/THIRD-PARTY-LICENSES/crc32fast-1.5.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/crc32fast-1.5.2/LICENSE-MIT)
+  - SHA-256: `61d383b05b87d78f94d2937e2580cce47226d17823c0430fbcad09596537efcf`
+  - Bytes: 1097
 
 ## Upstream: `https://github.com/storyyeller/stable_deref_trait`
 
