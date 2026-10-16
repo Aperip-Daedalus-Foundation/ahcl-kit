@@ -39,7 +39,7 @@ use crate::{LicenseTransportError, VerifiedLicense};
 use ahcl_kit_config::AhclVersion;
 use ureq::ResponseExt;
 
-const OFFICIAL_RETRIES: usize = 2;
+const OFFICIAL_RETRIES: usize = 9;
 
 pub trait LicenseTransport: Send + Sync {
     fn execute(&self, request: &LicenseRequest) -> Result<LicenseResponse, LicenseTransportError>;
@@ -47,6 +47,7 @@ pub trait LicenseTransport: Send + Sync {
 
 pub struct OfficialLicenseClient {
     transport: Box<dyn LicenseTransport>,
+    retry_reporter: Option<Box<dyn Fn(usize, usize) + Send + Sync>>,
 }
 
 impl OfficialLicenseClient {
@@ -60,7 +61,16 @@ impl OfficialLicenseClient {
     {
         Self {
             transport: Box::new(transport),
+            retry_reporter: None,
         }
+    }
+
+    pub fn with_retry_reporter<F>(mut self, reporter: F) -> Self
+    where
+        F: Fn(usize, usize) + Send + Sync + 'static,
+    {
+        self.retry_reporter = Some(Box::new(reporter));
+        self
     }
 
     pub fn fetch(&self, version: AhclVersion) -> Result<VerifiedLicense, LicenseError> {
@@ -71,14 +81,20 @@ impl OfficialLicenseClient {
     }
 
     fn execute(&self, request: &LicenseRequest) -> Result<LicenseResponse, LicenseTransportError> {
-        let mut retries_remaining = OFFICIAL_RETRIES;
+        let mut retries_completed = 0;
         loop {
-            match self.transport.execute(request) {
-                Err(error) if retries_remaining > 0 && retryable(error) => {
-                    retries_remaining -= 1;
-                }
-                result => return result,
+            let result = self.transport.execute(request);
+            if !should_retry(&result, retries_completed) {
+                return result;
             }
+            retries_completed += 1;
+            self.report_retry(retries_completed);
+        }
+    }
+
+    fn report_retry(&self, retry: usize) {
+        if let Some(reporter) = &self.retry_reporter {
+            reporter(retry, OFFICIAL_RETRIES);
         }
     }
 }
@@ -109,6 +125,23 @@ fn retryable(error: LicenseTransportError) -> bool {
             | LicenseTransportError::RequestTimeout
             | LicenseTransportError::ResponseReadFailed
     )
+}
+
+fn retryable_status(status: u16) -> bool {
+    matches!(status, 408 | 425 | 429 | 500..=599)
+}
+
+fn should_retry(
+    result: &Result<LicenseResponse, LicenseTransportError>,
+    retries_completed: usize,
+) -> bool {
+    if retries_completed >= OFFICIAL_RETRIES {
+        return false;
+    }
+    match result {
+        Ok(response) => retryable_status(response.status()),
+        Err(error) => retryable(*error),
+    }
 }
 
 struct UreqLicenseTransport {

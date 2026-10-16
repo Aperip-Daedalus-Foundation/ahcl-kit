@@ -47,6 +47,7 @@ use ahcl_kit_materials::{
     ProjectMaterialGenerator, ThirdPartyMaterialGenerator,
 };
 use std::collections::BTreeMap;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use time::OffsetDateTime;
 
@@ -75,7 +76,7 @@ impl ConcreteRuntime {
     pub fn new(current_date: Option<UtcDate>, installed: LanguageInstallation) -> Self {
         Self {
             current_date,
-            license_client: OfficialLicenseClient::new(),
+            license_client: OfficialLicenseClient::new().with_retry_reporter(report_license_retry),
             filesystems: BTreeMap::new(),
             installed,
         }
@@ -106,6 +107,15 @@ impl ConcreteRuntime {
         self.filesystems.insert(key, filesystem);
         Ok(plan)
     }
+}
+
+fn report_license_retry(retry: usize, limit: usize) {
+    let mut stderr = io::stderr().lock();
+    let _ = writeln!(
+        stderr,
+        "[warning] official license request failed; retrying {retry}/{limit}"
+    );
+    let _ = stderr.flush();
 }
 
 impl CommandRuntime for ConcreteRuntime {
