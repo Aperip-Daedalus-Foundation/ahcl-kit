@@ -166,7 +166,8 @@ special-authorization-channel = ""
 子 crate 即使直接声明 `package.license`，也可以通过显式 `kind = "license"`
 映射使用仓库根目录的 `LICENSE`、`COPYING` 或 `COPYRIGHT`，不要求通过 workspace
 继承许可证。映射须指定依赖的准确版本、来源和完整提交哈希，URL 必须指向同一
-仓库的同一提交。映射不能覆盖已有的 `license-file` 声明，也不能借用其他包的许可证。
+仓库的同一提交。包元数据须足以定位该提交中的子 crate，否则会拒绝映射。
+映射不能覆盖已有的 `license-file` 声明，也不能借用其他包的许可证。
 
 </div>
 

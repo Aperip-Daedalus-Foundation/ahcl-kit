@@ -172,8 +172,9 @@ Explicit `kind = "license"` mappings can use a repository-root `LICENSE`,
 `COPYING`, or `COPYRIGHT` even when a subcrate declares `package.license`
 directly instead of inheriting it from the workspace. Specify the dependency's
 exact version, source, and full commit hash, with a URL pointing to the same
-repository and commit. A mapping cannot override `license-file` or borrow a
-license from another package.
+repository and commit. Package metadata must identify the subcrate's location
+at that commit; otherwise the mapping is rejected. A mapping cannot override
+`license-file` or borrow a license from another package.
 
 </div>
 
