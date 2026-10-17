@@ -204,6 +204,9 @@ fn manifest_path_in_vcs(package: &Package, bytes: &[u8]) -> Result<Option<String
 }
 
 fn accept_vcs_path(package: &Package, path: &str) -> Result<Option<String>, CargoError> {
+    if path.is_empty() {
+        return Ok(Some("Cargo.toml".to_owned()));
+    }
     let path = path.trim_matches('/');
     if path.is_empty() || unsafe_vcs_part(path) {
         return Err(upstream_error(
