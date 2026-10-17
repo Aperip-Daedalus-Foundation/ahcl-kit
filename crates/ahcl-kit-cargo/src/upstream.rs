@@ -434,11 +434,15 @@ impl LicenseRecovery<'_> {
         manifest: &LoadedManifest,
         evidence_path: &str,
     ) -> Result<RepoPath, CargoError> {
-        let package_relative = relative_to_manifest_dir(
-            &manifest.path,
-            evidence_path,
-            manifest_allows_shared_license(self.package, &manifest.value, self.mapping.is_some()),
-        )?;
+        // Shared NOTICE belongs to the separate notice recovery path, not license recovery.
+        let allow_shared_license = matches!(evidence_path, "LICENSE" | "COPYING" | "COPYRIGHT")
+            && manifest_allows_shared_license(
+                self.package,
+                &manifest.value,
+                self.mapping.is_some(),
+            );
+        let package_relative =
+            relative_to_manifest_dir(&manifest.path, evidence_path, allow_shared_license)?;
         RepoPath::parse(&package_relative).map_err(|_| {
             upstream_error(
                 self.package,
