@@ -35,7 +35,7 @@ use crate::collector::EvidenceBudget;
 use crate::settings::{CargoEvidence, CargoEvidenceKind};
 use crate::upstream_manifest::{
     UpstreamManifest, exact_revision, fetch_text, immutable_url, is_allowed_repository,
-    manifest_inherits_license, manifest_license_candidate, relative_to_manifest_dir,
+    manifest_allows_shared_license, manifest_license_candidate, relative_to_manifest_dir,
     transport_error, upstream_manifest_path, validate_mapping, verify_manifest,
 };
 use crate::upstream_url::validate_source_url;
@@ -377,10 +377,11 @@ impl LicenseRecovery<'_> {
         let Some(evidence_path) = evidence_path else {
             return Ok(Vec::new());
         };
+        let relative = self.evidence_relative_path(manifest, &evidence_path)?;
         let evidence_url = self.evidence_url(&evidence_path)?;
         self.validate_evidence_url(&evidence_url)?;
         let response = self.fetch_evidence(&evidence_url, &evidence_path)?;
-        self.record(manifest, &evidence_path, &evidence_url, response)
+        self.record(relative, &evidence_url, response)
     }
 
     fn evidence_url(&self, evidence_path: &str) -> Result<String, CargoError> {
@@ -428,25 +429,31 @@ impl LicenseRecovery<'_> {
         Ok(response)
     }
 
-    fn record(
-        &mut self,
+    fn evidence_relative_path(
+        &self,
         manifest: &LoadedManifest,
         evidence_path: &str,
-        evidence_url: &str,
-        response: CargoEvidenceResponse,
-    ) -> Result<Vec<LicenseArtifact>, CargoError> {
+    ) -> Result<RepoPath, CargoError> {
         let package_relative = relative_to_manifest_dir(
             &manifest.path,
             evidence_path,
-            manifest_inherits_license(&manifest.value),
+            manifest_allows_shared_license(self.package, &manifest.value, self.mapping.is_some()),
         )?;
-        let relative = RepoPath::parse(&package_relative).map_err(|_| {
+        RepoPath::parse(&package_relative).map_err(|_| {
             upstream_error(
                 self.package,
                 evidence_path,
                 "evidence path is not repository-safe".to_owned(),
             )
-        })?;
+        })
+    }
+
+    fn record(
+        &mut self,
+        relative: RepoPath,
+        evidence_url: &str,
+        response: CargoEvidenceResponse,
+    ) -> Result<Vec<LicenseArtifact>, CargoError> {
         let mut recovered = Vec::new();
         push_artifact(
             &mut recovered,
