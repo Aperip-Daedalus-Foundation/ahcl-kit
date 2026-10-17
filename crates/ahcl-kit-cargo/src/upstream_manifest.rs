@@ -672,7 +672,34 @@ pub(crate) fn relative_to_manifest_dir(
     Ok(value)
 }
 
-pub(crate) fn manifest_inherits_license(manifest: &toml::Value) -> bool {
+pub(crate) fn manifest_allows_shared_license(
+    package: &Package,
+    manifest: &toml::Value,
+    explicitly_mapped: bool,
+) -> bool {
+    if manifest_inherits_license(manifest) {
+        return true;
+    }
+    // Identity and mapping checks run first. A direct declaration only permits
+    // a shared root file when an explicit mapping establishes that association.
+    explicitly_mapped && direct_license_matches(package, manifest)
+}
+
+fn direct_license_matches(package: &Package, manifest: &toml::Value) -> bool {
+    let Some(table) = manifest.get("package").and_then(toml::Value::as_table) else {
+        return false;
+    };
+    if table.contains_key("license-file") || package.license_file.is_some() {
+        return false;
+    }
+    table
+        .get("license")
+        .and_then(toml::Value::as_str)
+        .filter(|license| !license.trim().is_empty())
+        .is_some_and(|license| package.license.as_deref() == Some(license))
+}
+
+fn manifest_inherits_license(manifest: &toml::Value) -> bool {
     manifest
         .get("package")
         .and_then(toml::Value::as_table)
