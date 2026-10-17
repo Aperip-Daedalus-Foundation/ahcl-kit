@@ -135,11 +135,11 @@ rules = []
 [rust.cargo.evidence.example]
 package = "example-crate"
 version = "1.0.0"
-source = "git+https://example.com/example-crate"
-repository = "https://example.com/example-crate"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+repository = "https://github.com/example/example-crate"
 revision = "0123456789abcdef0123456789abcdef01234567"
 path = "LICENSE"
-url = "https://example.com/example-crate/LICENSE"
+url = "https://raw.githubusercontent.com/example/example-crate/0123456789abcdef0123456789abcdef01234567/LICENSE"
 kind = "license"
 
 [rust.cargo.component.example]
@@ -167,6 +167,13 @@ special-authorization-channel = ""
 `materials-directory` uses `.ahcl`, and omitted languages resolve to an empty
 set. Empty languages allow the generic AHCL project material commands to run
 without invoking an ecosystem adapter.
+
+Explicit `kind = "license"` mappings can use a repository-root `LICENSE`,
+`COPYING`, or `COPYRIGHT` even when a subcrate declares `package.license`
+directly instead of inheriting it from the workspace. Specify the dependency's
+exact version, source, and full commit hash, with a URL pointing to the same
+repository and commit. A mapping cannot override `license-file` or borrow a
+license from another package.
 
 </div>
 

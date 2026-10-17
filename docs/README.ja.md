@@ -25,6 +25,8 @@ npm、pnpm、Yarn、Bun をサポートし、それぞれのロックファイ�
 
 ## インストール
 
+リリースには、次のシステム向けのネイティブパッケージが含まれます。
+
 | システム | アーキテクチャ | パッケージ |
 | --- | --- | --- |
 | Windows | x64、ARM64 | MSI |
@@ -42,6 +44,8 @@ ahcl --version
 
 ## クイックスタート
 
+現在のプロジェクトに完全な設定ひな形を作成します。
+
 ```console
 ahcl config init
 ```
@@ -51,8 +55,23 @@ ahcl config init
 
 ```console
 ahcl project init
+```
+
+設定されたすべてのマテリアルを生成します。
+
+```console
 ahcl project generate
+```
+
+ファイルに書き込まずに変更内容を確認します。
+
+```console
 ahcl project generate --dry-run
+```
+
+生成されたファイルが最新かどうかを確認します。
+
+```console
 ahcl project check
 ```
 
@@ -80,6 +99,8 @@ ahcl project check
 
 ## 設定
 
+</div>
+
 ```text
 schema = 1
 materials-directory = ".ahcl"
@@ -103,7 +124,9 @@ special-authorization-channel = ""
 
 [generation]
 strict-license-files = true
+```
 
+```text
 [rust.cargo]
 manifests:
   - "Cargo.toml"
@@ -113,11 +136,11 @@ rules = []
 [rust.cargo.evidence.example]
 package = "example-crate"
 version = "1.0.0"
-source = "git+https://example.com/example-crate"
-repository = "https://example.com/example-crate"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+repository = "https://github.com/example/example-crate"
 revision = "0123456789abcdef0123456789abcdef01234567"
 path = "LICENSE"
-url = "https://example.com/example-crate/LICENSE"
+url = "https://raw.githubusercontent.com/example/example-crate/0123456789abcdef0123456789abcdef01234567/LICENSE"
 kind = "license"
 
 [rust.cargo.component.example]
@@ -136,6 +159,24 @@ adoption-date = "2026-09-20"
 special-authorization-channel = ""
 ```
 
+<div align="center">
+
+`enabled`、`covered-scope`、`[rust.cargo.evidence.*]`、`[rust.cargo.component.*]`
+は任意です。証拠の `kind` は `license`、`notice`、`materials` です。コンポーネントの
+`layout` は `independent` または `centralized` です。`schema` を省略すると最新の対応スキーマ、`materials-directory` を省略すると
+`.ahcl` が使用されます。言語を省略すると空の集合になります。言語が空でも一般的な
+AHCL プロジェクトマテリアルのコマンドは実行できますが、エコシステムアダプターは
+呼び出されません。
+
+`package.license` を直接宣言するサブクレートでも、明示的な `kind = "license"`
+マッピングでリポジトリ直下の `LICENSE`、`COPYING`、`COPYRIGHT` を指定できます。
+workspace からの継承は必要ありません。依存パッケージの正確なバージョン、取得元、
+完全なコミットハッシュと、同じリポジトリ・コミットを指す URL を指定してください。
+既存の `license-file` 宣言を上書きしたり、他のパッケージのライセンスを流用したり
+することはできません。
+
+</div>
+
 ```text
 [javascript]
 manifests:
@@ -146,6 +187,8 @@ packages = []
 rules = []
 ```
 
+<div align="center">
+
 `managers` は `npm`、`pnpm`、`yarn`、`bun` を受け付けます。省略した場合は、各
 マニフェストの隣にある単一のロックファイル（`package-lock.json`、
 `pnpm-lock.yaml`、`yarn.lock`、またはテキスト形式の `bun.lock`）を使います。
@@ -155,12 +198,7 @@ Yarn classic と Yarn Berry の両方を読み取れます。バイナリの `bu
 レジストリへの接続を行いません。ロックファイルが複数ある場合は `managers` を
 明示してください。
 
-`enabled`、`covered-scope`、`[rust.cargo.evidence.*]`、`[rust.cargo.component.*]`
-は任意です。証拠の `kind` は `license`、`notice`、`materials` です。コンポーネントの
-`layout` は `independent` または `centralized` です。`schema` を省略すると最新の対応スキーマ、`materials-directory` を省略すると
-`.ahcl` が使用されます。言語を省略すると空の集合になります。言語が空でも一般的な
-AHCL プロジェクトマテリアルのコマンドは実行できますが、エコシステムアダプターは
-呼び出されません。
+</div>
 
 AHCL 1.2 の対象範囲の説明が長い場合は、リテラルテキストブロックを使用できます。
 
@@ -181,7 +219,12 @@ covered-scope: |
 従来の `covered-scope = "..."` 形式と `\n` エスケープも引き続き使用できます。
 コンポーネントの `covered-scope` にも同じ構文を使用します。
 
+<div align="center">
+
 ## ソースからのビルド
+
+Rust ツールチェーンのバージョンはリポジトリで固定されています。次のコマンドで
+実行ファイルをビルドします。
 
 ```console
 cargo build-release

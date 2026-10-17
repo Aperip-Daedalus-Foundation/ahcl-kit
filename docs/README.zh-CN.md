@@ -24,6 +24,8 @@ Rust 适配器支持 Cargo 项目。JavaScript 适配器支持 npm、pnpm、Yarn
 
 ## 安装
 
+发布文件为以下系统提供原生安装包：
+
 | 系统 | 架构 | 安装包 |
 | --- | --- | --- |
 | Windows | x64、ARM64 | MSI |
@@ -40,6 +42,8 @@ ahcl --version
 
 ## 快速开始
 
+在当前项目中创建完整的配置模板：
+
 ```console
 ahcl config init
 ```
@@ -48,8 +52,23 @@ ahcl config init
 
 ```console
 ahcl project init
+```
+
+生成所有已配置的材料：
+
+```console
 ahcl project generate
+```
+
+预览变更而不写入文件：
+
+```console
 ahcl project generate --dry-run
+```
+
+检查生成文件是否为最新状态：
+
+```console
 ahcl project check
 ```
 
@@ -75,6 +94,8 @@ ahcl project check
 
 ## 配置
 
+</div>
+
 ```text
 schema = 1
 materials-directory = ".ahcl"
@@ -98,7 +119,9 @@ special-authorization-channel = ""
 
 [generation]
 strict-license-files = true
+```
 
+```text
 [rust.cargo]
 manifests:
   - "Cargo.toml"
@@ -108,11 +131,11 @@ rules = []
 [rust.cargo.evidence.example]
 package = "example-crate"
 version = "1.0.0"
-source = "git+https://example.com/example-crate"
-repository = "https://example.com/example-crate"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+repository = "https://github.com/example/example-crate"
 revision = "0123456789abcdef0123456789abcdef01234567"
 path = "LICENSE"
-url = "https://example.com/example-crate/LICENSE"
+url = "https://raw.githubusercontent.com/example/example-crate/0123456789abcdef0123456789abcdef01234567/LICENSE"
 kind = "license"
 
 [rust.cargo.component.example]
@@ -131,6 +154,22 @@ adoption-date = "2026-09-20"
 special-authorization-channel = ""
 ```
 
+<div align="center">
+
+`enabled`、`covered-scope`、`[rust.cargo.evidence.*]` 和
+`[rust.cargo.component.*]` 是可选项。证据 `kind` 为 `license`、`notice` 或
+`materials`。组件 `layout` 为 `independent` 或 `centralized`。省略 `schema`
+时使用最新支持的 schema；省略 `materials-directory` 时使用
+`.ahcl`；省略语言时解析为空集合。语言集合为空时仍可执行通用 AHCL 项目材料命令，
+但不会调用任何生态适配器。
+
+子 crate 即使直接声明 `package.license`，也可以通过显式 `kind = "license"`
+映射使用仓库根目录的 `LICENSE`、`COPYING` 或 `COPYRIGHT`，不要求通过 workspace
+继承许可证。映射须指定依赖的准确版本、来源和完整提交哈希，URL 必须指向同一
+仓库的同一提交。映射不能覆盖已有的 `license-file` 声明，也不能借用其他包的许可证。
+
+</div>
+
 ```text
 [javascript]
 manifests:
@@ -141,6 +180,8 @@ packages = []
 rules = []
 ```
 
+<div align="center">
+
 `managers` 可取 `npm`、`pnpm`、`yarn` 和 `bun`。省略 `managers` 时，使用每个
 清单旁边唯一的锁文件：`package-lock.json`、`pnpm-lock.yaml`、`yarn.lock` 或
 文本形式的 `bun.lock`。npm 锁文件须为版本 2 或 3，pnpm 锁文件须为版本 6 或 9。
@@ -148,12 +189,7 @@ Yarn classic 与 Yarn Berry 均可读取。二进制 `bun.lockb` 会被拒绝。
 适配器不会安装依赖、遍历 `node_modules` 或访问注册表。存在多个锁文件时，必须
 显式设置 `managers`。
 
-`enabled`、`covered-scope`、`[rust.cargo.evidence.*]` 和
-`[rust.cargo.component.*]` 是可选项。证据 `kind` 为 `license`、`notice` 或
-`materials`。组件 `layout` 为 `independent` 或 `centralized`。省略 `schema`
-时使用最新支持的 schema；省略 `materials-directory` 时使用
-`.ahcl`；省略语言时解析为空集合。语言集合为空时仍可执行通用 AHCL 项目材料命令，
-但不会调用任何生态适配器。
+</div>
 
 AHCL 1.2 的覆盖范围说明较长时，可以使用块文本：
 
@@ -173,7 +209,11 @@ covered-scope: |
 原有的 `covered-scope = "..."` 单行写法仍可使用，也支持 `\n` 转义。
 组件的 `covered-scope` 使用相同语法。
 
+<div align="center">
+
 ## 从源码构建
+
+仓库已固定 Rust 工具链版本，使用以下命令构建可执行文件：
 
 ```console
 cargo build-release
