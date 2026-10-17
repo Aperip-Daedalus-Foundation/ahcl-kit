@@ -255,6 +255,14 @@ impl CheckedUrl<'_> {
     }
 }
 
+pub(crate) fn normalize_repository(value: &str) -> String {
+    let trimmed = value.trim_end_matches('/').trim_end_matches(".git");
+    let Some((host, parts)) = repository_identity(trimmed) else {
+        return trimmed.to_ascii_lowercase();
+    };
+    format!("https://{host}/{}", parts.join("/")).to_ascii_lowercase()
+}
+
 fn repository_identity(value: &str) -> Option<(String, Vec<String>)> {
     let parsed = Url::parse(value).ok()?;
     if !https_url_without_extras(&parsed) {
@@ -294,11 +302,22 @@ fn repository_path_parts(parsed: &Url) -> Option<Vec<String>> {
         .path_segments()?
         .map(str::to_owned)
         .collect::<Vec<_>>();
+    // Browsing refs and directories do not supply the evidence revision or package path.
+    if github_subdirectory_url(parsed, &parts) {
+        parts.truncate(2);
+    }
     strip_git_suffix(&mut parts);
     if parts.len() < 2 || parts.iter().any(|part| path_part_rejected(part)) {
         return None;
     }
     Some(parts)
+}
+
+fn github_subdirectory_url(parsed: &Url, parts: &[String]) -> bool {
+    parsed.host_str() == Some("github.com")
+        && parts.len() >= 5
+        && parts[2] == "tree"
+        && parts.iter().all(|part| !path_part_rejected(part))
 }
 
 fn strip_git_suffix(parts: &mut [String]) {
