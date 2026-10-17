@@ -317,7 +317,7 @@ fn github_subdirectory_url(parsed: &Url, parts: &[String]) -> bool {
     parsed.host_str() == Some("github.com")
         && parts.len() >= 5
         && parts[2] == "tree"
-        && parts.iter().all(|part| !path_part_rejected(part))
+        && parts.iter().all(|part| !part.is_empty())
 }
 
 fn strip_git_suffix(parts: &mut [String]) {
