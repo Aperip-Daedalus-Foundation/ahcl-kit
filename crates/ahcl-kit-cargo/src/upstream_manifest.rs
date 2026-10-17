@@ -36,7 +36,7 @@ use crate::upstream::{
     CargoEvidenceRequest, CargoEvidenceTransport, CargoTransportError, MAX_UPSTREAM_RESPONSE_BYTES,
     upstream_error, upstream_error_fields,
 };
-use crate::upstream_url::{validate_materials_url, validate_source_url};
+use crate::upstream_url::{normalize_repository, validate_materials_url, validate_source_url};
 use ahcl_kit_core::RepoPath;
 use cargo_metadata::Package;
 use serde_json::Value as JsonValue;
@@ -741,13 +741,6 @@ pub(crate) fn join_repo_path(manifest_path: &str, value: &str) -> Result<String,
         });
     }
     Ok(result)
-}
-
-fn normalize_repository(value: &str) -> String {
-    value
-        .trim_end_matches('/')
-        .trim_end_matches(".git")
-        .to_ascii_lowercase()
 }
 
 pub(crate) fn is_allowed_repository(value: &str) -> bool {
