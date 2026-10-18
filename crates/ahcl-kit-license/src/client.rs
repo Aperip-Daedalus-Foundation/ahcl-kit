@@ -145,29 +145,50 @@ fn should_retry(
 }
 
 struct UreqLicenseTransport {
-    agent: ureq::Agent,
+    agent: Result<ureq::Agent, LicenseTransportError>,
 }
 
 impl UreqLicenseTransport {
     fn new() -> Self {
+        Self {
+            agent: Self::configured_agent(),
+        }
+    }
+
+    fn configured_agent() -> Result<ureq::Agent, LicenseTransportError> {
         let config = ureq::Agent::config_builder()
             .https_only(true)
+            .proxy(license_proxy()?)
             .max_redirects(0)
             .http_status_as_error(false)
             .accept_encoding("gzip")
             .timeout_connect(Some(OFFICIAL_CONNECT_TIMEOUT))
             .timeout_global(Some(OFFICIAL_TOTAL_TIMEOUT))
             .build();
-        Self {
-            agent: ureq::Agent::new_with_config(config),
-        }
+        Ok(ureq::Agent::new_with_config(config))
     }
+}
+
+fn license_proxy() -> Result<Option<ureq::Proxy>, LicenseTransportError> {
+    let Some(value) = std::env::var_os("AHCL_LICENSE_PROXY") else {
+        return Ok(ureq::Proxy::try_from_env());
+    };
+    let value = value.to_str().ok_or(LicenseTransportError::RequestFailed)?;
+    if value.eq_ignore_ascii_case("direct") {
+        return Ok(None);
+    }
+    // An explicit license proxy is independent of the generic NO_PROXY rules.
+    ureq::Proxy::new(value)
+        .map(Some)
+        .map_err(|_| LicenseTransportError::RequestFailed)
 }
 
 impl LicenseTransport for UreqLicenseTransport {
     fn execute(&self, request: &LicenseRequest) -> Result<LicenseResponse, LicenseTransportError> {
         let mut response = self
             .agent
+            .as_ref()
+            .map_err(|error| *error)?
             .get(request.url())
             .header("Accept", request.accept())
             .call()
