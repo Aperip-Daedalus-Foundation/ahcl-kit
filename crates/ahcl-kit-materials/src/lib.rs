@@ -37,7 +37,9 @@ mod dependencies;
 mod layout;
 mod platform_fs;
 mod project;
+mod project_history;
 mod render;
+mod render_history;
 mod third_party;
 mod view;
 

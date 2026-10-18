@@ -42,6 +42,12 @@ pub(crate) fn root_license(
 ) -> String {
     let mut rendered = license_notice(config, layout, license);
     append_special_authorization_channel(&mut rendered, config);
+    if config.license().version() != AhclVersion::V1_2 && config.license().history().is_explicit() {
+        let key = scope_key(config);
+        return format!(
+            "----- BEGIN AHCL NOTICE -----\n<!-- AHCL KIT MANAGED SCOPE: {key} -->\n{rendered}\n----- END AHCL NOTICE -----\n"
+        );
+    }
     rendered
 }
 
@@ -169,16 +175,41 @@ pub(crate) fn project_notice(
     }
     rendered.push_str("- AHCL origin: <https://ahcl.aperip.com>\n- Applicable version: AHCL ");
     rendered.push_str(config.license().version().as_str());
-    rendered.push_str("\n- Continuous AHCL Licensing Segment beginning: ");
-    rendered.push_str(&adoption_date.to_string());
-    if config.license().version() == AhclVersion::V1_2 {
-        rendered.push_str("\n- Effective Date: ");
-        rendered.push_str(&adoption_date.to_string());
-    }
+    append_notice_dates(&mut rendered, config, adoption_date);
     rendered.push_str("\n- Version adoption records: `");
     rendered.push_str(layout.materials_directory().as_str());
     rendered.push_str("/AHCL-VERSION-ADOPTION.md`\n");
     rendered
+}
+
+fn append_notice_dates(rendered: &mut String, config: &EffectiveConfig, segment_start: UtcDate) {
+    rendered.push_str(&format!(
+        "\n- Continuous AHCL Licensing Segment beginning: {segment_start}"
+    ));
+    if config.license().version() == AhclVersion::V1_2 {
+        rendered.push_str(&format!("\n- Effective Date: {segment_start}"));
+    }
+    if let Some(date) = config.license().history().effective_date() {
+        rendered.push_str(&format!("\n- Current version Effective Date: {date}"));
+    }
+    let history = config.license().history();
+    if history.is_explicit() {
+        rendered.push_str(&format!(
+            "\n- Current Continuous AHCL Licensing Segment: {}\n- Current revision lineage: {}",
+            history.current_segment(),
+            history.current_lineage()
+        ));
+    }
+    if crate::render_history::interrupted(config) {
+        rendered.push_str("\n- AHCL licensing status: interrupted; the applicable version above describes the closed segment.");
+    } else if config.license().history().is_explicit() {
+        let status = if config.license().enabled() {
+            "active"
+        } else {
+            "not declared"
+        };
+        rendered.push_str(&format!("\n- AHCL licensing status: {status}"));
+    }
 }
 
 pub(crate) fn source(config: &EffectiveConfig) -> String {
@@ -198,33 +229,12 @@ pub(crate) fn source(config: &EffectiveConfig) -> String {
     rendered
 }
 
-pub(crate) fn version_adoption(config: &EffectiveConfig, adoption_date: UtcDate) -> String {
-    if config.license().version() != AhclVersion::V1_2 {
-        return format!(
-            "# AHCL Version Adoption\n\n\
-             - Initial AHCL adoption date: {adoption_date}\n\
-             - Applicable version: AHCL {}\n\n\
-             ## Version Adoption Events\n\n\
-             None.\n",
-            config.license().version().as_str()
-        );
-    }
-    let key = scope_key(config);
-    format!(
-        "# AHCL Version Adoption\n\n\
-         - Covered scope: {}\n\
-         - Initial AHCL adoption date: {adoption_date}\n\
-         - Applicable version: AHCL {}\n\n\
-         ## Version Adoption Events\n\n\
-         <!-- BEGIN AHCL KIT MANAGED SCOPE: {key} -->\n\
-         - Version adoption event: AHCL {} for {}\n\
-         - Effective Date: {adoption_date}\n\
-         <!-- END AHCL KIT MANAGED SCOPE: {key} -->\n",
-        covered_scope(config),
-        config.license().version().as_str(),
-        config.license().version().as_str(),
-        covered_scope(config),
-    )
+pub(crate) fn version_adoption(
+    config: &EffectiveConfig,
+    initial: UtcDate,
+    segment_start: UtcDate,
+) -> String {
+    crate::render_history::version_adoption(config, initial, segment_start)
 }
 
 pub(crate) fn managed_block(config: &EffectiveConfig, body: &str) -> String {

@@ -39,6 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) enum ManagedFileKind {
     License,
     Document,
+    Notice,
     Adoption,
     Official,
     Dependency,
@@ -53,10 +54,8 @@ struct ManagedRange {
 
 struct SpliceInput<'a> {
     existing: &'a str,
-    desired: &'a str,
     kind: ManagedFileKind,
     ranges: &'a [ManagedRange],
-    desired_ranges: &'a [ManagedRange],
     desired_by_key: &'a BTreeMap<String, &'a str>,
 }
 
@@ -118,6 +117,7 @@ fn merge_managed(
     }
     let desired_ranges = managed_ranges(desired, kind)?;
     let ranges = managed_ranges(existing, kind)?;
+    validate_unscoped_adoption(existing, desired, kind, &ranges, &desired_ranges)?;
     merge_range_sets(existing, desired, kind, &ranges, &desired_ranges)
 }
 
@@ -139,6 +139,9 @@ fn merge_range_sets(
     ranges: &[ManagedRange],
     desired_ranges: &[ManagedRange],
 ) -> Result<Option<String>, MaterialsError> {
+    if let Some(output) = merge_unmarked(existing, desired, kind, ranges, desired_ranges)? {
+        return Ok(changed_output(existing, output));
+    }
     if desired_ranges.is_empty() {
         return Ok(None);
     }
@@ -177,10 +180,8 @@ fn splice_managed(
     let existing_keys = existing_key_index(ranges)?;
     let input = SpliceInput {
         existing,
-        desired,
         kind,
         ranges,
-        desired_ranges,
         desired_by_key: &desired_by_key,
     };
     let mut output = String::with_capacity(existing.len() + desired.len());
@@ -231,7 +232,7 @@ fn splice_one(
 ) -> Result<(), MaterialsError> {
     let old = &input.existing[range.start..range.end];
     if let Some(replacement) = input.desired_by_key.get(&range.key) {
-        push_replacement(output, input, range, old, replacement)?;
+        push_replacement(output, input.kind, old, replacement)?;
     } else {
         output.push_str(old);
     }
@@ -240,59 +241,67 @@ fn splice_one(
 
 fn push_replacement(
     output: &mut String,
-    input: &SpliceInput<'_>,
-    range: &ManagedRange,
+    kind: ManagedFileKind,
     old: &str,
     replacement: &str,
 ) -> Result<(), MaterialsError> {
-    if matches!(input.kind, ManagedFileKind::Adoption) && !old.contains("Effective Date:") {
-        push_adoption_event(output, input, range, old)?;
-    } else {
-        output.push_str(replacement);
+    match kind {
+        ManagedFileKind::Adoption => {
+            output.push_str(&crate::project_history::merge_adoption(old, replacement)?)
+        }
+        ManagedFileKind::Notice => {
+            output.push_str(&crate::project_history::merge_notice(old, replacement)?)
+        }
+        _ => output.push_str(replacement),
     }
     Ok(())
 }
 
-// Historical adoption blocks without an effective date keep their record and
-// gain only the new event. Later blocks are replaced as a whole.
-fn push_adoption_event(
-    output: &mut String,
-    input: &SpliceInput<'_>,
-    range: &ManagedRange,
-    old: &str,
+fn merge_unmarked(
+    existing: &str,
+    desired: &str,
+    kind: ManagedFileKind,
+    ranges: &[ManagedRange],
+    desired_ranges: &[ManagedRange],
+) -> Result<Option<String>, MaterialsError> {
+    if !ranges.is_empty() || desired_ranges.len() > 1 {
+        return Ok(None);
+    }
+    match kind {
+        ManagedFileKind::Adoption => {
+            crate::project_history::merge_adoption(existing, desired).map(Some)
+        }
+        ManagedFileKind::Notice => {
+            crate::project_history::merge_notice(existing, desired).map(Some)
+        }
+        _ => Ok(None),
+    }
+}
+
+fn validate_unscoped_adoption(
+    existing: &str,
+    desired: &str,
+    kind: ManagedFileKind,
+    ranges: &[ManagedRange],
+    desired_ranges: &[ManagedRange],
 ) -> Result<(), MaterialsError> {
-    let end_marker = old
-        .rfind("<!-- END AHCL KIT MANAGED SCOPE:")
-        .ok_or_else(ambiguous)?;
-    let desired_range = input
-        .desired_ranges
-        .iter()
-        .find(|candidate| candidate.key == range.key)
-        .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::Plan))?;
-    let desired_block = input
-        .desired
-        .get(desired_range.start..desired_range.end)
-        .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::Plan))?;
-    let event = adoption_event(desired_block);
-    output.push_str(&old[..end_marker]);
-    if !old.contains(event) {
-        output.push('\n');
-        output.push_str(event);
-        output.push('\n');
+    if !matches!(kind, ManagedFileKind::Adoption) {
+        return Ok(());
     }
-    output.push_str(&old[end_marker..]);
+    let mut unscoped = String::new();
+    let mut cursor = 0;
+    for range in ranges {
+        unscoped.push_str(&existing[cursor..range.start]);
+        cursor = range.end;
+    }
+    unscoped.push_str(&existing[cursor..]);
+    for range in desired_ranges {
+        crate::project_history::validate_unscoped_records(
+            &unscoped,
+            &desired[range.start..range.end],
+        )?;
+    }
     Ok(())
-}
-
-fn adoption_event(desired_block: &str) -> &str {
-    let event_start = desired_block
-        .find('\n')
-        .map(|index| index + 1)
-        .unwrap_or(desired_block.len());
-    let event_end = desired_block
-        .rfind("<!-- END AHCL KIT MANAGED SCOPE:")
-        .unwrap_or(desired_block.len());
-    desired_block[event_start..event_end].trim()
 }
 
 fn append_missing_ranges(
