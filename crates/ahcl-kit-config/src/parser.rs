@@ -1028,7 +1028,15 @@ fn project_field(key: &str) -> bool {
 fn license_field(key: &str) -> bool {
     matches!(
         key,
-        "version" | "enabled" | "covered-scope" | "special-authorization-channel"
+        "version"
+            | "enabled"
+            | "covered-scope"
+            | "special-authorization-channel"
+            | "current-segment"
+            | "current-lineage"
+            | "segment-start"
+            | "effective-date"
+            | "history"
     )
 }
 
