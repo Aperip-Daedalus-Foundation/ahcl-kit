@@ -380,7 +380,7 @@ fn license_candidate(
     manifest: &toml::Value,
 ) -> Result<Option<String>, CargoError> {
     let table = package_table(context, manifest)?;
-    reject_package_identity(context, table)?;
+    reject_package_identity(context, table, manifest)?;
     let state = license_fields(table);
     reject_without_applicability(context, &state)?;
     // Inherited workspace license is checked before a package file is accepted.
@@ -397,7 +397,7 @@ fn verify_manifest_fields(
     evidence_path: &str,
 ) -> Result<(), CargoError> {
     let table = package_table(context, manifest)?;
-    reject_package_identity(context, table)?;
+    reject_package_identity(context, table, manifest)?;
     let state = license_fields(table);
     reject_without_applicability(context, &state)?;
     confirm_inherited_license(context, state.inherited)?;
@@ -426,11 +426,11 @@ fn package_table<'a>(
 fn reject_package_identity(
     context: &UpstreamManifest<'_>,
     table: &toml::Table,
+    manifest: &toml::Value,
 ) -> Result<(), CargoError> {
     let name = table.get("name").and_then(toml::Value::as_str);
-    let version = table.get("version").and_then(toml::Value::as_str);
     if name != Some(context.package.name.as_str())
-        || version != Some(context.package.version.to_string().as_str())
+        || !manifest_version_matches(context, table, manifest)?
     {
         return Err(upstream_error(
             context.package,
@@ -439,6 +439,41 @@ fn reject_package_identity(
         ));
     }
     Ok(())
+}
+
+fn manifest_version_matches(
+    context: &UpstreamManifest<'_>,
+    table: &toml::Table,
+    manifest: &toml::Value,
+) -> Result<bool, CargoError> {
+    let version = table.get("version");
+    let expected = context.package.version.to_string();
+    let Some(inherited) = version.and_then(toml::Value::as_table) else {
+        return Ok(version.and_then(toml::Value::as_str) == Some(expected.as_str()));
+    };
+    if inherited.len() != 1
+        || inherited.get("workspace").and_then(toml::Value::as_bool) != Some(true)
+        || !allows_root_workspace_inheritance(context, table, manifest)
+    {
+        return Ok(false);
+    }
+    // Resolve inheritance within the existing immutable repository-root boundary.
+    let root_manifest = workspace_manifest(context)?;
+    let version = root_manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("package"))
+        .and_then(|package| package.get("version"))
+        .and_then(toml::Value::as_str);
+    Ok(version == Some(expected.as_str()))
+}
+
+fn allows_root_workspace_inheritance(
+    context: &UpstreamManifest<'_>,
+    table: &toml::Table,
+    manifest: &toml::Value,
+) -> bool {
+    !table.contains_key("workspace")
+        && (context.manifest_path == "Cargo.toml" || manifest.get("workspace").is_none())
 }
 
 fn license_fields(table: &toml::Table) -> LicenseFields<'_> {
