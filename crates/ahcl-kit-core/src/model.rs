@@ -235,6 +235,7 @@ pub enum CommandId {
     ConfigInit,
     ConfigValidate,
     ConfigShowResolved,
+    ConfigHistory,
     ProjectInit,
     ProjectGenerate,
     ProjectCheck,
@@ -248,9 +249,10 @@ impl CommandId {
         // Each variant is named in one of the matches below, so adding a
         // command fails compilation instead of falling through.
         match self {
-            Self::ConfigInit | Self::ConfigValidate | Self::ConfigShowResolved => {
-                config_command_name(self)
-            }
+            Self::ConfigInit
+            | Self::ConfigValidate
+            | Self::ConfigShowResolved
+            | Self::ConfigHistory => config_command_name(self),
             Self::ProjectInit
             | Self::ProjectGenerate
             | Self::ProjectCheck
@@ -266,6 +268,7 @@ fn config_command_name(command: CommandId) -> &'static str {
         CommandId::ConfigInit => "config.init",
         CommandId::ConfigValidate => "config.validate",
         CommandId::ConfigShowResolved => "config.show-resolved",
+        CommandId::ConfigHistory => "config.history",
         CommandId::ProjectInit
         | CommandId::ProjectGenerate
         | CommandId::ProjectCheck
@@ -283,9 +286,10 @@ fn project_or_material_name(command: CommandId) -> &'static str {
         CommandId::LicenseSync => "license.sync",
         CommandId::DependencyGenerate => "dependency.generate",
         CommandId::ThirdPartyGenerate => "third-party.generate",
-        CommandId::ConfigInit | CommandId::ConfigValidate | CommandId::ConfigShowResolved => {
-            config_command_name(command)
-        }
+        CommandId::ConfigInit
+        | CommandId::ConfigValidate
+        | CommandId::ConfigShowResolved
+        | CommandId::ConfigHistory => config_command_name(command),
     }
 }
 

@@ -36,6 +36,7 @@ mod args;
 mod batch;
 mod discovery;
 mod dispatch;
+mod history;
 mod output;
 mod runtime;
 mod runtime_impl;

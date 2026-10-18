@@ -136,6 +136,9 @@ fn config_only_report(
     if command_id == CommandId::ConfigShowResolved {
         return show_report(runtime, project, path).map(Some);
     }
+    if command_id == CommandId::ConfigHistory {
+        return history_report(runtime, project, path).map(Some);
+    }
     Ok(None)
 }
 
@@ -159,6 +162,8 @@ fn show_report(
     path: &Path,
 ) -> Result<crate::BatchValue<ProjectReport>, RuntimeError> {
     let config = runtime.load_config(project)?;
+    let mut resolved = resolved_config(&config);
+    resolved["licensing_history"] = crate::history::configured_history(&config)?;
     Ok(crate::BatchValue::success(
         ProjectReport::new(
             path.to_path_buf(),
@@ -166,7 +171,25 @@ fn show_report(
             Vec::new(),
             Vec::new(),
         )
-        .with_resolved_config(resolved_config(&config)),
+        .with_resolved_config(resolved),
+    ))
+}
+
+fn history_report(
+    runtime: &mut dyn CommandRuntime,
+    project: &ProjectRoot,
+    path: &Path,
+) -> Result<crate::BatchValue<ProjectReport>, RuntimeError> {
+    let config = runtime.load_config(project)?;
+    let history = crate::history::configured_history(&config)?;
+    Ok(crate::BatchValue::success(
+        ProjectReport::new(
+            path.to_path_buf(),
+            ProjectStatus::Success,
+            Vec::new(),
+            Vec::new(),
+        )
+        .with_resolved_config(history),
     ))
 }
 
@@ -404,7 +427,7 @@ fn remember_adapter(
 fn scopes(command_id: CommandId) -> &'static [PlanScope] {
     match command_id {
         CommandId::ConfigInit => &[PlanScope::ConfigInit],
-        CommandId::ConfigValidate | CommandId::ConfigShowResolved => &[],
+        CommandId::ConfigValidate | CommandId::ConfigShowResolved | CommandId::ConfigHistory => &[],
         CommandId::ProjectInit => &[PlanScope::ProjectInit],
         CommandId::ProjectGenerate | CommandId::ProjectCheck => &[
             PlanScope::ProjectFiles,
@@ -491,6 +514,7 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
             "enabled": config.license().enabled(),
             "covered_scope": config.license().covered_scope(),
             "special_authorization_channel": config.license().special_authorization_channel(),
+            "history": config_value_to_json(&config.license().history().resolved_value()),
         },
         "generation": {
             "strict_license_files": config.generation().strict_license_files(),
@@ -513,7 +537,7 @@ fn resolved_config(config: &EffectiveConfig) -> serde_json::Value {
     value
 }
 
-fn config_value_to_json(value: &ConfigValue) -> serde_json::Value {
+pub(crate) fn config_value_to_json(value: &ConfigValue) -> serde_json::Value {
     match value {
         ConfigValue::Null => serde_json::Value::Null,
         ConfigValue::Bool(value) => serde_json::Value::Bool(*value),
