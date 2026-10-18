@@ -274,7 +274,7 @@ pub fn render_text(report: &CommandReport) -> String {
             project.status.as_str()
         ));
         if let Some(resolved_config) = &project.resolved_config {
-            rendered.push_str(&format!("  resolved_config: {resolved_config}\n"));
+            rendered.push_str(&render_resolved(&report.command_id, resolved_config));
         }
         for change in &project.planned_changes {
             rendered.push_str(&format!("  {} {}\n", change.kind.as_str(), change.path));
@@ -289,6 +289,14 @@ pub fn render_text(report: &CommandReport) -> String {
         }
     }
     rendered
+}
+
+fn render_resolved(command: &str, value: &serde_json::Value) -> String {
+    if command == "config.history" {
+        crate::history::render_text(value)
+    } else {
+        format!("  resolved_config: {value}\n")
+    }
 }
 
 fn display_path(path: &Path) -> String {

@@ -179,6 +179,8 @@ enum ConfigCommand {
     Init(ConfigInitArgs),
     Validate(ConfigValidateArgs),
     Show(ConfigShowArgs),
+    /// Show configured AHCL licensing segments and history without network access.
+    History(ConfigValidateArgs),
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -453,6 +455,7 @@ fn config_command_id(command: &ConfigCommand) -> CommandId {
         ConfigCommand::Init(_) => CommandId::ConfigInit,
         ConfigCommand::Validate(_) => CommandId::ConfigValidate,
         ConfigCommand::Show(_) => CommandId::ConfigShowResolved,
+        ConfigCommand::History(_) => CommandId::ConfigHistory,
     }
 }
 
@@ -469,6 +472,7 @@ fn config_project_args(command: &ConfigCommand) -> &ProjectArgs {
         ConfigCommand::Init(args) => &args.project,
         ConfigCommand::Validate(args) => &args.project,
         ConfigCommand::Show(args) => &args.project,
+        ConfigCommand::History(args) => &args.project,
     }
 }
 
