@@ -475,11 +475,7 @@ impl LicenseRecovery<'_> {
         recovered: &mut Vec<LicenseArtifact>,
         evidence_url: &str,
     ) -> Result<(), CargoError> {
-        if self
-            .existing
-            .iter()
-            .any(|artifact| artifact.relative_path.as_str() == "AHCL-EVIDENCE-SOURCE.md")
-        {
+        if source_note_path_taken(self.existing, recovered) {
             return Ok(());
         }
         let source_note =
@@ -741,11 +737,7 @@ fn push_notice_source(
     write: &mut NoticeWrite<'_>,
     recovered: &mut Vec<LicenseArtifact>,
 ) -> Result<(), CargoError> {
-    if write
-        .existing
-        .iter()
-        .any(|artifact| artifact.relative_path.as_str() == "AHCL-EVIDENCE-SOURCE.md")
-    {
+    if source_note_path_taken(write.existing, recovered) {
         return Ok(());
     }
     let source_note = format!(
@@ -760,6 +752,15 @@ fn push_notice_source(
         source_note.into_bytes(),
         write.package,
     )
+}
+
+fn source_note_path_taken(existing: &[LicenseArtifact], recovered: &[LicenseArtifact]) -> bool {
+    existing.iter().chain(recovered).any(|artifact| {
+        artifact
+            .relative_path
+            .as_str()
+            .eq_ignore_ascii_case("AHCL-EVIDENCE-SOURCE.md")
+    })
 }
 
 fn push_artifact(
