@@ -34,6 +34,7 @@
 
 mod ast;
 mod binding;
+mod history;
 mod host;
 mod parser;
 mod schema;
@@ -41,6 +42,7 @@ mod skeleton;
 
 pub use ast::ScalarValue;
 pub use binding::{ConfigValue, LanguageBinding, LanguageContributor, inline_text, is_config_name};
+pub use history::{HistoryKind, HistoryOverrides, HistoryRecord, LicensingHistory};
 pub use host::{ComponentResolution, HostFailure, LanguageHost, LanguageInstallation};
 pub use parser::{ConfigDocument, ConfigError};
 pub use schema::{

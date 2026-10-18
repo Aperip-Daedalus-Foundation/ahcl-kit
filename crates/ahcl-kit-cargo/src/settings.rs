@@ -32,9 +32,9 @@
 
 use ahcl_kit_config::{
     AhclVersion, ComponentIdentity, ConfigDocument, ConfigError, ConfigValue, EffectiveConfig,
-    LanguageBinding, LanguageContributor, PackageRule, PackageRuleClassification, ScalarValue,
-    inline_text, is_commit_revision, is_config_name, is_secure_https_url, parse_date_at,
-    parse_materials_directory, parse_repo_path, parse_version, validate_scope,
+    HistoryOverrides, LanguageBinding, LanguageContributor, PackageRule, PackageRuleClassification,
+    ScalarValue, inline_text, is_commit_revision, is_config_name, is_secure_https_url,
+    parse_date_at, parse_materials_directory, parse_repo_path, parse_version, validate_scope,
 };
 use ahcl_kit_core::RepoPath;
 use std::any::Any;
@@ -42,6 +42,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const EVIDENCE_PREFIX: &str = "rust.cargo.evidence.";
 const COMPONENT_PREFIX: &str = "rust.cargo.component.";
+const COMPONENTS_PREFIX: &str = "rust.cargo.components.";
 
 pub static CONTRIBUTOR: CargoContributor = CargoContributor;
 
@@ -64,7 +65,7 @@ impl LanguageContributor for CargoContributor {
     fn owns_section(&self, section: &str) -> bool {
         section == "rust.cargo"
             || named_suffix(section, EVIDENCE_PREFIX)
-            || named_suffix(section, COMPONENT_PREFIX)
+            || component_id(section).is_some()
     }
 
     fn known_field(&self, section: &str, key: &str) -> bool {
@@ -74,7 +75,7 @@ impl LanguageContributor for CargoContributor {
         if named_suffix(section, EVIDENCE_PREFIX) {
             return evidence_field_name(key);
         }
-        named_suffix(section, COMPONENT_PREFIX) && component_field_name(key)
+        component_id(section).is_some() && component_field_name(key)
     }
 
     fn load(
@@ -122,24 +123,27 @@ impl CargoBinding {
         config: &EffectiveConfig,
         component: &CargoComponent,
     ) -> Result<EffectiveConfig, ConfigError> {
-        let path = format!("rust.cargo.component.{}", component.id());
-        let mut narrowed = config.for_component_identity(ComponentIdentity {
-            path,
-            package: component.package().to_owned(),
-            enabled: component.enabled(),
-            centralized: component.layout() == ComponentLayout::Centralized,
-            materials_directory: component.materials_directory().cloned(),
-            license_version: component.license_version(),
-            covered_scope: component.covered_scope().map(str::to_owned),
-            right_holders: component.right_holders().map(|values| values.to_vec()),
-            canonical_repository: component.canonical_repository().map(str::to_owned),
-            canonical_branch: component.canonical_branch().map(str::to_owned),
-            contact: component.contact().map(str::to_owned),
-            adoption_date: component.adoption_date(),
-            special_authorization_channel: component
-                .special_authorization_channel()
-                .map(str::to_owned),
-        })?;
+        let path = component.section.clone();
+        let mut narrowed = config.for_component_identity_with_history(
+            ComponentIdentity {
+                path,
+                package: component.package().to_owned(),
+                enabled: component.enabled(),
+                centralized: component.layout() == ComponentLayout::Centralized,
+                materials_directory: component.materials_directory().cloned(),
+                license_version: component.license_version(),
+                covered_scope: component.covered_scope().map(str::to_owned),
+                right_holders: component.right_holders().map(|values| values.to_vec()),
+                canonical_repository: component.canonical_repository().map(str::to_owned),
+                canonical_branch: component.canonical_branch().map(str::to_owned),
+                contact: component.contact().map(str::to_owned),
+                adoption_date: component.adoption_date(),
+                special_authorization_channel: component
+                    .special_authorization_channel()
+                    .map(str::to_owned),
+            },
+            component.history_overrides.as_ref(),
+        )?;
         narrowed.replace_binding(Box::new(self.with_selected_package(component.package())));
         Ok(narrowed)
     }
@@ -200,6 +204,20 @@ impl LanguageBinding for CargoBinding {
             "rust".to_owned(),
             ConfigValue::Object(vec![("cargo".to_owned(), cargo_value(&self.settings))]),
         )
+    }
+
+    fn component_configs(
+        &self,
+        parent: &EffectiveConfig,
+    ) -> Result<Vec<(String, EffectiveConfig)>, ConfigError> {
+        self.settings
+            .components
+            .iter()
+            .map(|component| {
+                self.component_config(parent, component)
+                    .map(|config| (component.id().to_owned(), config))
+            })
+            .collect()
     }
 
     fn package_id_prefixes(&self) -> &'static [&'static str] {
@@ -338,6 +356,7 @@ impl ComponentLayout {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CargoComponent {
     id: String,
+    section: String,
     package: String,
     enabled: bool,
     layout: ComponentLayout,
@@ -350,6 +369,7 @@ pub struct CargoComponent {
     contact: Option<String>,
     adoption_date: Option<ahcl_kit_core::UtcDate>,
     special_authorization_channel: Option<String>,
+    history_overrides: Option<HistoryOverrides>,
 }
 
 impl CargoComponent {
@@ -391,6 +411,10 @@ impl CargoComponent {
     }
     pub fn special_authorization_channel(&self) -> Option<&str> {
         self.special_authorization_channel.as_deref()
+    }
+
+    pub fn history_overrides(&self) -> Option<&HistoryOverrides> {
+        self.history_overrides.as_ref()
     }
 }
 
@@ -437,6 +461,11 @@ fn component_field_name(key: &str) -> bool {
             | "contact"
             | "adoption-date"
             | "special-authorization-channel"
+            | "current-segment"
+            | "current-lineage"
+            | "segment-start"
+            | "effective-date"
+            | "history"
     )
 }
 
@@ -700,8 +729,12 @@ fn evidence_kind_key(kind: CargoEvidenceKind) -> u8 {
 
 fn resolve_components(document: &ConfigDocument) -> Result<Vec<CargoComponent>, ConfigError> {
     let mut result = Vec::new();
+    let mut ids = BTreeSet::new();
     for section in document.section_names() {
         if let Some(component) = component_from_section(document, section)? {
+            if !ids.insert(component.id().to_owned()) {
+                return invalid(section, "duplicate component id");
+            }
             result.push(component);
         }
     }
@@ -712,12 +745,9 @@ fn component_from_section(
     document: &ConfigDocument,
     section: &str,
 ) -> Result<Option<CargoComponent>, ConfigError> {
-    let Some(id) = section.strip_prefix(COMPONENT_PREFIX) else {
+    let Some(id) = component_id(section) else {
         return Ok(None);
     };
-    if !is_config_name(id) {
-        return Ok(None);
-    }
     parse_component(document, section, id).map(Some)
 }
 
@@ -736,6 +766,7 @@ fn parse_component(
     let channels = component_channels(&fields)?;
     Ok(CargoComponent {
         id: id.to_owned(),
+        section: section.to_owned(),
         package,
         enabled: channels.enabled,
         layout,
@@ -748,6 +779,7 @@ fn parse_component(
         contact: channels.contact,
         adoption_date: identity.adoption_date,
         special_authorization_channel: channels.special_authorization_channel,
+        history_overrides: HistoryOverrides::parse(document, section)?,
     })
 }
 
@@ -972,6 +1004,21 @@ fn component_value(component: &CargoComponent) -> ConfigValue {
                 .map(ConfigValue::String)
                 .unwrap_or(ConfigValue::Null),
         ),
+        (
+            "adoption_date".to_owned(),
+            component
+                .adoption_date
+                .map(|date| ConfigValue::String(date.to_string()))
+                .unwrap_or(ConfigValue::Null),
+        ),
+        (
+            "history".to_owned(),
+            component
+                .history_overrides
+                .as_ref()
+                .map(HistoryOverrides::resolved_value)
+                .unwrap_or(ConfigValue::Null),
+        ),
     ])
 }
 
@@ -995,6 +1042,13 @@ fn boolean_field(
         Some(ScalarValue::Boolean(value)) => Ok(Some(*value)),
         Some(_) => invalid(key, "must be a boolean"),
     }
+}
+
+fn component_id(section: &str) -> Option<&str> {
+    section
+        .strip_prefix(COMPONENT_PREFIX)
+        .or_else(|| section.strip_prefix(COMPONENTS_PREFIX))
+        .filter(|id| is_config_name(id))
 }
 
 fn named_suffix(section: &str, prefix: &str) -> bool {

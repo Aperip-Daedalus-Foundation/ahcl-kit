@@ -33,6 +33,25 @@
 use crate::binding::LanguageContributor;
 use crate::schema::LATEST_SCHEMA;
 
+const HISTORY_HINT: &str = "# current-segment = \"initial\"\n\
+# current-lineage = \"main\"\n\
+# segment-start = \"YYYY-MM-DD\"\n\
+# effective-date = \"YYYY-MM-DD\"\n\
+# Omit unknown dates; effective-date needs an explicit date or matching version event.\n\
+# An explicit empty record list is `history = []`.\n\
+# Example record (set covered-scope to the same scope):\n\
+# history:\n\
+#   - id = \"initial-adoption\"\n\
+#     kind = \"initial-adoption\"\n\
+#     segment = \"initial\"\n\
+#     lineage = \"main\"\n\
+#     effective-date = \"YYYY-MM-DD\"\n\
+#     covered-scope = \"the project as a whole\"\n\
+#     version = \"1.2\"\n\
+# Authority and signature are optional for initial-adoption/readoption.\n\
+# Interruption requires non-ahcl-license and authority for all relevant right holders.\n\
+# Version-adoption requires the complete snapshot, including authority and signature.\n";
+
 /// Renders a complete, deterministic starter configuration with no adapters enabled.
 pub struct ConfigSkeleton;
 
@@ -89,6 +108,7 @@ impl ConfigSkeleton {
              [license]\n\
              version = \"1.2\"\n\
              special-authorization-channel = \"\"\n\
+             {HISTORY_HINT}\n\
              \n\
              [generation]\n\
              strict-license-files = true\n",
@@ -120,8 +140,10 @@ impl ConfigSkeleton {
             rendered.push('\n');
         }
         rendered.push_str(
-            "contact = \"\"\nadoption-date = \"\"\n\n[license]\nversion = \"1.2\"\nspecial-authorization-channel = \"\"\n\n[generation]\nstrict-license-files = true\n",
+            "contact = \"\"\nadoption-date = \"\"\n\n[license]\nversion = \"1.2\"\nspecial-authorization-channel = \"\"\n",
         );
+        rendered.push_str(HISTORY_HINT);
+        rendered.push_str("\n[generation]\nstrict-license-files = true\n");
         rendered
     }
 }

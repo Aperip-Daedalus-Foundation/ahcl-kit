@@ -32,7 +32,7 @@
 
 use crate::ast::{DocumentAst, ScalarValue, Value};
 use crate::binding::{ConfigValue, LanguageBinding, LanguageContributor, is_config_name};
-use crate::{ConfigDocument, ConfigError};
+use crate::{ConfigDocument, ConfigError, HistoryOverrides, LicensingHistory};
 use ahcl_kit_core::{RepoPath, ResolvedPackage, UtcDate};
 use std::collections::BTreeSet;
 use std::fmt;
@@ -42,6 +42,10 @@ use url::Url;
 #[path = "schema_glob.rs"]
 mod glob;
 
+#[path = "schema_component.rs"]
+mod component;
+pub use component::ComponentIdentity;
+
 /// Latest supported configuration schema version.
 pub const LATEST_SCHEMA: u32 = 1;
 
@@ -49,7 +53,7 @@ const EVIDENCE_FILE_BYTES: u64 = 2_097_152;
 const FILES_PER_PACKAGE: u64 = 64;
 const AGGREGATE_EVIDENCE_BYTES: u64 = 536_870_912;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AhclVersion {
     V1_0,
     V1_1,
@@ -286,6 +290,7 @@ pub struct LicenseSettings {
     enabled: bool,
     covered_scope: String,
     special_authorization_channel: String,
+    history: LicensingHistory,
 }
 
 impl LicenseSettings {
@@ -303,6 +308,10 @@ impl LicenseSettings {
 
     pub fn special_authorization_channel(&self) -> &str {
         &self.special_authorization_channel
+    }
+
+    pub fn history(&self) -> &LicensingHistory {
+        &self.history
     }
 }
 
@@ -338,23 +347,6 @@ impl ConfigLimits {
     }
 }
 
-/// Identity overrides contributed by one ecosystem component.
-pub struct ComponentIdentity {
-    pub path: String,
-    pub package: String,
-    pub enabled: bool,
-    pub centralized: bool,
-    pub materials_directory: Option<RepoPath>,
-    pub license_version: Option<AhclVersion>,
-    pub covered_scope: Option<String>,
-    pub right_holders: Option<Vec<String>>,
-    pub canonical_repository: Option<String>,
-    pub canonical_branch: Option<String>,
-    pub contact: Option<String>,
-    pub adoption_date: Option<UtcDate>,
-    pub special_authorization_channel: Option<String>,
-}
-
 #[derive(Clone)]
 pub struct EffectiveConfig {
     schema: u32,
@@ -375,9 +367,9 @@ impl EffectiveConfig {
         let requested = requested_languages(ast)?;
         let (languages, bindings) = load_bindings(document, &requested)?;
         let project = resolve_project(ast)?;
-        let license = resolve_license(ast, version)?;
+        let license = resolve_license(document, version, &project)?;
         let generation = resolve_generation(ast)?;
-        Ok(Self {
+        let config = Self {
             schema: LATEST_SCHEMA,
             materials_directory,
             languages,
@@ -386,7 +378,11 @@ impl EffectiveConfig {
             generation,
             bindings,
             limits: default_limits(),
-        })
+        };
+        for binding in config.bindings() {
+            binding.component_configs(&config)?;
+        }
+        Ok(config)
     }
 
     pub fn schema(&self) -> u32 {
@@ -479,55 +475,6 @@ impl EffectiveConfig {
             return;
         }
         self.bindings.push(replacement);
-    }
-
-    pub fn for_component_identity(&self, identity: ComponentIdentity) -> Result<Self, ConfigError> {
-        let version = identity.license_version.unwrap_or(self.license.version);
-        let materials_directory = identity
-            .materials_directory
-            .clone()
-            .unwrap_or_else(|| self.materials_directory.clone());
-        if identity.centralized
-            && (self.license.version != AhclVersion::V1_2
-                || version != AhclVersion::V1_2
-                || materials_directory != self.materials_directory)
-        {
-            return invalid(
-                identity.path,
-                "centralized components require AHCL 1.2 and the parent materials directory"
-                    .to_owned(),
-            );
-        }
-        let right_holders = component_right_holders(&identity, &self.project.right_holders)?;
-        let project = narrowed_project(&self.project, &identity, right_holders);
-        let license = LicenseSettings {
-            version,
-            enabled: identity.enabled,
-            covered_scope: identity
-                .covered_scope
-                .clone()
-                .unwrap_or_else(|| identity.package.clone()),
-            special_authorization_channel: identity
-                .special_authorization_channel
-                .clone()
-                .unwrap_or_else(|| self.license.special_authorization_channel.clone()),
-        };
-        Ok(Self {
-            schema: self.schema,
-            materials_directory,
-            languages: self.languages.clone(),
-            project,
-            license,
-            generation: self.generation,
-            bindings: self.bindings.clone(),
-            limits: self.limits,
-        })
-    }
-
-    pub fn with_covered_scope(&self, covered_scope: &str) -> Self {
-        let mut cloned = self.clone();
-        cloned.license.covered_scope = covered_scope.to_owned();
-        cloned
     }
 
     pub fn with_license_enabled(&self, enabled: bool) -> Self {
@@ -653,10 +600,12 @@ fn resolve_adoption_date(ast: &DocumentAst) -> Result<Option<UtcDate>, ConfigErr
 }
 
 fn resolve_license(
-    ast: &DocumentAst,
+    document: &ConfigDocument,
     version: AhclVersion,
+    project: &ProjectSettings,
 ) -> Result<LicenseSettings, ConfigError> {
-    Ok(LicenseSettings {
+    let ast = document.ast();
+    let mut license = LicenseSettings {
         version,
         enabled: optional_boolean(ast, Some("license"), "enabled")?.unwrap_or(true),
         covered_scope: covered_scope_setting(ast)?,
@@ -666,7 +615,11 @@ fn resolve_license(
             "special-authorization-channel",
         )?
         .unwrap_or_default(),
-    })
+        history: LicensingHistory::default(),
+    };
+    let history = HistoryOverrides::parse(document, "license")?.unwrap_or_default();
+    license.history = LicensingHistory::resolve(history, &license, project, "license")?;
+    Ok(license)
 }
 
 fn covered_scope_setting(ast: &DocumentAst) -> Result<String, ConfigError> {
@@ -803,44 +756,6 @@ fn push_language_binding(
     Ok(fallback)
 }
 
-fn component_right_holders(
-    identity: &ComponentIdentity,
-    parent: &[String],
-) -> Result<Vec<String>, ConfigError> {
-    match &identity.right_holders {
-        Some(values) if values.is_empty() => invalid(
-            format!("{}.right-holders", identity.path),
-            "must not be explicitly empty".to_owned(),
-        ),
-        Some(values) => Ok(values.clone()),
-        None => Ok(parent.to_vec()),
-    }
-}
-
-fn narrowed_project(
-    parent: &ProjectSettings,
-    identity: &ComponentIdentity,
-    right_holders: Vec<String>,
-) -> ProjectSettings {
-    ProjectSettings {
-        name: identity.package.clone(),
-        canonical_repository: identity
-            .canonical_repository
-            .clone()
-            .unwrap_or_else(|| parent.canonical_repository.clone()),
-        canonical_branch: identity
-            .canonical_branch
-            .clone()
-            .unwrap_or_else(|| parent.canonical_branch.clone()),
-        right_holders,
-        contact: identity
-            .contact
-            .clone()
-            .unwrap_or_else(|| parent.contact.clone()),
-        adoption_date: identity.adoption_date.or(parent.adoption_date),
-    }
-}
-
 pub(crate) fn fields_for_section(
     ast: &DocumentAst,
     section: &str,
@@ -911,10 +826,9 @@ fn reserved_scope_line(line: &str) -> bool {
 pub fn parse_date_at(value: &str, path: &str) -> Result<UtcDate, ConfigError> {
     let parts: Vec<_> = value.split('-').collect();
     if parts.len() != 3
-        || parts
-            .iter()
-            .zip([4, 2, 2])
-            .any(|(part, length)| part.len() != length)
+        || parts.iter().zip([4, 2, 2]).any(|(part, length)| {
+            part.len() != length || !part.bytes().all(|byte| byte.is_ascii_digit())
+        })
     {
         return invalid(path.to_owned(), "must use YYYY-MM-DD".to_owned());
     }

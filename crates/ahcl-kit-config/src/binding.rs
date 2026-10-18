@@ -30,7 +30,7 @@
 //
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
-use crate::{ConfigDocument, ConfigError};
+use crate::{ConfigDocument, ConfigError, EffectiveConfig};
 use ahcl_kit_core::ResolvedPackage;
 use std::any::Any;
 
@@ -71,6 +71,14 @@ pub trait LanguageBinding: Send + Sync {
     fn summary_lines(&self) -> Vec<String>;
 
     fn resolved_entry(&self) -> (String, ConfigValue);
+
+    /// Resolves locally configured components without loading a package graph.
+    fn component_configs(
+        &self,
+        _parent: &EffectiveConfig,
+    ) -> Result<Vec<(String, EffectiveConfig)>, ConfigError> {
+        Ok(Vec::new())
+    }
 
     fn package_id_prefixes(&self) -> &'static [&'static str];
 
