@@ -353,8 +353,9 @@ fn license_artifacts(
     }
     let mut artifacts = collector::collect(package, request.limits(), budget)?;
     // Packaged evidence comes first. Upstream fills only the gaps that remain.
-    extend_upstream_evidence(package, request, transport, budget, &mut artifacts)?;
-    if !has_license_evidence(package, &artifacts) && request.strict_license_files() {
+    let has_license =
+        extend_upstream_evidence(package, request, transport, budget, &mut artifacts)?;
+    if !has_license && request.strict_license_files() {
         return Err(CargoError::MissingLicenseEvidence {
             package_id: package_id.to_owned(),
             package: package.name.to_string(),
@@ -372,16 +373,19 @@ fn extend_upstream_evidence(
     transport: &dyn CargoEvidenceTransport,
     budget: &mut EvidenceBudget,
     artifacts: &mut Vec<LicenseArtifact>,
-) -> Result<(), CargoError> {
-    if !has_license_evidence(package, artifacts) {
+) -> Result<bool, CargoError> {
+    let mut has_license = has_license_evidence(package, artifacts);
+    if !has_license {
         let recovered = upstream::recover(package, request, transport, budget, artifacts)?;
+        // Verified license evidence does not need a conventional output filename.
+        has_license = !recovered.is_empty();
         artifacts.extend(recovered);
     }
     let notices = upstream::recover_notice(package, request, transport, budget, artifacts)?;
     artifacts.extend(notices);
     let materials = upstream::supplement_materials(package, request, budget, artifacts)?;
     artifacts.extend(materials);
-    Ok(())
+    Ok(has_license)
 }
 
 fn retain_included_edges(
