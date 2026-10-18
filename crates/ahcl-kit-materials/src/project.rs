@@ -296,7 +296,8 @@ impl ProjectMaterialGenerator {
         if first.license().version() != AhclVersion::V1_2 {
             return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
         }
-        let bodies = collect_centralized_bodies(scopes, license, adoption_date, &first_layout)?;
+        let bodies =
+            collect_centralized_bodies(view, scopes, license, adoption_date, &first_layout)?;
         write_centralized_files(view, &first_layout, license, bodies)
     }
 
@@ -460,6 +461,7 @@ struct CentralizedBodies {
 }
 
 fn collect_centralized_bodies(
+    view: &dyn ProjectView,
     scopes: &[EffectiveConfig],
     license: &VerifiedLicense,
     adoption_date: UtcDate,
@@ -473,12 +475,20 @@ fn collect_centralized_bodies(
         include_official: false,
     };
     for scope in scopes {
-        push_centralized_scope(&mut bodies, scope, license, adoption_date, first_layout)?;
+        push_centralized_scope(
+            view,
+            &mut bodies,
+            scope,
+            license,
+            adoption_date,
+            first_layout,
+        )?;
     }
     Ok(bodies)
 }
 
 fn push_centralized_scope(
+    view: &dyn ProjectView,
     bodies: &mut CentralizedBodies,
     scope: &EffectiveConfig,
     license: &VerifiedLicense,
@@ -490,8 +500,8 @@ fn push_centralized_scope(
     if !same_centralized_layout(scope, &layout, first_layout) {
         return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
     }
-    if scope.license().enabled() {
-        push_enabled_scope(bodies, scope, &layout, license, adoption_date);
+    if scope.license().enabled() || scope.license().history().is_explicit() {
+        push_enabled_scope(view, bodies, scope, &layout, license, adoption_date)?;
     }
     Ok(())
 }
@@ -506,26 +516,34 @@ fn same_centralized_layout(
 }
 
 fn push_enabled_scope(
+    view: &dyn ProjectView,
     bodies: &mut CentralizedBodies,
     scope: &EffectiveConfig,
     layout: &LayoutPolicy,
     license: &VerifiedLicense,
     adoption_date: UtcDate,
-) {
-    bodies.include_official = true;
-    bodies
-        .licenses
-        .push(render::root_license(scope, layout, license));
+) -> Result<(), MaterialsError> {
+    let adoption_date = scope.project().adoption_date().unwrap_or(adoption_date);
+    if scope.license().enabled() {
+        bodies.include_official = true;
+        bodies
+            .licenses
+            .push(render::root_license(scope, layout, license));
+    }
     bodies.notices.push(render::managed_block(
         scope,
-        &render::project_notice(scope, layout, adoption_date),
+        &crate::project_history::notice(view, scope, layout, adoption_date)?,
     ));
     bodies
         .sources
         .push(render::managed_block(scope, &render::source(scope)));
-    bodies
-        .adoptions
-        .push(render::version_adoption(scope, adoption_date));
+    bodies.adoptions.push(crate::project_history::adoption(
+        view,
+        scope,
+        layout,
+        adoption_date,
+    )?);
+    Ok(())
 }
 
 fn write_centralized_files(
@@ -559,7 +577,7 @@ fn write_centralized_license_files(
         desired,
         layout.project_notice_path()?,
         &bodies.notices,
-        ManagedFileKind::Document,
+        ManagedFileKind::Notice,
     )?;
     Ok(())
 }
@@ -617,6 +635,9 @@ fn add_project_files(
     if config.license().enabled() {
         add_licensed_project_files(view, plan, config, license, adoption_date, &layout)?;
     }
+    if !config.license().enabled() && config.license().history().is_explicit() {
+        add_project_document_files(view, plan, config, adoption_date, &layout)?;
+    }
     add_dependency_file(view, plan, config, &layout)?;
     add_optional_project_files(view, plan, config, &layout)
 }
@@ -668,17 +689,22 @@ fn add_project_document_files(
         view,
         plan,
         layout.project_notice_path()?,
-        &[document_body(
+        &[render::managed_block(
             config,
-            render::project_notice(config, layout, adoption_date),
+            &crate::project_history::notice(view, config, layout, adoption_date)?,
         )],
-        ManagedFileKind::Document,
+        ManagedFileKind::Notice,
     )?;
     write_managed(
         view,
         plan,
         layout.version_adoption_path()?,
-        &[render::version_adoption(config, adoption_date)],
+        &[crate::project_history::adoption(
+            view,
+            config,
+            layout,
+            adoption_date,
+        )?],
         ManagedFileKind::Adoption,
     )?;
     write_managed(
