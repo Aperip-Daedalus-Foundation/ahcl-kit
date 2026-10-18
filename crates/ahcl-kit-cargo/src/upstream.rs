@@ -139,7 +139,6 @@ impl UreqCargoEvidenceTransport {
     pub(crate) fn new() -> Self {
         let config = ureq::Agent::config_builder()
             .https_only(true)
-            .proxy(None)
             .max_redirects(0)
             .http_status_as_error(false)
             .accept_encoding("")
