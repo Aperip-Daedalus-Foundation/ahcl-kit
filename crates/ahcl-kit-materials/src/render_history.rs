@@ -34,6 +34,9 @@ use crate::render;
 use ahcl_kit_config::{EffectiveConfig, HistoryKind, HistoryRecord};
 use ahcl_kit_core::UtcDate;
 
+#[path = "history_text.rs"]
+pub(crate) mod text;
+
 pub(crate) const CONFIGURED: &str = "<!-- AHCL KIT HISTORY CONFIGURED -->";
 pub(crate) const SUMMARY_BEGIN: &str = "<!-- BEGIN AHCL KIT HISTORY SUMMARY -->";
 pub(crate) const SUMMARY_END: &str = "<!-- END AHCL KIT HISTORY SUMMARY -->";
@@ -65,17 +68,18 @@ pub(crate) fn version_adoption(
 fn summary(config: &EffectiveConfig, initial: UtcDate, segment: UtcDate) -> String {
     let history = config.license().history();
     let initial = config.project().adoption_date().unwrap_or(initial);
-    let mut body = format!(
-        "{SUMMARY_BEGIN}\n- Covered scope: {}\n- Initial AHCL adoption date: {initial}\n\
+    let mut body = format!("{SUMMARY_BEGIN}\n{}\n", text::MARKER);
+    push_field(&mut body, "covered-scope", scope(config));
+    body.push_str(&format!(
+        "- Initial AHCL adoption date: {initial}\n\
          - Current Continuous AHCL Licensing Segment: {}\n\
          - Current revision lineage: {}\n\
          - Continuous AHCL Licensing Segment beginning: {segment}\n\
          - Applicable version: AHCL {}\n",
-        render::covered_scope(config),
-        history.current_segment(),
-        history.current_lineage(),
+        text::literal(history.current_segment()),
+        text::literal(history.current_lineage()),
         config.license().version().as_str(),
-    );
+    ));
     if let Some(date) = history.effective_date() {
         body.push_str(&format!("- Current version Effective Date: {date}\n"));
     }
@@ -106,20 +110,16 @@ pub(crate) fn interrupted(config: &EffectiveConfig) -> bool {
 }
 
 pub(crate) fn scope(config: &EffectiveConfig) -> &str {
-    let scope = config.license().covered_scope();
-    if scope.trim().is_empty() {
-        "the project as a whole"
-    } else {
-        scope
-    }
+    ahcl_kit_config::matching_scope(config.license().covered_scope())
 }
 
 fn render_record(record: &HistoryRecord) -> String {
     let mut body = format!(
-        "{RECORD_BEGIN}{} -->\n### {}: {}\n\n",
+        "{RECORD_BEGIN}{} -->\n{}\n### {}: {}\n\n",
         record.id(),
+        text::MARKER,
         record.kind().as_str(),
-        record.id(),
+        text::literal(record.id()),
     );
     for (key, value) in record.fields() {
         push_field(&mut body, key, value);
@@ -130,7 +130,8 @@ fn render_record(record: &HistoryRecord) -> String {
 
 fn push_field(body: &mut String, key: &str, value: &str) {
     let label = field_label(key);
-    let mut lines = value.split('\n');
+    let literal = text::literal(value);
+    let mut lines = literal.split('\n');
     body.push_str(&format!(
         "- {label}: {}\n",
         lines.next().unwrap_or_default()

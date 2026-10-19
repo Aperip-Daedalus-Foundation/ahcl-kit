@@ -64,7 +64,7 @@ fn license_notice(
     }
 }
 
-fn v1_0_license_notice(directory: &str, filename: &str) -> String {
+pub(crate) fn v1_0_license_notice(directory: &str, filename: &str) -> String {
     format!(
         "This project is licensed under version 1.0 of the Aperip Heimdall Commons\n\
          License (AHCL 1.0).\n\n\
@@ -75,7 +75,7 @@ fn v1_0_license_notice(directory: &str, filename: &str) -> String {
     )
 }
 
-fn v1_1_license_notice(directory: &str, filename: &str) -> String {
+pub(crate) fn v1_1_license_notice(directory: &str, filename: &str) -> String {
     format!(
         "This project is licensed under version 1.1 of the Aperip Heimdall Commons\n\
          License (AHCL 1.1).\n\n\
@@ -123,7 +123,7 @@ fn append_special_authorization_channel(rendered: &mut String, config: &Effectiv
     }
 }
 
-fn special_authorization_section(channel: &str, version: &str) -> String {
+pub(crate) fn special_authorization_section(channel: &str, version: &str) -> String {
     let mut section = String::from("\nChannels for Non-AHCL Special Authorizations:\n");
     section.push_str(channel);
     section.push_str(
@@ -283,7 +283,9 @@ pub(crate) fn covered_scope(config: &EffectiveConfig) -> String {
     if scope.is_empty() {
         "the project as a whole".to_owned()
     } else {
-        inline(scope)
+        crate::render_history::text::literal(
+            &scope.split_whitespace().collect::<Vec<_>>().join(" "),
+        )
     }
 }
 
