@@ -158,13 +158,14 @@ impl ChangePlan {
     }
 
     /// Records a planning input without replacing an earlier observation.
+    /// Case-only read probes may coexist, but must not alias a planned change.
     pub fn expect_entry(&mut self, path: RepoPath, entry: ProjectEntry) -> Result<(), PlanError> {
         if let Some(expected) = self.expected_entries.get(&path) {
             if expected != &entry {
                 return Err(PlanError::ConflictingObservation { path });
             }
         }
-        self.reserve_path(&path)?;
+        self.check_reserved_path(&path)?;
         self.expected_entries.entry(path).or_insert(entry);
         Ok(())
     }
@@ -256,21 +257,34 @@ impl ChangePlan {
         if self.changes.contains_key(&path) {
             return Err(PlanError::ConflictingChange { path });
         }
+        let portable_key = portable_path_key(&path);
+        if self
+            .expected_entries
+            .keys()
+            .any(|expected| expected != &path && portable_path_key(expected) == portable_key)
+        {
+            return Err(PlanError::ConflictingChange { path });
+        }
         self.reserve_path(&path)?;
         self.changes.insert(path, change);
         Ok(())
     }
 
     fn reserve_path(&mut self, path: &RepoPath) -> Result<(), PlanError> {
-        let portable_key = portable_path_key(path);
+        self.check_reserved_path(path)?;
+        self.portable_paths
+            .insert(portable_path_key(path), path.clone());
+        Ok(())
+    }
+
+    fn check_reserved_path(&self, path: &RepoPath) -> Result<(), PlanError> {
         if self
             .portable_paths
-            .get(&portable_key)
+            .get(&portable_path_key(path))
             .is_some_and(|existing| existing != path)
         {
             return Err(PlanError::ConflictingChange { path: path.clone() });
         }
-        self.portable_paths.insert(portable_key, path.clone());
         Ok(())
     }
 }
