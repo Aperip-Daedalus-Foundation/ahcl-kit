@@ -31,5 +31,5 @@
 # SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
 [toolchain]
-channel = "1.99.0"
+channel = "1.99.1"
 profile = "minimal"
