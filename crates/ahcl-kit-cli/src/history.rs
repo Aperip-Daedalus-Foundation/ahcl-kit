@@ -31,7 +31,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
 use crate::{RuntimeError, dispatch::config_value_to_json};
-use ahcl_kit_config::{EffectiveConfig, inline_text};
+use ahcl_kit_config::{EffectiveConfig, inline_text, matching_scope};
 use serde_json::{Value, json};
 
 pub(crate) fn configured_history(config: &EffectiveConfig) -> Result<Value, RuntimeError> {
@@ -78,7 +78,7 @@ fn render_scope(output: &mut String, scope: &Value) {
     output.push_str(&format!(
         "\n  Scope {}: {}\n",
         text(&scope["id"]),
-        text(&scope["covered_scope"])
+        scope_text(&scope["covered_scope"])
     ));
     output.push_str(&format!(
         "    Project: {}\n    Canonical repository: {}\n",
@@ -86,9 +86,10 @@ fn render_scope(output: &mut String, scope: &Value) {
         text(&scope["canonical_repository"])
     ));
     output.push_str(&format!(
-        "    Initial AHCL adoption: {}\n    Configured version: AHCL {}\n",
+        "    Initial AHCL adoption: {}\n    Configured version: AHCL {} (enabled: {})\n",
         text(&scope["initial_adoption_date"]),
-        text(&scope["version"])
+        text(&scope["version"]),
+        text(&scope["enabled"])
     ));
     let history = &scope["history"];
     output.push_str(&format!(
@@ -127,11 +128,19 @@ fn render_record(output: &mut String, record: &Value) {
     }
 }
 
+fn scope_text(value: &Value) -> String {
+    value
+        .as_str()
+        .map(matching_scope)
+        .map(inline_text)
+        .unwrap_or_else(|| text(value))
+}
+
 fn text(value: &Value) -> String {
     match value {
         Value::String(value) if !value.is_empty() => inline_text(value),
         Value::Null => "unknown".to_owned(),
-        Value::String(_) => "the project as a whole".to_owned(),
+        Value::String(_) => "(empty)".to_owned(),
         _ => value.to_string(),
     }
 }
