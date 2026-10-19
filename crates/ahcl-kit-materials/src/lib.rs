@@ -35,6 +35,7 @@
 mod apply;
 mod dependencies;
 mod layout;
+mod planning_view;
 mod platform_fs;
 mod project;
 mod project_history;
@@ -94,7 +95,7 @@ struct PlanInputs<'a> {
 }
 
 struct PlannedDocuments {
-    writes: BTreeMap<RepoPath, Vec<u8>>,
+    changes: ChangePlan,
     removals: Vec<crate::ManagedRemoval>,
     diagnostics: Vec<ahcl_kit_core::Diagnostic>,
 }
@@ -103,9 +104,9 @@ fn plan_documents(input: PlanInputs<'_>) -> Result<PlannedDocuments, MaterialsEr
     let layout = LayoutPolicy::from_config(input.config)?;
     let dependency_path = layout.dependencies_path()?;
     let documents = generate_documents(&input)?;
-    let writes = collect_document_writes(&documents, &dependency_path)?;
+    let changes = collect_document_writes(&documents, &dependency_path)?;
     Ok(PlannedDocuments {
-        writes,
+        changes,
         removals: documents.removals,
         diagnostics: documents.diagnostics,
     })
@@ -151,21 +152,35 @@ fn generate_documents(input: &PlanInputs<'_>) -> Result<GeneratedDocuments, Mate
 fn collect_document_writes(
     documents: &GeneratedDocuments,
     dependency_path: &RepoPath,
-) -> Result<BTreeMap<RepoPath, Vec<u8>>, MaterialsError> {
+) -> Result<ChangePlan, MaterialsError> {
     let mut writes = BTreeMap::new();
     collect_writes(&mut writes, &documents.project, Some(dependency_path))?;
     collect_writes(&mut writes, &documents.license_plan, None)?;
     collect_writes(&mut writes, &documents.dependency, None)?;
     collect_writes(&mut writes, &documents.third_party, None)?;
-    Ok(writes)
+    let mut desired = desired_plan(writes)?;
+    for plan in [
+        &documents.project,
+        &documents.license_plan,
+        &documents.dependency,
+        &documents.third_party,
+    ] {
+        // Keep inputs even when their write was unchanged or superseded above.
+        desired
+            .extend_expectations(plan)
+            .map_err(MaterialsError::from_plan)?;
+    }
+    Ok(desired)
 }
 
 fn assemble_plan(
     view: &dyn ProjectView,
     planned: PlannedDocuments,
 ) -> Result<MaterialGenerationPlan, MaterialsError> {
-    let desired = desired_plan(planned.writes)?;
-    let changes = desired.compare(view).map_err(MaterialsError::from_plan)?;
+    let changes = planned
+        .changes
+        .compare(view)
+        .map_err(MaterialsError::from_plan)?;
     Ok(MaterialGenerationPlan::new(
         changes,
         planned.removals,

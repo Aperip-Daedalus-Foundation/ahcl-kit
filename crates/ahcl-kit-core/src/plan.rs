@@ -125,10 +125,15 @@ impl Change {
 }
 
 /// A byte-stably ordered set of changes which can be compared without writing.
+///
+/// Expected entries retain the first planning observations, including read-only
+/// dependencies and writes suppressed as unchanged. Validation is optimistic:
+/// it neither locks entries nor provides an atomic compare-and-swap or transaction.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ChangePlan {
     changes: BTreeMap<RepoPath, Change>,
     portable_paths: BTreeMap<String, RepoPath>,
+    expected_entries: BTreeMap<RepoPath, ProjectEntry>,
 }
 
 impl ChangePlan {
@@ -152,9 +157,58 @@ impl ChangePlan {
         self.changes.is_empty()
     }
 
-    /// Compares the plan against capability-owned project observations.
+    /// Records a planning input without replacing an earlier observation.
+    pub fn expect_entry(&mut self, path: RepoPath, entry: ProjectEntry) -> Result<(), PlanError> {
+        if let Some(expected) = self.expected_entries.get(&path) {
+            if expected != &entry {
+                return Err(PlanError::ConflictingObservation { path });
+            }
+        }
+        self.reserve_path(&path)?;
+        self.expected_entries.entry(path).or_insert(entry);
+        Ok(())
+    }
+
+    /// Includes observations for inputs whose own output is unchanged.
+    pub fn expected_entries(&self) -> impl Iterator<Item = (&RepoPath, &ProjectEntry)> {
+        self.expected_entries.iter()
+    }
+
+    /// Carries read dependencies through plan composition; disagreements fail.
+    pub fn extend_expectations(&mut self, source: &Self) -> Result<(), PlanError> {
+        for (path, entry) in source.expected_entries() {
+            self.expect_entry(path.clone(), entry.clone())?;
+        }
+        Ok(())
+    }
+
+    /// Validates the entire read set without changing its baseline or writing.
+    pub fn validate_expectations(&self, view: &dyn ProjectView) -> Result<(), PlanError> {
+        for (path, expected) in self.expected_entries() {
+            validate_expected(view, path, expected)?;
+        }
+        Ok(())
+    }
+
+    /// Rechecks a guarded target immediately before a caller commits it.
+    /// An unobserved target has no guard; callers must still enforce create-only
+    /// and no-follow rules. A later concurrent write can still race this check.
+    pub fn validate_expected_entry(
+        &self,
+        view: &dyn ProjectView,
+        path: &RepoPath,
+    ) -> Result<(), PlanError> {
+        if let Some(expected) = self.expected_entries.get(path) {
+            validate_expected(view, path, expected)?;
+        }
+        Ok(())
+    }
+
+    /// Compares against live observations, preserving and validating prior inputs.
     pub fn compare(&self, view: &dyn ProjectView) -> Result<Self, PlanError> {
+        self.validate_expectations(view)?;
         let mut compared = Self::new();
+        compared.extend_expectations(self)?;
         for change in self.changes.values() {
             compared.classify_change(change, view)?;
         }
@@ -166,7 +220,11 @@ impl ChangePlan {
         change: &Change,
         view: &dyn ProjectView,
     ) -> Result<(), PlanError> {
-        let entry = observed_entry(view, change.path())?;
+        let entry = match self.expected_entries.get(change.path()) {
+            Some(expected) => expected.clone(),
+            None => observed_entry(view, change.path())?,
+        };
+        self.expect_entry(change.path().clone(), entry.clone())?;
         // Writes and removals stay on separate paths: equal bytes suppress a
         // write, while any present entry still requires an explicit remove.
         match change.kind() {
@@ -195,12 +253,24 @@ impl ChangePlan {
 
     fn insert(&mut self, change: Change) -> Result<(), PlanError> {
         let path = change.path().clone();
-        let portable_key = portable_path_key(&path);
-        if self.changes.contains_key(&path) || self.portable_paths.contains_key(&portable_key) {
+        if self.changes.contains_key(&path) {
             return Err(PlanError::ConflictingChange { path });
         }
-        self.portable_paths.insert(portable_key, path.clone());
+        self.reserve_path(&path)?;
         self.changes.insert(path, change);
+        Ok(())
+    }
+
+    fn reserve_path(&mut self, path: &RepoPath) -> Result<(), PlanError> {
+        let portable_key = portable_path_key(path);
+        if self
+            .portable_paths
+            .get(&portable_key)
+            .is_some_and(|existing| existing != path)
+        {
+            return Err(PlanError::ConflictingChange { path: path.clone() });
+        }
+        self.portable_paths.insert(portable_key, path.clone());
         Ok(())
     }
 }
@@ -210,6 +280,20 @@ fn observed_entry(view: &dyn ProjectView, path: &RepoPath) -> Result<ProjectEntr
         path: path.clone(),
         source,
     })
+}
+
+fn validate_expected(
+    view: &dyn ProjectView,
+    path: &RepoPath,
+    expected: &ProjectEntry,
+) -> Result<(), PlanError> {
+    let entry = view
+        .entry(path)
+        .map_err(|_| PlanError::StaleEntry { path: path.clone() })?;
+    if &entry != expected {
+        return Err(PlanError::StaleEntry { path: path.clone() });
+    }
+    Ok(())
 }
 
 fn write_kind(
@@ -241,6 +325,12 @@ pub enum PlanError {
     ConflictingChange {
         path: RepoPath,
     },
+    ConflictingObservation {
+        path: RepoPath,
+    },
+    StaleEntry {
+        path: RepoPath,
+    },
     MissingBytes {
         path: RepoPath,
     },
@@ -259,6 +349,18 @@ impl fmt::Display for PlanError {
             Self::ConflictingChange { path } => {
                 write!(formatter, "duplicate planned change for {path}")
             }
+            Self::ConflictingObservation { path } => {
+                write!(
+                    formatter,
+                    "planning inputs disagree for {path}; replan before applying"
+                )
+            }
+            Self::StaleEntry { path } => {
+                write!(
+                    formatter,
+                    "planning input changed or cannot be verified for {path}; replan before applying"
+                )
+            }
             Self::MissingBytes { path } => {
                 write!(formatter, "write change is missing bytes for {path}")
             }
@@ -275,6 +377,8 @@ impl std::error::Error for PlanError {
         match self {
             Self::View { source, .. } => Some(source),
             Self::ConflictingChange { .. }
+            | Self::ConflictingObservation { .. }
+            | Self::StaleEntry { .. }
             | Self::MissingBytes { .. }
             | Self::UnsupportedEntry { .. } => None,
         }

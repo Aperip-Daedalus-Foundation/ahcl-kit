@@ -39,10 +39,25 @@ use ahcl_kit_core::{ChangeKind, ChangePlan, RepoPath};
 pub struct PlanApplier;
 
 impl PlanApplier {
+    /// Checks the complete planning read set before any writes or managed removals.
+    /// This does not reserve entries; callers must still recheck write targets.
+    pub fn preflight(
+        filesystem: &ProjectFilesystem,
+        compared_plan: &ChangePlan,
+    ) -> Result<(), MaterialsError> {
+        compared_plan
+            .validate_expectations(filesystem)
+            .map_err(MaterialsError::from_plan)
+    }
+
+    /// Applies an optimistically validated plan, not an atomic multi-file transaction.
+    /// A concurrent edit after a check can still race the commit. A later failure
+    /// leaves earlier commits in place; historical records are never rolled back.
     pub fn apply(
         filesystem: &ProjectFilesystem,
         compared_plan: &ChangePlan,
     ) -> Result<(), MaterialsError> {
+        Self::preflight(filesystem, compared_plan)?;
         let mut writes = Vec::new();
         for change in compared_plan.changes() {
             if change.kind() == ChangeKind::Remove {
@@ -63,6 +78,9 @@ impl PlanApplier {
         }
 
         for (path, kind, bytes) in writes {
+            compared_plan
+                .validate_expected_entry(filesystem, path.repo_path())
+                .map_err(MaterialsError::from_plan)?;
             let replace = kind == ChangeKind::Replace;
             filesystem.root.atomic_write(&path, bytes, replace)?;
         }

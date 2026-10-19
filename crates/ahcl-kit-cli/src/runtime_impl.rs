@@ -185,8 +185,12 @@ impl CommandRuntime for ConcreteRuntime {
         Ok(plan.changes().clone())
     }
 
-    fn compare(&mut self, _: &ProjectRoot, plan: &ChangePlan) -> Result<ChangePlan, RuntimeError> {
-        Ok(plan.clone())
+    fn compare(
+        &mut self,
+        project: &ProjectRoot,
+        plan: &ChangePlan,
+    ) -> Result<ChangePlan, RuntimeError> {
+        plan.compare(self.filesystem(project)?).map_err(plan_error)
     }
 
     fn apply(&mut self, project: &ProjectRoot, plan: &ChangePlan) -> Result<(), RuntimeError> {
@@ -204,9 +208,11 @@ impl CommandRuntime for ConcreteRuntime {
 
     fn compare_project(
         &mut self,
-        _: &ProjectRoot,
+        project: &ProjectRoot,
         plan: RuntimePlan,
     ) -> Result<RuntimePlan, RuntimeError> {
+        PlanApplier::preflight(self.filesystem(project)?, plan.changes())
+            .map_err(materials_error)?;
         Ok(plan)
     }
 
@@ -216,6 +222,8 @@ impl CommandRuntime for ConcreteRuntime {
         plan: &RuntimePlan,
     ) -> Result<(), RuntimeError> {
         let filesystem = self.filesystem(project)?;
+        // Read dependencies must be checked before managed removals as well as writes.
+        PlanApplier::preflight(filesystem, plan.changes()).map_err(materials_error)?;
         if let Some(materials_directory) = plan.managed_materials_directory() {
             let managed = filesystem
                 .managed_third_party_dir(materials_directory)
@@ -314,6 +322,11 @@ fn dependency_kind_rank(kind: ahcl_kit_core::DependencyKind) -> u8 {
 
 fn prefix_plan(source: &ChangePlan, prefix: Option<&RepoPath>) -> Result<ChangePlan, RuntimeError> {
     let mut result = ChangePlan::new();
+    for (path, entry) in source.expected_entries() {
+        result
+            .expect_entry(prefixed_path(prefix, path)?, entry.clone())
+            .map_err(plan_error)?;
+    }
     for change in source.changes() {
         let path = prefixed_path(prefix, change.path())?;
         match change.kind() {
@@ -349,6 +362,7 @@ fn prefix_diagnostic(
 }
 
 fn append_plan(target: &mut ChangePlan, source: &ChangePlan) -> Result<(), RuntimeError> {
+    target.extend_expectations(source).map_err(plan_error)?;
     for change in source.changes() {
         append_change(target, change)?;
     }
@@ -673,5 +687,10 @@ fn materials_error(error: ahcl_kit_materials::MaterialsError) -> RuntimeError {
 }
 
 fn plan_error(error: ahcl_kit_core::PlanError) -> RuntimeError {
-    RuntimeError::with_source("materials.plan", error)
+    let code = match &error {
+        ahcl_kit_core::PlanError::StaleEntry { .. } => "materials.plan_stale",
+        ahcl_kit_core::PlanError::ConflictingObservation { .. } => "materials.plan_conflict",
+        _ => "materials.plan",
+    };
+    RuntimeError::with_source(code, error)
 }
