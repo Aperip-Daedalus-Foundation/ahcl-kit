@@ -31,6 +31,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
 use crate::LayoutPolicy;
+use crate::planning_view::PlanningView;
 use crate::render;
 use ahcl_kit_config::{
     AhclVersion, ConfigDocument, ConfigError, ConfigSkeleton, EffectiveConfig, LanguageContributor,
@@ -262,9 +263,11 @@ impl ProjectMaterialGenerator {
         force: bool,
         contributors: &[&'static dyn LanguageContributor],
     ) -> Result<ChangePlan, MaterialsError> {
+        let view = PlanningView::new(view);
         let prepared =
-            prepare_init_document(view, identity, license, current_date, force, contributors)?;
-        commit_init_plan(view, prepared, license, current_date)
+            prepare_init_document(&view, identity, license, current_date, force, contributors)?;
+        let plan = commit_init_plan(&view, prepared, license, current_date)?;
+        view.finish(plan)
     }
 
     pub fn plan_project_files(
@@ -274,13 +277,14 @@ impl ProjectMaterialGenerator {
         initial_adoption_date: UtcDate,
     ) -> Result<ChangePlan, MaterialsError> {
         validate_license(config, license)?;
+        let view = PlanningView::new(view);
         let adoption_date = config
             .project()
             .adoption_date()
             .unwrap_or(initial_adoption_date);
         let mut desired = ChangePlan::new();
-        add_project_files(view, &mut desired, config, license, adoption_date)?;
-        compare(desired, view)
+        add_project_files(&view, &mut desired, config, license, adoption_date)?;
+        view.finish(desired)
     }
 
     pub fn plan_centralized_files(
@@ -289,6 +293,7 @@ impl ProjectMaterialGenerator {
         license: &VerifiedLicense,
         adoption_date: UtcDate,
     ) -> Result<ChangePlan, MaterialsError> {
+        let view = PlanningView::new(view);
         let first = scopes
             .first()
             .ok_or_else(|| MaterialsError::new(MaterialsErrorCode::Plan))?;
@@ -297,8 +302,9 @@ impl ProjectMaterialGenerator {
             return Err(MaterialsError::new(MaterialsErrorCode::InvalidLayout));
         }
         let bodies =
-            collect_centralized_bodies(view, scopes, license, adoption_date, &first_layout)?;
-        write_centralized_files(view, &first_layout, license, bodies)
+            collect_centralized_bodies(&view, scopes, license, adoption_date, &first_layout)?;
+        let plan = write_centralized_files(&view, &first_layout, license, bodies)?;
+        view.finish(plan)
     }
 
     pub fn plan_license_sync(
@@ -449,7 +455,7 @@ fn commit_init_plan(
         )?;
     }
     add_project_files(view, &mut desired, &config, license, adoption_date)?;
-    compare(desired, view)
+    Ok(desired)
 }
 
 struct CentralizedBodies {
@@ -556,7 +562,7 @@ fn write_centralized_files(
     write_centralized_license_files(view, &mut desired, layout, &bodies)?;
     write_centralized_source_files(view, &mut desired, layout, &bodies)?;
     write_official_license(view, &mut desired, layout, license, bodies.include_official)?;
-    compare(desired, view)
+    Ok(desired)
 }
 
 fn write_centralized_license_files(
@@ -880,11 +886,20 @@ fn map_config_error(_: ConfigError) -> MaterialsError {
 }
 
 fn map_plan_error(error: PlanError) -> MaterialsError {
-    let code = match error {
-        PlanError::View { .. } => MaterialsErrorCode::View,
+    match error {
+        PlanError::StaleEntry { path } => MaterialsError::filesystem_at(
+            "materials.plan_stale",
+            "planning input changed or cannot be verified; replan before applying",
+            path,
+        ),
+        PlanError::ConflictingObservation { path } => MaterialsError::filesystem_at(
+            "materials.plan_conflict",
+            "planning inputs disagree; replan before applying",
+            path,
+        ),
+        PlanError::View { .. } => MaterialsError::new(MaterialsErrorCode::View),
         PlanError::ConflictingChange { .. }
         | PlanError::MissingBytes { .. }
-        | PlanError::UnsupportedEntry { .. } => MaterialsErrorCode::Plan,
-    };
-    MaterialsError::new(code)
+        | PlanError::UnsupportedEntry { .. } => MaterialsError::new(MaterialsErrorCode::Plan),
+    }
 }

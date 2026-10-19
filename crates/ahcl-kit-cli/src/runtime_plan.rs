@@ -149,8 +149,9 @@ fn license_changes(
 ) -> Result<ChangePlan, RuntimeError> {
     let mut changes = centralized.unwrap_or_default();
     if changes.is_empty() {
-        changes = ProjectMaterialGenerator::plan_license_sync(filesystem, config, license)
+        let license_plan = ProjectMaterialGenerator::plan_license_sync(filesystem, config, license)
             .map_err(super::materials_error)?;
+        append_plan(&mut changes, &license_plan)?;
     }
     Ok(changes)
 }

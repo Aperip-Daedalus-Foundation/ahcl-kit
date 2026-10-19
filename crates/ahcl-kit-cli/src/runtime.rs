@@ -383,11 +383,22 @@ impl RuntimeError {
     }
 
     fn safe_source_message(&self) -> Option<String> {
-        let source = self.source.as_deref()?;
-        if let Some(error) = source.downcast_ref::<HostFailure>() {
-            return Some(error.message().to_owned());
+        match self.code.as_str() {
+            "materials.plan_stale" => Some(
+                "planning input changed or cannot be verified; replan before applying".to_owned(),
+            ),
+            "materials.plan_conflict" => {
+                Some("planning inputs disagree; replan before applying".to_owned())
+            }
+            _ => self.host_failure_message(),
         }
-        None
+    }
+
+    fn host_failure_message(&self) -> Option<String> {
+        self.source
+            .as_deref()?
+            .downcast_ref::<HostFailure>()
+            .map(|error| error.message().to_owned())
     }
 }
 
