@@ -104,17 +104,18 @@ fn notice_start(
 ) -> Result<UtcDate, MaterialsError> {
     let history = config.license().history();
     let prior = prior_start(old)?;
+    let same_group = notice_group(old)
+        == (
+            history.current_segment().to_owned(),
+            history.current_lineage().to_owned(),
+        );
     if let Some(start) = configured_start(config) {
-        let same_group = notice_group(old)
-            == (
-                history.current_segment().to_owned(),
-                history.current_lineage().to_owned(),
-            );
         if same_group && prior.is_some_and(|prior| prior != start) {
             return Err(conflict());
         }
         return Ok(start);
     }
+    let prior = prior.filter(|_| same_group);
     Ok(prior.or(history.segment_start()).unwrap_or(initial))
 }
 
