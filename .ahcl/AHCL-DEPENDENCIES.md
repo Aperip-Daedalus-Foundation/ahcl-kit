@@ -2315,25 +2315,25 @@ Retained evidence:
 
 ## Upstream: `https://github.com/serde-rs/json`
 
-### `serde_json` 1.0.151
+### `serde_json` 1.0.154
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.151`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.154`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
 - Cargo source: `registry+https://github.com/rust-lang/crates.io-index`
 - Checksum: None.
 - Declared license: `MIT OR Apache-2.0`
-- Authors: Erick Tryzelaar <erick.tryzelaar@gmail.com>; David Tolnay <dtolnay@gmail.com>
+- Authors: None.
 - Repository: `https://github.com/serde-rs/json`
 - Homepage: None.
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/serde_json-1.0.154/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_json-1.0.154/LICENSE-APACHE)
   - SHA-256: `62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a`
   - Bytes: 9723
-- [`.ahcl/THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_json-1.0.151/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/serde_json-1.0.154/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_json-1.0.154/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
 
@@ -2732,9 +2732,9 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `toml` 1.1.7+spec-1.1.0
+### `toml` 1.1.8+spec-1.1.0
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml@1.1.7+spec-1.1.0`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml@1.1.8+spec-1.1.0`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2747,10 +2747,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.7_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-1.1.7_2Bspec-1.1.0/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.7_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-1.1.7_2Bspec-1.1.0/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
