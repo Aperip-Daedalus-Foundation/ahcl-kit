@@ -293,13 +293,25 @@ fn validate_kind(path: &str, record: &HistoryRecord) -> Result<(), ConfigError> 
         required(path, &record.fields, "effective-date")?;
     }
     match record.kind {
-        HistoryKind::InitialAdoption | HistoryKind::Readoption => {
-            required_fields(path, &record.fields, &["version"])
-        }
+        HistoryKind::InitialAdoption => required_fields(path, &record.fields, &["version"]),
+        HistoryKind::Readoption => validate_readoption(path, record),
         HistoryKind::VersionAdoption => validate_version_adoption(path, record),
         HistoryKind::Interruption => validate_interruption(path, &record.fields),
         HistoryKind::Record => required_fields(path, &record.fields, &["title", "notes"]),
     }
+}
+
+fn validate_readoption(path: &str, record: &HistoryRecord) -> Result<(), ConfigError> {
+    required_fields(path, &record.fields, &["version"])?;
+    if record.fields.contains_key("previous-lineage")
+        && !record.fields.contains_key("previous-segment")
+    {
+        return invalid(
+            &format!("{path}.previous-lineage"),
+            "requires previous-segment to identify a complete predecessor group",
+        );
+    }
+    Ok(())
 }
 
 fn validate_version_adoption(path: &str, record: &HistoryRecord) -> Result<(), ConfigError> {

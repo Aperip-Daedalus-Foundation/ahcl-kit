@@ -249,6 +249,11 @@ impl LicensingHistory {
         self.segment_start
     }
 
+    /// Whether the segment beginning was explicitly supplied as a scalar date.
+    pub fn segment_start_explicit(&self) -> bool {
+        self.supplied.segment_start.is_some()
+    }
+
     pub fn effective_date(&self) -> Option<UtcDate> {
         self.effective_date
     }
@@ -294,7 +299,7 @@ impl LicensingHistory {
             ),
             (
                 "segment_start_explicit".to_owned(),
-                ConfigValue::Bool(self.supplied.segment_start.is_some()),
+                ConfigValue::Bool(self.segment_start_explicit()),
             ),
             (
                 "effective_date_explicit".to_owned(),
@@ -358,7 +363,8 @@ fn string_value(value: Option<&str>) -> ConfigValue {
         .unwrap_or(ConfigValue::Null)
 }
 
-pub(crate) fn matching_scope(scope: &str) -> &str {
+/// Uses the whole-project scope only for blank input; retains all other scope text.
+pub fn matching_scope(scope: &str) -> &str {
     if scope.trim().is_empty() {
         "the project as a whole"
     } else {
