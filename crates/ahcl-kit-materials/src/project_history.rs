@@ -31,7 +31,7 @@
 // SPDX-License-Identifier: LicenseRef-AHCL-1.2
 
 use crate::{LayoutPolicy, MaterialsError, render, render_history};
-use ahcl_kit_config::{AhclVersion, ConfigValue, EffectiveConfig, HistoryKind, HistoryRecord};
+use ahcl_kit_config::{AhclVersion, EffectiveConfig, HistoryKind, HistoryRecord};
 use ahcl_kit_core::{ProjectEntry, ProjectView, UtcDate};
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -103,23 +103,37 @@ fn notice_start(
     initial: UtcDate,
 ) -> Result<UtcDate, MaterialsError> {
     let history = config.license().history();
+    let prior = prior_start(old)?;
     if let Some(start) = configured_start(config) {
+        let same_group = notice_group(old)
+            == (
+                history.current_segment().to_owned(),
+                history.current_lineage().to_owned(),
+            );
+        if same_group && prior.is_some_and(|prior| prior != start) {
+            return Err(conflict());
+        }
         return Ok(start);
     }
+    Ok(prior.or(history.segment_start()).unwrap_or(initial))
+}
+
+fn prior_start(old: &str) -> Result<Option<UtcDate>, MaterialsError> {
     let dates: Vec<_> = old
         .lines()
         .filter_map(|line| line.strip_prefix("- Continuous AHCL Licensing Segment beginning: "))
         .collect();
     match dates.as_slice() {
-        [] => Ok(history.segment_start().unwrap_or(initial)),
+        [] => Ok(None),
         [date] => ahcl_kit_config::parse_date_at(date.trim(), "project notice segment beginning")
+            .map(Some)
             .map_err(|_| conflict()),
         _ => Err(conflict()),
     }
 }
 
 fn configured_start(config: &EffectiveConfig) -> Option<UtcDate> {
-    if scalar_supplied(config, "segment_start_explicit") {
+    if config.license().history().segment_start_explicit() {
         return config.license().history().segment_start();
     }
     config
@@ -137,15 +151,6 @@ fn record_starts_current_segment(config: &EffectiveConfig, record: &HistoryRecor
             record.kind(),
             HistoryKind::InitialAdoption | HistoryKind::Readoption
         )
-}
-
-fn scalar_supplied(config: &EffectiveConfig, name: &str) -> bool {
-    let ConfigValue::Object(fields) = config.license().history().resolved_value() else {
-        return false;
-    };
-    fields
-        .iter()
-        .any(|(key, value)| key == name && *value == ConfigValue::Bool(true))
 }
 
 fn validate_notice_version(config: &EffectiveConfig, old: &str) -> Result<(), MaterialsError> {
@@ -191,10 +196,71 @@ fn authorizes_version(
         return false;
     }
     match record.kind() {
-        HistoryKind::VersionAdoption => config.license().version() > prior,
-        HistoryKind::Readoption => distinct_segment(old, record),
+        HistoryKind::VersionAdoption => authorizes_upgrade(config, old, prior, record),
+        HistoryKind::Readoption => previous_matches(old, record) && distinct_segment(old, record),
         _ => false,
     }
+}
+
+fn authorizes_upgrade(
+    config: &EffectiveConfig,
+    old: &str,
+    prior: AhclVersion,
+    record: &HistoryRecord,
+) -> bool {
+    config.license().version() > prior
+        && matches_notice_group(old, record.segment(), record.lineage())
+        && record
+            .from_version()
+            .is_some_and(|base| reachable_version(config, prior, base))
+}
+
+fn reachable_version(config: &EffectiveConfig, prior: AhclVersion, target: AhclVersion) -> bool {
+    // A lower parallel baseline does not revert the already-applicable maximum.
+    // Higher baselines require supplied upgrade steps; every step strictly
+    // increases its version, so this traversal cannot cycle or infer dates.
+    if target <= prior {
+        return true;
+    }
+    config.license().history().records().iter().any(|record| {
+        upgrade_step(config, record, target)
+            && record
+                .from_version()
+                .is_some_and(|base| reachable_version(config, prior, base))
+    })
+}
+
+fn upgrade_step(config: &EffectiveConfig, record: &HistoryRecord, target: AhclVersion) -> bool {
+    record.kind() == HistoryKind::VersionAdoption
+        && matches_current_group(config, record)
+        && record.version() == Some(target)
+}
+
+fn previous_matches(old: &str, record: &HistoryRecord) -> bool {
+    let Some(previous) = record.fields().get("previous-segment") else {
+        return true;
+    };
+    let lineage = record
+        .fields()
+        .get("previous-lineage")
+        .map(String::as_str)
+        .unwrap_or_else(|| record.lineage());
+    matches_notice_group(old, previous, lineage)
+}
+
+fn matches_notice_group(old: &str, segment: &str, lineage: &str) -> bool {
+    summary_value(old, "Current Continuous AHCL Licensing Segment")
+        .is_none_or(|value| value.trim() == segment)
+        && summary_value(old, "Current revision lineage")
+            .is_none_or(|value| value.trim() == lineage)
+}
+
+fn notice_group(text: &str) -> (String, String) {
+    (
+        summary_value(text, "Current Continuous AHCL Licensing Segment")
+            .unwrap_or_else(|| "initial".to_owned()),
+        summary_value(text, "Current revision lineage").unwrap_or_else(|| "main".to_owned()),
+    )
 }
 
 fn matches_current_record(config: &EffectiveConfig, record: &HistoryRecord) -> bool {
@@ -209,15 +275,12 @@ fn matches_current_group(config: &EffectiveConfig, record: &HistoryRecord) -> bo
 }
 
 fn distinct_segment(old: &str, record: &HistoryRecord) -> bool {
-    let previous = old
-        .lines()
-        .find_map(|line| line.strip_prefix("- Current Continuous AHCL Licensing Segment: "))
-        .or_else(|| record.fields().get("previous-segment").map(String::as_str))
-        .unwrap_or("initial");
-    let lineage = old
-        .lines()
-        .find_map(|line| line.strip_prefix("- Current revision lineage: "))
-        .unwrap_or("main");
+    let previous = summary_value(old, "Current Continuous AHCL Licensing Segment")
+        .or_else(|| record.fields().get("previous-segment").cloned())
+        .unwrap_or_else(|| "initial".to_owned());
+    let lineage = summary_value(old, "Current revision lineage")
+        .or_else(|| record.fields().get("previous-lineage").cloned())
+        .unwrap_or_else(|| "main".to_owned());
     (record.segment(), record.lineage()) != (previous.trim(), lineage.trim())
 }
 
@@ -258,9 +321,10 @@ fn record_scope(record: &str) -> Result<String, MaterialsError> {
         .into_iter()
         .find(|field| field.key == "Covered scope")
         .ok_or_else(conflict)?;
-    Ok(record[scope.range]
-        .trim_end_matches(['\r', '\n'])
-        .replace("\r\n", "\n"))
+    Ok(render_history::text::normalized(
+        record,
+        record[scope.range].trim_end_matches(['\r', '\n']),
+    ))
 }
 
 fn record_ranges(text: &str) -> Result<BTreeMap<String, Range<usize>>, MaterialsError> {
@@ -363,14 +427,9 @@ fn merge_summary(old: &str, desired: &str) -> Result<String, MaterialsError> {
 }
 
 fn preserve_summary_date(old: &str, desired: &str) -> Result<String, MaterialsError> {
-    let same_state = [
-        "Applicable version",
-        "Current Continuous AHCL Licensing Segment",
-        "Current revision lineage",
-    ]
-    .iter()
-    .all(|key| summary_value(old, key) == summary_value(desired, key));
-    if !same_state || summary_value(desired, "Current version Effective Date").is_some() {
+    if !same_summary_state(old, desired)
+        || summary_value(desired, "Current version Effective Date").is_some()
+    {
         return Ok(desired.to_owned());
     }
     let date = fields(old)?
@@ -386,10 +445,15 @@ fn preserve_summary_date(old: &str, desired: &str) -> Result<String, MaterialsEr
     Ok(output)
 }
 
-fn summary_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+fn same_summary_state(old: &str, desired: &str) -> bool {
+    summary_value(old, "Applicable version") == summary_value(desired, "Applicable version")
+        && notice_group(old) == notice_group(desired)
+}
+
+fn summary_value(text: &str, key: &str) -> Option<String> {
     text.lines().find_map(|line| {
         let (label, value) = line.strip_prefix("- ")?.split_once(": ")?;
-        (label == key).then_some(value)
+        (label == key).then(|| render_history::text::normalized(text, value))
     })
 }
 
@@ -469,8 +533,8 @@ fn compatible_fields(old: &str, desired: &str) -> Result<(), MaterialsError> {
             .iter()
             .find(|prior| prior.key == field.key)
             .ok_or_else(conflict)?;
-        let old_value = old[prior.range.clone()].replace("\r\n", "\n");
-        if old_value != desired[field.range].replace("\r\n", "\n") {
+        let old_value = render_history::text::normalized(old, &old[prior.range.clone()]);
+        if old_value != render_history::text::normalized(desired, &desired[field.range]) {
             return Err(conflict());
         }
     }
@@ -479,10 +543,28 @@ fn compatible_fields(old: &str, desired: &str) -> Result<(), MaterialsError> {
 
 pub(crate) fn merge_notice(old: &str, desired: &str) -> Result<String, MaterialsError> {
     let mut output = old.to_owned();
+    if !same_summary_state(old, desired) {
+        remove_missing_notice_field(&mut output, desired, "Current version Effective Date")?;
+        remove_missing_notice_field(&mut output, desired, "Effective Date")?;
+    }
     for field in fields(desired)?.into_iter().rev() {
         update_notice_field(&mut output, desired, &field)?;
     }
     Ok(output)
+}
+
+fn remove_missing_notice_field(
+    output: &mut String,
+    desired: &str,
+    key: &str,
+) -> Result<(), MaterialsError> {
+    if summary_value(desired, key).is_some() {
+        return Ok(());
+    }
+    if let Some(field) = fields(output)?.iter().find(|field| field.key == key) {
+        output.replace_range(notice_field_range(output, field), "");
+    }
+    Ok(())
 }
 
 fn update_notice_field(

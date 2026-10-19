@@ -35,6 +35,9 @@ use crate::render;
 use ahcl_kit_core::{ChangePlan, ProjectEntry, ProjectView, RepoPath};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "project_legacy.rs"]
+mod legacy;
+
 #[derive(Clone, Copy)]
 pub(super) enum ManagedFileKind {
     License,
@@ -274,6 +277,7 @@ fn merge_unmarked(
         ManagedFileKind::Notice => {
             crate::project_history::merge_notice(existing, desired).map(Some)
         }
+        ManagedFileKind::License => legacy::merge(existing, desired, !desired_ranges.is_empty()),
         _ => Ok(None),
     }
 }
