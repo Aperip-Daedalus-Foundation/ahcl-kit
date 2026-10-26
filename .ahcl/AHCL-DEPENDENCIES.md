@@ -283,9 +283,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/algesten/ureq`
 
-### `ureq` 3.4.2
+### `ureq` 3.4.3
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq@3.4.2`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq@3.4.3`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -298,10 +298,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.3/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.4.3/LICENSE-APACHE)
   - SHA-256: `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`
   - Bytes: 11357
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.3/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.4.3/LICENSE-MIT)
   - SHA-256: `7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721`
   - Bytes: 1072
 
@@ -2222,9 +2222,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/rustls/rustls`
 
-### `rustls` 0.23.45
+### `rustls` 0.23.46
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustls@0.23.45`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustls@0.23.46`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2237,13 +2237,13 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-ISC)
   - SHA-256: `7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4`
   - Bytes: 775
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-MIT)
   - SHA-256: `709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c`
   - Bytes: 1082
 
@@ -2270,9 +2270,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/rustls/webpki-roots`
 
-### `webpki-roots` 1.0.9
+### `webpki-roots` 1.0.11
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#webpki-roots@1.0.9`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#webpki-roots@1.0.11`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2285,7 +2285,7 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/webpki-roots-1.0.9/LICENSE`](THIRD-PARTY-LICENSES/webpki-roots-1.0.9/LICENSE)
+- [`.ahcl/THIRD-PARTY-LICENSES/webpki-roots-1.0.11/LICENSE`](THIRD-PARTY-LICENSES/webpki-roots-1.0.11/LICENSE)
   - SHA-256: `e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8`
   - Bytes: 2371
 
