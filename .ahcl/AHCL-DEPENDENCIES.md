@@ -2222,9 +2222,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/rustls/rustls`
 
-### `rustls` 0.23.45
+### `rustls` 0.23.46
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustls@0.23.45`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustls@0.23.46`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2237,13 +2237,13 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-ISC)
   - SHA-256: `7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4`
   - Bytes: 775
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-MIT)
   - SHA-256: `709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c`
   - Bytes: 1082
 
