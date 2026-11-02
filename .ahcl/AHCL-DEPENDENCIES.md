@@ -283,9 +283,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/algesten/ureq`
 
-### `ureq` 3.4.2
+### `ureq` 3.5.0
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq@3.4.2`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq@3.5.0`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -298,18 +298,18 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-APACHE)
   - SHA-256: `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`
   - Bytes: 11357
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.4.2/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-MIT)
   - SHA-256: `7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721`
   - Bytes: 1072
 
 ## Upstream: `https://github.com/algesten/ureq-proto`
 
-### `ureq-proto` 0.6.4
+### `ureq-proto` 0.6.5
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq-proto@0.6.4`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq-proto@0.6.5`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -322,10 +322,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-APACHE.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-APACHE.txt)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-APACHE.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-APACHE.txt)
   - SHA-256: `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
   - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-MIT.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.4/LICENSE-MIT.txt)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-MIT.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-MIT.txt)
   - SHA-256: `5b460f37be48ac4cf2181596181cc6cae432fc2caae05944873f380730829a4b`
   - Bytes: 1055
 
@@ -448,9 +448,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/bytecodealliance/rustix`
 
-### `rustix` 1.1.5
+### `rustix` 1.1.6
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.5`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.6`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: `cfg(unix)`
@@ -463,16 +463,16 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/COPYRIGHT`](THIRD-PARTY-LICENSES/rustix-1.1.5/COPYRIGHT)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.6/COPYRIGHT`](THIRD-PARTY-LICENSES/rustix-1.1.6/COPYRIGHT)
   - SHA-256: `377c2e7c53250cc5905c0b0532d35973392af16ffb9596a41d99d202cf3617c9`
   - Bytes: 853
-- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.6/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustix-1.1.6/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-Apache-2.0_WITH_LLVM-exception`](THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-Apache-2.0_WITH_LLVM-exception)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.6/LICENSE-Apache-2.0_WITH_LLVM-exception`](THIRD-PARTY-LICENSES/rustix-1.1.6/LICENSE-Apache-2.0_WITH_LLVM-exception)
   - SHA-256: `268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5`
   - Bytes: 12243
-- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustix-1.1.5/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustix-1.1.6/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustix-1.1.6/LICENSE-MIT)
   - SHA-256: `23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3`
   - Bytes: 1023
 
@@ -2222,9 +2222,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/rustls/rustls`
 
-### `rustls` 0.23.45
+### `rustls` 0.23.46
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustls@0.23.45`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#rustls@0.23.46`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2237,13 +2237,13 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-APACHE`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-ISC)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-ISC`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-ISC)
   - SHA-256: `7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4`
   - Bytes: 775
-- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.45/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-MIT`](THIRD-PARTY-LICENSES/rustls-0.23.46/LICENSE-MIT)
   - SHA-256: `709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c`
   - Bytes: 1082
 
@@ -2270,9 +2270,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/rustls/webpki-roots`
 
-### `webpki-roots` 1.0.9
+### `webpki-roots` 1.0.11
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#webpki-roots@1.0.9`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#webpki-roots@1.0.11`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2285,7 +2285,7 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/webpki-roots-1.0.9/LICENSE`](THIRD-PARTY-LICENSES/webpki-roots-1.0.9/LICENSE)
+- [`.ahcl/THIRD-PARTY-LICENSES/webpki-roots-1.0.11/LICENSE`](THIRD-PARTY-LICENSES/webpki-roots-1.0.11/LICENSE)
   - SHA-256: `e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8`
   - Bytes: 2371
 
