@@ -283,9 +283,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/algesten/ureq`
 
-### `ureq` 3.5.0
+### `ureq` 3.5.1
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq@3.5.0`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq@3.5.1`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -298,18 +298,18 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.5.1/LICENSE-APACHE`](THIRD-PARTY-LICENSES/ureq-3.5.1/LICENSE-APACHE)
   - SHA-256: `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`
   - Bytes: 11357
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.5.0/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-3.5.1/LICENSE-MIT`](THIRD-PARTY-LICENSES/ureq-3.5.1/LICENSE-MIT)
   - SHA-256: `7e5886959f67f8c75063a9d55cd3cb08c5a8cbea9a944fa1df2d4ae038f53721`
   - Bytes: 1072
 
 ## Upstream: `https://github.com/algesten/ureq-proto`
 
-### `ureq-proto` 0.6.5
+### `ureq-proto` 0.7.1
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq-proto@0.6.5`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#ureq-proto@0.7.1`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -322,10 +322,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-APACHE.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-APACHE.txt)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.7.1/LICENSE-APACHE.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.7.1/LICENSE-APACHE.txt)
   - SHA-256: `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`
   - Bytes: 11358
-- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-MIT.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.6.5/LICENSE-MIT.txt)
+- [`.ahcl/THIRD-PARTY-LICENSES/ureq-proto-0.7.1/LICENSE-MIT.txt`](THIRD-PARTY-LICENSES/ureq-proto-0.7.1/LICENSE-MIT.txt)
   - SHA-256: `5b460f37be48ac4cf2181596181cc6cae432fc2caae05944873f380730829a4b`
   - Bytes: 1055
 
