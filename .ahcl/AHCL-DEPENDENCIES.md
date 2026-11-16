@@ -1115,9 +1115,9 @@ Retained evidence:
 
 ## Upstream: `https://github.com/hyperium/mime`
 
-### `mime` 0.3.17
+### `mime` 0.3.18
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#mime@0.3.17`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#mime@0.3.18`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -1130,10 +1130,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-APACHE`](THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/mime-0.3.18/LICENSE-APACHE`](THIRD-PARTY-LICENSES/mime-0.3.18/LICENSE-APACHE)
   - SHA-256: `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`
   - Bytes: 10847
-- [`.ahcl/THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-MIT`](THIRD-PARTY-LICENSES/mime-0.3.17/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/mime-0.3.18/LICENSE-MIT`](THIRD-PARTY-LICENSES/mime-0.3.18/LICENSE-MIT)
   - SHA-256: `df9cfd06d8a44d9a671eadd39ffd97f166481da015a30f45dfd27886209c5922`
   - Bytes: 1058
 
@@ -2688,9 +2688,9 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `serde_spanned` 1.1.2
+### `serde_spanned` 1.1.3
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#serde_spanned@1.1.2`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#serde_spanned@1.1.3`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2703,10 +2703,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.2/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_spanned-1.1.2/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.3/LICENSE-APACHE`](THIRD-PARTY-LICENSES/serde_spanned-1.1.3/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-- [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.2/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_spanned-1.1.2/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/serde_spanned-1.1.3/LICENSE-MIT`](THIRD-PARTY-LICENSES/serde_spanned-1.1.3/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
@@ -2732,9 +2732,9 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `toml` 1.1.8+spec-1.1.0
+### `toml` 1.2.1+spec-1.1.0
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml@1.1.8+spec-1.1.0`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml@1.2.1+spec-1.1.0`
 - Role: Direct
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2747,10 +2747,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.2.1_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml-1.2.1_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-1.1.8_2Bspec-1.1.0/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml-1.2.1_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml-1.2.1_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
@@ -2776,9 +2776,9 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `toml_datetime` 1.1.2+spec-1.1.0
+### `toml_datetime` 1.1.3+spec-1.1.0
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_datetime@1.1.2+spec-1.1.0`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_datetime@1.1.3+spec-1.1.0`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2791,10 +2791,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.2_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_datetime-1.1.2_2Bspec-1.1.0/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.3_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_datetime-1.1.3_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.2_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_datetime-1.1.2_2Bspec-1.1.0/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml_datetime-1.1.3_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_datetime-1.1.3_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
@@ -2864,9 +2864,9 @@ Retained evidence:
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
-### `toml_writer` 1.1.3+spec-1.1.0
+### `toml_writer` 1.2.0+spec-1.1.0
 
-- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_writer@1.1.3+spec-1.1.0`
+- Cargo package ID: `registry+https://github.com/rust-lang/crates.io-index#toml_writer@1.2.0+spec-1.1.0`
 - Role: Transitive
 - Dependency kinds: Normal
 - Target conditions: All targets.
@@ -2879,10 +2879,10 @@ Retained evidence:
 - Contributing lockfiles: `Cargo.lock`
 
 Retained evidence:
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.1.3_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_writer-1.1.3_2Bspec-1.1.0/LICENSE-APACHE)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.2.0_2Bspec-1.1.0/LICENSE-APACHE`](THIRD-PARTY-LICENSES/toml_writer-1.2.0_2Bspec-1.1.0/LICENSE-APACHE)
   - SHA-256: `249fdb6694467dd615b259f7ddde07be3f8ae5a72cecebb0e24f6629af4215fe`
   - Bytes: 11349
-- [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.1.3_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_writer-1.1.3_2Bspec-1.1.0/LICENSE-MIT)
+- [`.ahcl/THIRD-PARTY-LICENSES/toml_writer-1.2.0_2Bspec-1.1.0/LICENSE-MIT`](THIRD-PARTY-LICENSES/toml_writer-1.2.0_2Bspec-1.1.0/LICENSE-MIT)
   - SHA-256: `6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6`
   - Bytes: 1062
 
