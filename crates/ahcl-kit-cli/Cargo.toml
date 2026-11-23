@@ -50,7 +50,7 @@ ahcl-kit-config = { path = "../ahcl-kit-config" }
 ahcl-kit-core = { path = "../ahcl-kit-core" }
 ahcl-kit-license = { path = "../ahcl-kit-license" }
 ahcl-kit-materials = { path = "../ahcl-kit-materials" }
-clap = { version = "=4.6.7", features = ["derive"] }
+clap = { version = "=4.6.8", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 time = { version = "=0.3.45", default-features = false, features = ["std"] }
